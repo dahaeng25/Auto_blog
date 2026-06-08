@@ -1,0 +1,122 @@
+/* 썸네일 렌더링 전용 스타일 — Playwright screenshot 대상 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+#thumbnail-canvas {
+  position: relative;
+  width: 1200px;
+  height: 630px;
+  overflow: hidden;
+  font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+}
+
+/* 배경 장식 원 */
+#thumbnail-canvas::before,
+#thumbnail-canvas::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.15;
+}
+
+#thumbnail-canvas::before {
+  width: 500px;
+  height: 500px;
+  background: #e94560;
+  top: -150px;
+  right: -100px;
+}
+
+#thumbnail-canvas::after {
+  width: 350px;
+  height: 350px;
+  background: #533483;
+  bottom: -120px;
+  left: -80px;
+}
+
+.logo-area {
+  position: absolute;
+  top: 36px;
+  left: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 2;
+}
+
+.logo-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #e94560, #ff6b6b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -1px;
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.5px;
+}
+
+.text-area {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 100px;
+  z-index: 2;
+  text-align: center;
+}
+
+#thumbnail-text {
+  font-size: 64px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.25;
+  letter-spacing: -1.5px;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  word-break: keep-all;
+}
+
+#thumbnail-subtitle {
+  margin-top: 20px;
+  font-size: 22px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.3px;
+}
+
+.accent-line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, #e94560, #533483, #0f3460);
+  z-index: 3;
+}

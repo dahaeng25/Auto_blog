@@ -1,0 +1,30 @@
+{
+  "name": "blog-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "auth:setup": "tsx scripts/setup-auth.ts",
+    "content:test": "tsx scripts/test-content.ts",
+    "thumbnail:test": "tsx scripts/test-thumbnail.ts",
+    "publish:test": "tsx scripts/test-publish.ts",
+    "run:once": "tsx scripts/run-once.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7",
+    "node-cron": "^3.0.3",
+    "openai": "^4.87.3",
+    "playwright": "^1.50.1",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node-cron": "^3.0.11",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
