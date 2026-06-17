@@ -17,15 +17,15 @@ function useLibsql(): boolean {
 export async function getDb(): Promise<DbExecutor> {
   if (!executor) {
     if (useLibsql()) {
+      executor = new LibsqlExecutor();
+    } else {
       try {
-        executor = new LibsqlExecutor();
+        executor = new BetterSqliteExecutor();
       } catch {
         throw new Error(
-          "Turso(libsql) 연결에 실패했습니다. TURSO_DATABASE_URL과 TURSO_AUTH_TOKEN을 확인하세요.",
+          "로컬 SQLite 초기화 실패. npm install better-sqlite3 를 실행하세요.",
         );
       }
-    } else {
-      executor = new BetterSqliteExecutor();
     }
   }
   return executor;

@@ -1,39 +1,37 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
+import type { Database as SqliteDatabase } from "better-sqlite3";
 import { config } from "../../config/index.js";
 import type { DbExecutor, SqlResult } from "./types.js";
 
-let db: Database.Database | null = null;
+let db: SqliteDatabase | null = null;
 let migrated = false;
 
-function getSqlite(): Database.Database {
-  if (!db) {
-    fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
-    db = new Database(config.dbPath);
-    db.pragma("journal_mode = WAL");
-  }
-  return db;
-}
+async function ensureSqlite(): Promise<SqliteDatabase> {
+  if (db) return db;
 
-function migrateSqlite(database: Database.Database): void {
-  if (migrated) return;
-  const schemaPath = path.join(config.dataDir, "schema.sql");
-  const schema = fs.readFileSync(schemaPath, "utf-8");
-  database.exec(schema);
-  migrated = true;
+  const mod = await import("better-sqlite3");
+  const BetterSqlite3 = mod.default as new (path: string) => SqliteDatabase;
+
+  fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+  const database = new BetterSqlite3(config.dbPath);
+  database.pragma("journal_mode = WAL");
+
+  if (!migrated) {
+    const schemaPath = path.join(config.dataDir, "schema.sql");
+    const schema = fs.readFileSync(schemaPath, "utf-8");
+    database.exec(schema);
+    migrated = true;
+  }
+
+  db = database;
+  return database;
 }
 
 export class BetterSqliteExecutor implements DbExecutor {
-  private readonly database: Database.Database;
-
-  constructor() {
-    this.database = getSqlite();
-    migrateSqlite(this.database);
-  }
-
   async execute(sql: string, args: unknown[] = []): Promise<SqlResult> {
-    const stmt = this.database.prepare(sql);
+    const database = await ensureSqlite();
+    const stmt = database.prepare(sql);
     const verb = sql.trim().split(/\s+/)[0]?.toUpperCase();
 
     if (verb === "SELECT") {
@@ -48,9 +46,10 @@ export class BetterSqliteExecutor implements DbExecutor {
   async batch(
     statements: Array<{ sql: string; args?: unknown[] }>,
   ): Promise<SqlResult[]> {
-    const tx = this.database.transaction(() =>
+    const database = await ensureSqlite();
+    const tx = database.transaction(() =>
       statements.map(({ sql, args = [] }) => {
-        const result = this.database.prepare(sql).run(...args);
+        const result = database.prepare(sql).run(...args);
         return { rows: [], lastInsertRowid: result.lastInsertRowid };
       }),
     );
