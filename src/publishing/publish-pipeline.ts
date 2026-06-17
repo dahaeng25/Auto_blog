@@ -1,43 +1,44 @@
 import type { PublishInput, PublishResult } from "./types.js";
+import { getEnabledPlatforms } from "../../config/index.js";
+import { PLATFORMS } from "../../config/platforms.js";
+import { GooglePublisher } from "./google-publisher.js";
 import { NaverPublisher } from "./naver-publisher.js";
 import { TistoryPublisher } from "./tistory-publisher.js";
 
-export interface PublishPipelineOptions {
-  /** 네이버 발행 스킵 */
-  skipNaver?: boolean;
-  /** 티스토리 발행 스킵 */
-  skipTistory?: boolean;
-}
+const PUBLISHER_MAP = {
+  naver: new NaverPublisher(),
+  tistory: new TistoryPublisher(),
+  google: new GooglePublisher(),
+} as const;
 
 /**
  * Phase 4 퍼블리싱 파이프라인.
- * 네이버 → 티스토리 순서로 발행합니다.
+ * ENABLE_*_PUBLISH 환경 변수로 켜진 플랫폼만 순서대로 발행합니다.
  */
 export class PublishPipeline {
-  private readonly naver = new NaverPublisher();
-  private readonly tistory = new TistoryPublisher();
-
-  async run(
-    input: PublishInput,
-    options: PublishPipelineOptions = {},
-  ): Promise<PublishResult[]> {
+  async run(input: PublishInput): Promise<PublishResult[]> {
     console.log("\n═══ Phase 4: 퍼블리싱 파이프라인 ═══\n");
+
+    const platforms = getEnabledPlatforms();
+    if (platforms.length === 0) {
+      throw new Error(
+        "발행할 플랫폼이 없습니다. ENABLE_NAVER_PUBLISH / ENABLE_TISTORY_PUBLISH / ENABLE_GOOGLE_PUBLISH 중 하나 이상을 true로 설정하세요.",
+      );
+    }
 
     const results: PublishResult[] = [];
 
-    if (!options.skipNaver) {
-      console.log("── 네이버 발행 시작 ──");
-      results.push(await this.naver.publish(input));
-    }
-
-    if (!options.skipTistory) {
-      console.log("── 티스토리 발행 시작 ──");
-      results.push(await this.tistory.publish(input));
+    for (const platform of platforms) {
+      const name = PLATFORMS[platform].name;
+      console.log(`── ${name} 발행 시작 ──`);
+      results.push(await PUBLISHER_MAP[platform].publish(input));
     }
 
     const failed = results.filter((r) => !r.success);
     if (failed.length > 0) {
-      const messages = failed.map((r) => `[${r.platform}] ${r.error}`).join("\n");
+      const messages = failed
+        .map((r) => `[${r.platform}] ${r.error}`)
+        .join("\n");
       throw new Error(`퍼블리싱 실패:\n${messages}`);
     }
 
@@ -46,7 +47,9 @@ export class PublishPipeline {
       if (r.postUrl) {
         console.log(`   [${r.platform}] 발행 URL → ${r.postUrl}`);
       } else {
-        console.log(`   [${r.platform}] DRY-RUN — 발행 URL 없음 (에디터 입력만 완료)`);
+        console.log(
+          `   [${r.platform}] DRY-RUN — 발행 URL 없음 (에디터 입력만 완료)`,
+        );
       }
     }
 

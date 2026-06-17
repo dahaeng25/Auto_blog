@@ -6,20 +6,26 @@ services:
     env_file:
       - .env
     environment:
+      - DEPLOYMENT_MODE=docker
+      - ENABLE_WEB_SCHEDULER=true
       - PUBLISH_HEADLESS=true
+      - ENABLE_NAVER_PUBLISH=true
+      - ENABLE_TISTORY_PUBLISH=true
+      - ENABLE_GOOGLE_PUBLISH=true
       - PORT=3000
     volumes:
-      - blog-data:/app/data
-      - blog-auth:/app/auth
-      - blog-output:/app/output
+      # 호스트 폴더 마운트 — auth:setup 세션·DB·출력물이 컨테이너 재시작 후에도 유지
+      - ./auth:/app/auth
+      - ./data:/app/data
+      - ./output:/app/output
     restart: unless-stopped
-    # Playwright + LLM 호출에 메모리 2GB 이상 권장
     deploy:
       resources:
         limits:
           memory: 2G
-
-volumes:
-  blog-data:
-  blog-auth:
-  blog-output:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

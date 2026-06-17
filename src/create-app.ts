@@ -3,8 +3,8 @@ import path from "node:path";
 import fastifyStatic from "@fastify/static";
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
-import { config } from "../config/index.js";
-import type { Platform } from "../config/platforms.js";
+import { config, getEnabledPlatforms } from "../config/index.js";
+import { PLATFORMS, type Platform } from "../config/platforms.js";
 import { jobStore } from "./api/job-store.js";
 import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
@@ -20,6 +20,14 @@ export interface CreateAppOptions {
   serveStatic?: boolean;
 }
 
+async function getAllSessionStatus(): Promise<Record<Platform, boolean>> {
+  const platforms = Object.keys(PLATFORMS) as Platform[];
+  const entries = await Promise.all(
+    platforms.map(async (platform) => [platform, await hasSession(platform)] as const),
+  );
+  return Object.fromEntries(entries) as Record<Platform, boolean>;
+}
+
 export async function createApp(
   options: CreateAppOptions = {},
 ): Promise<FastifyInstance> {
@@ -31,15 +39,12 @@ export async function createApp(
   app.get("/health", async () => ({ ok: true }));
   app.get("/api/health", async () => ({ ok: true }));
   app.get("/api/meta", async () => ({
-    version: "0.2.2",
-    platform: config.isVercel ? "vercel" : "server",
+    version: "0.3.0",
+    platform: config.deploymentMode,
   }));
 
   app.get("/api/status", async (request, reply) => {
     try {
-      const naverSession = await hasSession("naver");
-      const tistorySession = await hasSession("tistory");
-
       return {
         job: await jobStore.get(),
         isRunning: await isPipelineRunning(),
@@ -51,13 +56,13 @@ export async function createApp(
           blogTopic: config.blogTopic || null,
           naverBlogId: config.naverBlogId || null,
           tistoryBlogName: config.tistoryBlogName || null,
+          bloggerBlogId: config.bloggerBlogId || null,
+          enabledPlatforms: getEnabledPlatforms(),
+          deploymentMode: config.deploymentMode,
           rssFeedCount: config.rssFeedUrls.length,
           isVercel: config.isVercel,
         },
-        sessions: {
-          naver: naverSession,
-          tistory: tistorySession,
-        },
+        sessions: await getAllSessionStatus(),
       };
     } catch (error) {
       const message =
@@ -163,15 +168,12 @@ export async function createApp(
     };
   });
 
-  app.get("/api/sessions", async () => ({
-    naver: await hasSession("naver"),
-    tistory: await hasSession("tistory"),
-  }));
+  app.get("/api/sessions", async () => getAllSessionStatus());
 
   app.post("/api/sessions/:platform", async (request, reply) => {
     const { platform } = request.params as { platform: string };
 
-    if (platform !== "naver" && platform !== "tistory") {
+    if (!(platform in PLATFORMS)) {
       return reply.status(400).send({ error: "지원하지 않는 플랫폼입니다." });
     }
 

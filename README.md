@@ -1,6 +1,21 @@
 # Auto_blog
 
-RSS 수집 → AI 원고 생성 → 썸네일 생성 → 네이버·티스토리 자동 발행 파이프라인입니다.
+RSS 수집 → AI 원고 생성 → 썸네일 생성 → **네이버 · 티스토리 · Google Blogger** 자동 발행 파이프라인입니다.
+
+## Docker 실행 (권장)
+
+가장 안정적인 운영 방식입니다. 상세 가이드: [docs/DOCKER.md](docs/DOCKER.md)
+
+```bash
+cp .env.docker.example .env   # API 키·블로그 ID 설정
+npm install && npx playwright install chromium
+npm run auth:setup            # 최초 1회 — 브라우저 로그인
+docker compose up -d --build
+```
+
+대시보드: http://localhost:3000
+
+---
 
 ## 로컬 실행
 
@@ -8,7 +23,7 @@ RSS 수집 → AI 원고 생성 → 썸네일 생성 → 네이버·티스토리
 npm install
 npx playwright install chromium
 cp .env.example .env   # API 키 등 설정
-npm run auth:setup     # 네이버·티스토리 로그인 (최초 1회)
+npm run auth:setup     # 활성화된 플랫폼 로그인 (최초 1회)
 npm run web            # 웹 대시보드 + 스케줄러
 ```
 

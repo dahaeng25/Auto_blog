@@ -53,6 +53,20 @@ export const config = {
 
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",
   tistoryBlogName: process.env.TISTORY_BLOG_NAME ?? "",
+  /** Blogger 블로그 숫자 ID (Blogger 설정 → 기본) */
+  bloggerBlogId: process.env.BLOGGER_BLOG_ID ?? "",
+
+  /** 플랫폼별 발행 on/off (Docker .env에서 조절) */
+  enableNaverPublish: process.env.ENABLE_NAVER_PUBLISH !== "false",
+  enableTistoryPublish: process.env.ENABLE_TISTORY_PUBLISH !== "false",
+  enableGooglePublish: process.env.ENABLE_GOOGLE_PUBLISH === "true",
+
+  /** docker | vercel | local */
+  deploymentMode: (process.env.DEPLOYMENT_MODE ??
+    (process.env.VERCEL ? "vercel" : "local")) as
+    | "docker"
+    | "vercel"
+    | "local",
 
   /** 세션 만료 시 .env 계정으로 자동 로그인 (기본 true) */
   authAutoLogin: process.env.AUTH_AUTO_LOGIN !== "false",
@@ -124,4 +138,10 @@ export const config = {
 } as const;
 
 export { PLATFORMS, type Platform } from "./platforms.js";
+export {
+  ALL_PLATFORMS,
+  getEnabledPlatforms,
+  isPlatformEnabled,
+  platformBlogIdConfigured,
+} from "./publish-platforms.js";
 export { CRON_SCHEDULE, CRON_TIMEZONE, RUN_ON_START } from "./cron.js";

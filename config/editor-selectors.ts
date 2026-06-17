@@ -81,4 +81,17 @@ export const EDITOR_SELECTORS = {
     publishConfirm:
       '#publish-btn, .layer_publish button:has-text("공개 발행"), .box_popup button:has-text("공개 발행"), button.btn_ok:has-text("공개 발행"), button.btn_confirm:has-text("공개 발행")',
   },
+  google: {
+    title:
+      'input[aria-label="Title"], textarea[aria-label="Title"], input[aria-label="제목"], textarea[aria-label="제목"]',
+    editorBody:
+      '[role="textbox"][aria-label*="Compose"], [role="textbox"][aria-label*="본문"], [contenteditable="true"][aria-label*="Compose"], div[contenteditable="true"]',
+    imageButton:
+      'button[aria-label*="Insert image"], button[aria-label*="이미지"], button:has-text("Image")',
+    fileInput: 'input[type="file"][accept*="image"], input[type="file"]',
+    publishButton:
+      'button:has-text("Publish"), button:has-text("게시"), div[role="button"]:has-text("Publish"), div[role="button"]:has-text("게시")',
+    publishConfirm:
+      'button:has-text("Publish"), button:has-text("게시"), button:has-text("Confirm")',
+  },
 } as const;

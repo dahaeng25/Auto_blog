@@ -2,9 +2,14 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { BrowserContext } from "playwright";
 import { config } from "../../config/index.js";
-import { PLATFORMS, type Platform } from "../../config/platforms.js";
+import {
+  getEnabledPlatforms,
+  PLATFORMS,
+  type Platform,
+} from "../../config/index.js";
 import { createBrowserSession } from "./browser-factory.js";
 import {
+  isGoogleLoggedIn,
   isNaverLoggedIn,
   isTistoryLoggedIn,
 } from "./login-check.js";
@@ -17,10 +22,25 @@ async function waitForEnter(message: string): Promise<void> {
   rl.close();
 }
 
-const LOGIN_CHECKERS: Record<Platform, (ctx: BrowserContext) => Promise<boolean>> = {
+const LOGIN_CHECKERS: Record<
+  Platform,
+  (ctx: BrowserContext) => Promise<boolean>
+> = {
   naver: isNaverLoggedIn,
   tistory: isTistoryLoggedIn,
+  google: isGoogleLoggedIn,
 };
+
+function blogIdForPlatform(platform: Platform): string {
+  switch (platform) {
+    case "naver":
+      return config.naverBlogId;
+    case "tistory":
+      return config.tistoryBlogName;
+    case "google":
+      return config.bloggerBlogId;
+  }
+}
 
 /**
  * 단일 플랫폼에 대해 수동 로그인 → 세션 저장 플로우를 실행합니다.
@@ -39,21 +59,12 @@ async function setupPlatformAuth(
   console.log(`2. 브라우저에서 직접 로그인을 완료하세요. (캡차/2단계 인증 포함)`);
   await waitForEnter(`3. 로그인이 끝나면 Enter를 누르세요... `);
 
-  // verifyUrl로 이동하여 쿠키 갱신
   await page.goto(verifyUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2000);
 
-  // 티스토리: 블로그 글쓰기 페이지까지 방문해 TSSESSION·관리자 쿠키 확보
-  if (platform === "tistory" && config.tistoryBlogName) {
-    const writeUrl = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
-    console.log(`   글쓰기 페이지 방문: ${writeUrl}`);
-    await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(3000);
-  }
-
-  // 네이버: 블로그 글쓰기 페이지까지 방문
-  if (platform === "naver" && config.naverBlogId) {
-    const writeUrl = PLATFORMS.naver.postWriteUrl(config.naverBlogId);
+  const blogId = blogIdForPlatform(platform);
+  if (blogId) {
+    const writeUrl = PLATFORMS[platform].postWriteUrl(blogId);
     console.log(`   글쓰기 페이지 방문: ${writeUrl}`);
     await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(3000);
@@ -73,24 +84,35 @@ async function setupPlatformAuth(
 }
 
 /**
- * headless:false 브라우저로 네이버·티스토리 순서로 수동 로그인 후
+ * headless:false 브라우저로 활성화된 플랫폼 순서로 수동 로그인 후
  * storage_state JSON 파일을 생성합니다.
  */
 export async function runAuthSetup(): Promise<void> {
+  const platforms = getEnabledPlatforms();
+  if (platforms.length === 0) {
+    throw new Error(
+      "인증 설정할 플랫폼이 없습니다. .env에서 ENABLE_*_PUBLISH 중 하나 이상을 true로 설정하세요.",
+    );
+  }
+
   console.log("╔══════════════════════════════════════════╗");
   console.log("║   블로그 오케스트레이터 — 인증 설정      ║");
   console.log("╚══════════════════════════════════════════╝");
-  console.log("\n브라우저가 열립니다. 각 플랫폼에 직접 로그인해 주세요.\n");
+  console.log(
+    `\n대상 플랫폼: ${platforms.map((p) => PLATFORMS[p].name).join(", ")}\n`,
+  );
 
   const session = await createBrowserSession({ headless: false });
 
   try {
-    await setupPlatformAuth("naver", session.context);
-    await setupPlatformAuth("tistory", session.context);
+    for (const platform of platforms) {
+      await setupPlatformAuth(platform, session.context);
+    }
 
     console.log("\n🎉 모든 플랫폼 인증이 완료되었습니다.");
-    console.log("   auth/naver_state.json");
-    console.log("   auth/tistory_state.json");
+    for (const platform of platforms) {
+      console.log(`   auth/${platform}_state.json`);
+    }
   } finally {
     await session.close();
   }

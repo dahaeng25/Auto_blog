@@ -10,6 +10,9 @@ export function isEditorUrl(url: string, platform: Platform): boolean {
   if (platform === "tistory") {
     return /manage\/newpost|manage\/posts\/write|\/manage\/newpost/i.test(url);
   }
+  if (platform === "google") {
+    return /blogger\.com\/blog\/post\/edit/i.test(url);
+  }
   return false;
 }
 

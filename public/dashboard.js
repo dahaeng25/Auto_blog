@@ -1,4 +1,21 @@
-/** Blog Orchestrator dashboard v6 — API 로그인 없음 */
+const PLATFORM_LABELS = {
+  naver: "네이버",
+  tistory: "티스토리",
+  google: "Google",
+};
+
+function formatSessionStatus(sessions, enabledPlatforms) {
+  const platforms =
+    enabledPlatforms?.length > 0
+      ? enabledPlatforms
+      : Object.keys(PLATFORM_LABELS);
+  return platforms
+    .map((p) => {
+      const label = PLATFORM_LABELS[p] ?? p;
+      return sessions[p] ? `${label} ✓` : `${label} ✗`;
+    })
+    .join(" · ");
+}
 let pollTimer = null;
 
 async function api(path, options = {}) {
@@ -59,12 +76,11 @@ async function loadStatus() {
     topicInput.placeholder = `기본값: ${data.config.blogTopic}`;
   }
 
-  const sessions = [];
-  if (data.sessions.naver) sessions.push("네이버 ✓");
-  else sessions.push("네이버 ✗");
-  if (data.sessions.tistory) sessions.push("티스토리 ✓");
-  else sessions.push("티스토리 ✗");
-  document.getElementById("session-status").textContent = sessions.join(" · ");
+  const sessions = formatSessionStatus(
+    data.sessions,
+    data.config.enabledPlatforms,
+  );
+  document.getElementById("session-status").textContent = sessions;
 
   const runBtn = document.getElementById("run-btn");
   runBtn.disabled = data.isRunning;
@@ -136,12 +152,12 @@ async function runPipeline() {
     }
 
     if (!status.config.publishDryRun) {
-      const missing = [];
-      if (!status.sessions.naver) missing.push("네이버");
-      if (!status.sessions.tistory) missing.push("티스토리");
+      const enabled = status.config.enabledPlatforms ?? ["naver", "tistory"];
+      const missing = enabled.filter((p) => !status.sessions[p]);
       if (missing.length > 0) {
+        const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
         throw new Error(
-          `${missing.join(" · ")} 세션이 없습니다. 하단 「세션 업로드」에서 auth/*.json 파일을 업로드하세요.`,
+          `${labels} 세션이 없습니다. 하단 「세션 업로드」에서 auth/*_state.json 파일을 업로드하거나 호스트에서 npm run auth:setup 을 실행하세요.`,
         );
       }
     }
@@ -257,6 +273,10 @@ async function init() {
   document.getElementById("upload-tistory")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) uploadSession("tistory", file);
+  });
+  document.getElementById("upload-google")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (file) uploadSession("google", file);
   });
 
   startPolling();

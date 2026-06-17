@@ -40,7 +40,7 @@
       <div class="card status-card">
         <span class="label">세션</span>
         <span id="session-status" class="value">—</span>
-        <span class="meta">네이버 · 티스토리</span>
+        <span class="meta">네이버 · 티스토리 · Google</span>
       </div>
     </section>
 
@@ -87,7 +87,7 @@
     <section class="card session-upload">
       <div class="card-header">
         <h2>세션 업로드</h2>
-        <p class="hint">로컬 PC에서 생성한 auth/*.json 파일을 클라우드에 업로드하세요.</p>
+        <p class="hint">호스트에서 npm run auth:setup 실행 후 생성된 auth/*_state.json 을 업로드하세요. (Docker는 ./auth 폴더 마운트 시 생략 가능)</p>
       </div>
       <div class="upload-row">
         <label class="upload-label">
@@ -97,6 +97,10 @@
         <label class="upload-label">
           티스토리 세션
           <input type="file" id="upload-tistory" accept=".json" />
+        </label>
+        <label class="upload-label">
+          Google Blogger 세션
+          <input type="file" id="upload-google" accept=".json" />
         </label>
       </div>
       <p id="upload-message" class="upload-message"></p>
@@ -132,6 +136,6 @@
     document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
     purgeLegacyLogin();
   </script>
-  <script src="/dashboard.js?v=8" type="module"></script>
+  <script src="/dashboard.js?v=9" type="module"></script>
 </body>
 </html>

@@ -19,6 +19,9 @@ function hasCredentials(platform: Platform): boolean {
   if (platform === "naver") {
     return Boolean(config.naverId && config.naverPassword);
   }
+  if (platform === "google") {
+    return false;
+  }
   const id = config.kakaoId || config.tistoryId;
   const pw = config.kakaoPassword || config.tistoryPassword;
   return Boolean(id && pw);
@@ -48,21 +51,39 @@ async function isWritePageAccessible(
     return (await title.count()) > 0;
   }
 
-  if (!config.tistoryBlogName) return false;
-  const url = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await humanPause(2500);
+  if (platform === "tistory") {
+    if (!config.tistoryBlogName) return false;
+    const url = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await humanPause(2500);
 
-  if (
-    /accounts\.kakao\.com|tistory\.com\/auth\/login|kauth\.kakao\.com/i.test(
-      page.url(),
-    )
-  ) {
-    return false;
+    if (
+      /accounts\.kakao\.com|tistory\.com\/auth\/login|kauth\.kakao\.com/i.test(
+        page.url(),
+      )
+    ) {
+      return false;
+    }
+
+    const title = page.locator("#post-title-inp, input[name='title']").first();
+    return (await title.count()) > 0 && (await title.isVisible());
   }
 
-  const title = page.locator("#post-title-inp, input[name='title']").first();
-  return (await title.count()) > 0 && (await title.isVisible());
+  if (platform === "google") {
+    if (!config.bloggerBlogId) return false;
+    const url = PLATFORMS.google.postWriteUrl(config.bloggerBlogId);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await humanPause(3000);
+
+    if (/accounts\.google\.com\/signin/i.test(page.url())) return false;
+
+    const title = page
+      .locator('input[aria-label="Title"], textarea[aria-label="Title"]')
+      .first();
+    return (await title.count()) > 0 && (await title.isVisible());
+  }
+
+  return false;
 }
 
 /**
@@ -112,6 +133,12 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
   }
 
   if (!hasCredentials(platform)) {
+    if (platform === "google") {
+      throw new Error(
+        `[${PLATFORMS[platform].name}] Google은 자동 로그인을 지원하지 않습니다.\n` +
+          "  npm run auth:setup 으로 브라우저에서 수동 로그인 후 세션을 저장하세요.",
+      );
+    }
     throw new Error(
       `[${PLATFORMS[platform].name}] 자동 로그인 계정이 없습니다.\n` +
         (platform === "naver"
@@ -134,7 +161,7 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
         await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
         await humanPause(3000);
       }
-    } else {
+    } else if (platform === "tistory") {
       await autoLoginTistory(page);
       if (config.tistoryBlogName) {
         const writeUrl = PLATFORMS.tistory.postWriteUrl(
@@ -143,6 +170,10 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
         await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
         await humanPause(3000);
       }
+    } else {
+      throw new Error(
+        `[${PLATFORMS[platform].name}] 자동 로그인 미지원 — npm run auth:setup 사용`,
+      );
     }
 
     const ok = await hasLoginCookies(loginSession.context, platform);
@@ -161,12 +192,15 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
   }
 }
 
-/** 네이버·티스토리 세션 일괄 갱신 */
+/** 활성화된 플랫폼 세션 일괄 갱신 */
 export async function ensureAllSessions(): Promise<void> {
-  if (config.naverBlogId) {
-    await ensureValidSession("naver");
-  }
-  if (config.tistoryBlogName) {
-    await ensureValidSession("tistory");
+  const { getEnabledPlatforms, platformBlogIdConfigured } = await import(
+    "../../config/publish-platforms.js"
+  );
+
+  for (const platform of getEnabledPlatforms()) {
+    if (platformBlogIdConfigured(platform)) {
+      await ensureValidSession(platform);
+    }
   }
 }

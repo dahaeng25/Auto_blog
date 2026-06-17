@@ -7,7 +7,7 @@ const projectRoot = path.resolve(
 );
 
 /** 지원 플랫폼 식별자 */
-export type Platform = "naver" | "tistory";
+export type Platform = "naver" | "tistory" | "google";
 
 /** 플랫폼별 URL 및 세션 파일 경로 */
 export const PLATFORMS = {
@@ -24,12 +24,19 @@ export const PLATFORMS = {
   tistory: {
     name: "티스토리",
     loginUrl: "https://www.tistory.com/auth/login",
-    /** 로그인 완료 여부 확인용 */
     verifyUrl: "https://www.tistory.com",
-    /** 글쓰기 URL — TISTORY_BLOG_NAME 환경변수 필요 */
     postWriteUrl: (blogName: string) =>
       `https://${blogName}.tistory.com/manage/newpost`,
     stateFile: path.join(projectRoot, "auth", "tistory_state.json"),
+  },
+  google: {
+    name: "Google Blogger",
+    loginUrl: "https://accounts.google.com/signin",
+    verifyUrl: "https://www.blogger.com/",
+    /** 글쓰기 URL — BLOGGER_BLOG_ID(숫자) 환경변수 필요 */
+    postWriteUrl: (blogId: string) =>
+      `https://www.blogger.com/blog/post/edit/${blogId}`,
+    stateFile: path.join(projectRoot, "auth", "google_state.json"),
   },
 } as const satisfies Record<
   Platform,
