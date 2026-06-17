@@ -50,6 +50,14 @@ async function loadStatus() {
   document.getElementById("dry-run").textContent = data.config.publishDryRun
     ? "테스트 (발행 안 함)"
     : "실제 발행";
+  document.getElementById("dry-run-meta").textContent = data.config.publishDryRun
+    ? "DRY-RUN"
+    : "LIVE";
+
+  const topicInput = document.getElementById("blog-topic");
+  if (topicInput && data.config.blogTopic && !topicInput.value) {
+    topicInput.placeholder = `기본값: ${data.config.blogTopic}`;
+  }
 
   const sessions = [];
   if (data.sessions.naver) sessions.push("네이버 ✓");
@@ -117,10 +125,12 @@ async function runPipeline() {
   msgEl.className = "run-message";
 
   try {
+    const topicInput = document.getElementById("blog-topic");
+    const blogTopic = topicInput?.value?.trim() || undefined;
     const result = await api("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trigger: "web" }),
+      body: JSON.stringify({ trigger: "web", blogTopic }),
     });
     if (result.title) {
       msgEl.textContent = `완료: ${result.title}`;

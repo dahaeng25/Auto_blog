@@ -188,6 +188,42 @@ body {
   margin-bottom: 28px;
 }
 
+.topic-field {
+  display: block;
+  max-width: 520px;
+  margin: 0 auto 16px;
+  text-align: left;
+}
+
+.topic-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.topic-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.topic-field input:focus {
+  outline: 2px solid var(--primary);
+  border-color: transparent;
+}
+
+.topic-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .run-message {
   margin-top: 12px;
   font-size: 0.875rem;

@@ -48,6 +48,7 @@ export async function createApp(
           cronTimezone: config.cronTimezone,
           publishDryRun: config.publishDryRun,
           publishHeadless: config.publishHeadless,
+          blogTopic: config.blogTopic || null,
           naverBlogId: config.naverBlogId || null,
           tistoryBlogName: config.tistoryBlogName || null,
           rssFeedCount: config.rssFeedUrls.length,
@@ -77,13 +78,14 @@ export async function createApp(
       });
     }
 
-    const trigger =
-      (request.body as { trigger?: string } | undefined)?.trigger ?? "web";
+    const body = (request.body as { trigger?: string; blogTopic?: string } | undefined) ?? {};
+    const trigger = body.trigger ?? "web";
+    const blogTopic = body.blogTopic?.trim() || undefined;
 
     // Vercel 서버리스: 함수 종료 전까지 파이프라인 완료 대기
     if (config.isVercel) {
       try {
-        const result = await runOrchestration({ trigger });
+        const result = await runOrchestration({ trigger, blogTopic });
         return {
           message: "파이프라인이 완료되었습니다.",
           job: await jobStore.get(),
@@ -97,7 +99,7 @@ export async function createApp(
       }
     }
 
-    void runOrchestration({ trigger }).catch(() => {});
+    void runOrchestration({ trigger, blogTopic }).catch(() => {});
 
     return reply.status(202).send({
       message: "파이프라인 실행을 시작했습니다.",
