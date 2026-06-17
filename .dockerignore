@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+output
+data/*.db
+auth/*.json
+*.log
+Auto_blog

@@ -1,0 +1,72 @@
+/**
+ * 웹 서버 엔트리포인트 — API + 대시보드 + cron 스케줄러
+ * Docker/로컬: npm run web
+ */
+import fs from "node:fs";
+import cron from "node-cron";
+import { config } from "../config/index.js";
+import { createApp } from "./create-app.js";
+import { logger } from "./monitoring/logger.js";
+import { isPipelineRunning, runOrchestration } from "./pipeline.js";
+
+function startScheduler(): void {
+  if (!config.enableWebScheduler) {
+    logger.info("ENABLE_WEB_SCHEDULER=false — cron 스케줄러 비활성화");
+    return;
+  }
+
+  if (!cron.validate(config.cronSchedule)) {
+    logger.error(`잘못된 CRON_SCHEDULE: ${config.cronSchedule}`);
+    process.exit(1);
+  }
+
+  cron.schedule(
+    config.cronSchedule,
+    () => {
+      void (async () => {
+        if (await isPipelineRunning()) {
+          logger.warn("cron 트리거 — 이미 실행 중이어서 건너뜀");
+          return;
+        }
+        logger.info("cron 트리거 — 파이프라인 시작");
+        void runOrchestration({ trigger: "cron" }).catch(() => {});
+      })();
+    },
+    { timezone: config.cronTimezone },
+  );
+
+  logger.info(`cron 스케줄러 등록: ${config.cronSchedule} (${config.cronTimezone})`);
+
+  if (config.runOnStart) {
+    logger.info("RUN_ON_START=true — 시작 시 즉시 1회 실행");
+    void runOrchestration({ trigger: "run-on-start" }).catch(() => {});
+  }
+}
+
+async function main(): Promise<void> {
+  if (!config.apiKey) {
+    logger.warn(
+      "API_KEY가 설정되지 않았습니다. 프로덕션 배포 시 반드시 설정하세요.",
+    );
+  }
+
+  fs.mkdirSync(config.authDir, { recursive: true });
+  fs.mkdirSync(config.dataDir, { recursive: true });
+  fs.mkdirSync(config.outputDir, { recursive: true });
+
+  const app = await createApp({ serveStatic: true });
+  startScheduler();
+
+  await app.listen({ port: config.port, host: "0.0.0.0" });
+
+  logger.info("╔══════════════════════════════════════════╗");
+  logger.info("║   Blog Orchestrator — 웹 서버 시작       ║");
+  logger.info("╚══════════════════════════════════════════╝");
+  logger.info(`대시보드: http://0.0.0.0:${config.port}`);
+  logger.info(`DRY-RUN: ${config.publishDryRun}`);
+}
+
+main().catch((err) => {
+  logger.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+});

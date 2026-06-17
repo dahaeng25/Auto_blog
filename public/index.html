@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog Orchestrator</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-card">
+      <h1>Blog Orchestrator</h1>
+      <p>대시보드 접속용 <strong>API_KEY</strong>를 입력하세요</p>
+      <p class="login-hint">※ OpenAI API 키가 아닙니다. Vercel 환경 변수에 설정한 <code>API_KEY</code> 값과 동일해야 합니다.</p>
+      <input id="api-key-input" type="password" placeholder="API_KEY" autocomplete="off" />
+      <button id="login-btn" class="btn btn-primary">접속</button>
+      <p id="login-error" class="error-text hidden"></p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="header">
+      <div>
+        <h1>Blog Orchestrator</h1>
+        <p class="subtitle">클라우드 블로그 자동화 대시보드</p>
+      </div>
+      <div class="header-actions">
+        <button id="refresh-btn" class="btn btn-ghost">새로고침</button>
+        <button id="logout-btn" class="btn btn-ghost">로그아웃</button>
+      </div>
+    </header>
+
+    <section class="status-grid">
+      <div class="card status-card">
+        <span class="label">파이프라인</span>
+        <span id="job-status" class="value badge">—</span>
+        <span id="job-detail" class="meta">—</span>
+      </div>
+      <div class="card status-card">
+        <span class="label">스케줄</span>
+        <span id="cron-schedule" class="value">—</span>
+        <span id="cron-timezone" class="meta">—</span>
+      </div>
+      <div class="card status-card">
+        <span class="label">발행 모드</span>
+        <span id="dry-run" class="value">—</span>
+        <span class="meta">DRY-RUN</span>
+      </div>
+      <div class="card status-card">
+        <span class="label">세션</span>
+        <span id="session-status" class="value">—</span>
+        <span class="meta">네이버 · 티스토리</span>
+      </div>
+    </section>
+
+    <section class="actions-bar">
+      <button id="run-btn" class="btn btn-primary btn-lg">
+        지금 블로그 글 작성 &amp; 업로드
+      </button>
+      <p id="run-message" class="run-message"></p>
+    </section>
+
+    <div class="main-grid">
+      <section class="card">
+        <div class="card-header">
+          <h2>최근 원고</h2>
+        </div>
+        <div id="articles-list" class="articles-list">
+          <p class="empty">원고가 없습니다.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>통계</h2>
+        </div>
+        <div id="stats" class="stats-grid">
+          <div class="stat-item"><span class="stat-label">주제 (farmed)</span><span id="stat-farmed" class="stat-value">0</span></div>
+          <div class="stat-item"><span class="stat-label">원고 (drafted)</span><span id="stat-drafted" class="stat-value">0</span></div>
+          <div class="stat-item"><span class="stat-label">발행 (published)</span><span id="stat-published" class="stat-value">0</span></div>
+          <div class="stat-item"><span class="stat-label">총 원고</span><span id="stat-articles" class="stat-value">0</span></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card session-upload">
+      <div class="card-header">
+        <h2>세션 업로드</h2>
+        <p class="hint">로컬 PC에서 생성한 auth/*.json 파일을 클라우드에 업로드하세요.</p>
+      </div>
+      <div class="upload-row">
+        <label class="upload-label">
+          네이버 세션
+          <input type="file" id="upload-naver" accept=".json" />
+        </label>
+        <label class="upload-label">
+          티스토리 세션
+          <input type="file" id="upload-tistory" accept=".json" />
+        </label>
+      </div>
+      <p id="upload-message" class="upload-message"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>실행 로그</h2>
+        <button id="logs-refresh" class="btn btn-ghost btn-sm">로그 새로고침</button>
+      </div>
+      <pre id="logs" class="logs">로그를 불러오는 중...</pre>
+    </section>
+
+    <div id="article-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content card">
+        <div class="card-header">
+          <h2 id="modal-title">원고 미리보기</h2>
+          <button id="modal-close" class="btn btn-ghost btn-sm">닫기</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

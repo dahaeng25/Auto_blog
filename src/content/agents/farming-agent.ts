@@ -30,11 +30,11 @@ export class FarmingAgent {
     });
 
     for (const topic of sorted) {
-      if (this.repo.existsByUrl(topic.sourceUrl)) {
+      if (await this.repo.existsByUrl(topic.sourceUrl)) {
         continue;
       }
 
-      const topicId = this.repo.insertTopic(topic);
+      const topicId = await this.repo.insertTopic(topic);
       console.log(`[Farming] 신규 주제 선정: "${topic.title}" (id=${topicId})`);
 
       return { topicId, topic };

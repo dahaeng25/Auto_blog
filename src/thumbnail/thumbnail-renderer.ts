@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright-core";
+import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
 import {
   assetExists,
@@ -187,11 +189,14 @@ export class ThumbnailRenderer {
   async render(options: ThumbnailRenderOptions): Promise<string> {
     const brand = loadThumbnailBrand();
     const filename = options.outputFilename ?? "thumbnail_최종.png";
-    const outputPath = path.join(this.outputDir, filename);
+    const outputDir = config.isVercel
+      ? path.join(os.tmpdir(), "blog-thumbnails")
+      : this.outputDir;
+    const outputPath = path.join(outputDir, filename);
 
-    await fs.mkdir(this.outputDir, { recursive: true });
+    await fs.mkdir(outputDir, { recursive: true });
 
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchChromium({ headless: true });
     const context = await browser.newContext({
       viewport: { width: brand.canvas.width, height: brand.canvas.height + 100 },
       deviceScaleFactor: 2,
