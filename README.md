@@ -12,6 +12,14 @@ npm run auth:setup     # 네이버·티스토리 로그인 (최초 1회)
 npm run web            # 웹 대시보드 + 스케줄러
 ```
 
+**Windows PowerShell**에서 `npm` 실행이 막히면 아래 중 하나를 사용하세요.
+
+```powershell
+npm.cmd run web
+# 또는 더블클릭
+web.bat
+```
+
 브라우저에서 http://localhost:3000 접속
 
 ---
