@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Database as SqliteDatabase } from "better-sqlite3";
 import { config } from "../../config/index.js";
 import type { DbExecutor, SqlResult } from "./types.js";
+import { loadSchemaStatements } from "./schema-loader.js";
 
 let db: SqliteDatabase | null = null;
 let migrated = false;
@@ -18,9 +19,10 @@ async function ensureSqlite(): Promise<SqliteDatabase> {
   database.pragma("journal_mode = WAL");
 
   if (!migrated) {
-    const schemaPath = path.join(config.dataDir, "schema.sql");
-    const schema = fs.readFileSync(schemaPath, "utf-8");
-    database.exec(schema);
+    const statements = loadSchemaStatements();
+    for (const sql of statements) {
+      database.exec(sql);
+    }
     migrated = true;
   }
 

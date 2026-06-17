@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../../config/index.js";
 import type { DbExecutor, SqlResult } from "./types.js";
+import { loadSchemaStatements } from "./schema-loader.js";
 
 let libsqlModule: typeof import("@libsql/client") | null = null;
 
@@ -24,12 +25,7 @@ async function migrateLibsql(
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   }
 
-  const schemaPath = path.join(config.dataDir, "schema.sql");
-  const schema = fs.readFileSync(schemaPath, "utf-8");
-  const statements = schema
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith("--"));
+  const statements = loadSchemaStatements();
 
   for (const sql of statements) {
     try {
