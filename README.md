@@ -38,11 +38,18 @@ web.bat
 
 2. **Vercel Pro 권장** — 파이프라인 실행에 최대 300초 필요 (Hobby 플랜은 10초 제한)
 
+### Vercel Hobby (무료) 제한
+
+- 함수 메모리: 최대 **2048MB** (`vercel.json`에 반영됨)
+- 함수 실행 시간: 최대 **10초** — 글 생성·발행 전체 파이프라인은 **10초 안에 끝나지 않을 수 있음**
+- 전체 자동 발행이 필요하면 **로컬 `web.bat`** 또는 **Docker** 사용 권장
+
 ### GitHub → Vercel 배포 단계
 
 1. GitHub에 저장소 push
 2. [vercel.com](https://vercel.com) → **Add New Project** → GitHub 저장소 연결
-3. **Environment Variables** 설정:
+3. 프로젝트 이름: `auto-blog_` 등 **기존과 겹치지 않는 이름** 사용
+4. **Environment Variables** 설정:
 
 | 변수 | 설명 |
 |------|------|
