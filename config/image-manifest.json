@@ -1,0 +1,25 @@
+{
+  "$comment": "02~09번 본문 이미지. 07~09는 linkUrl 클릭 시 이동 URL.",
+  "bodyImages": [
+    { "id": "02", "file": "assets/images/02.png" },
+    { "id": "03", "file": "assets/images/03.png" },
+    { "id": "04", "file": "assets/images/04.png" },
+    { "id": "05", "file": "assets/images/05.png" },
+    { "id": "06", "file": "assets/images/06.png" },
+    {
+      "id": "07",
+      "file": "assets/images/07.png",
+      "linkUrl": "https://pf.kakao.com/_xgxnxgG"
+    },
+    {
+      "id": "08",
+      "file": "assets/images/08.png",
+      "linkUrl": "https://pf.kakao.com/_xgxnxgG"
+    },
+    {
+      "id": "09",
+      "file": "assets/images/09.png",
+      "linkUrl": "https://pf.kakao.com/_xgxnxgG"
+    }
+  ]
+}

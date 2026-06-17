@@ -1,0 +1,53 @@
+{
+  "$comment": "blue_directors(청사 디렉터스) 샘플 썸네일 — 네이버 1:1 정방형, 문구만 변경",
+  "canvas": {
+    "width": 886,
+    "height": 886
+  },
+  "background": {
+    "type": "gradient",
+    "gradient": "linear-gradient(165deg, #0c2540 0%, #1a4a7a 45%, #0f3258 100%)",
+    "image": "assets/thumbnail/bg.png"
+  },
+  "text": {
+    "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    "fontWeight": "800",
+    "color": "#ffffff",
+    "align": "center",
+    "verticalAlign": "center",
+    "lineHeight": 1.45,
+    "letterSpacing": "-0.5px",
+    "textShadow": "0 2px 8px rgba(0,0,0,0.25)",
+    "padding": "100px 72px",
+    "maxWidth": "760px",
+    "fontSizeMin": 34,
+    "fontSizeMax": 52
+  },
+  "subtitle": {
+    "enabled": false,
+    "fontSize": "20px",
+    "color": "rgba(255,255,255,0.75)"
+  },
+  "logo": {
+    "enabled": false,
+    "image": "assets/thumbnail/logo.png",
+    "width": 140,
+    "top": 40,
+    "left": 40
+  },
+  "decor": {
+    "topBar": { "enabled": true, "height": 10, "color": "#c9a227" },
+    "bottomBar": { "enabled": true, "height": 10, "color": "#c9a227" },
+    "textBox": {
+      "enabled": true,
+      "border": "2px solid rgba(201,162,39,0.55)",
+      "padding": "28px 36px",
+      "background": "rgba(12,37,64,0.35)"
+    }
+  },
+  "accent": {
+    "enabled": false,
+    "height": 6,
+    "gradient": "linear-gradient(90deg, #c9a227, #e8c547)"
+  }
+}

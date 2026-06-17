@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "auth:setup": "tsx scripts/setup-auth.ts",
+    "auth:verify": "tsx scripts/verify-auth.ts",
     "content:test": "tsx scripts/test-content.ts",
     "thumbnail:test": "tsx scripts/test-thumbnail.ts",
     "publish:test": "tsx scripts/test-publish.ts",
     "run:once": "tsx scripts/run-once.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/index.ts"
+  },
+  "optionalDependencies": {
+    "@google/generative-ai": "^0.24.0"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

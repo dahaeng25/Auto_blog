@@ -43,7 +43,11 @@ export class PublishPipeline {
 
     console.log("\n✅ 모든 플랫폼 퍼블리싱 완료");
     for (const r of results) {
-      if (r.postUrl) console.log(`   [${r.platform}] ${r.postUrl}`);
+      if (r.postUrl) {
+        console.log(`   [${r.platform}] 발행 URL → ${r.postUrl}`);
+      } else {
+        console.log(`   [${r.platform}] DRY-RUN — 발행 URL 없음 (에디터 입력만 완료)`);
+      }
     }
 
     return results;

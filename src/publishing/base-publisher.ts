@@ -1,10 +1,15 @@
 import fs from "node:fs/promises";
 import type { Frame, Page } from "playwright";
-
-type PageOrFrame = Page | Frame;
 import { config } from "../../config/index.js";
 import type { PublishInput, PublishResult } from "./types.js";
 import { humanClick, humanPause } from "./utils/human-input.js";
+import {
+  toSelectorArray,
+  uploadImageRobust,
+} from "./utils/image-upload.js";
+import { clickPublishButton } from "./utils/publish-click.js";
+
+type PageOrFrame = Page | Frame;
 
 /**
  * 플랫폼 퍼블리셔 공통 베이스 클래스.
@@ -15,8 +20,10 @@ export abstract class BasePublisher {
 
   abstract publish(input: PublishInput): Promise<PublishResult>;
 
-  /** 썸네일 파일 존재 확인 */
+  /** 썸네일 파일 존재 확인 (skip 옵션 시 생략) */
   protected async validateThumbnail(thumbnailPath: string): Promise<void> {
+    if (config.publishSkipThumbnail) return;
+
     try {
       await fs.access(thumbnailPath);
     } catch {
@@ -25,59 +32,52 @@ export abstract class BasePublisher {
   }
 
   /**
-   * 숨겨진 file input에 이미지를 업로드합니다.
-   * 버튼 클릭이 필요한 경우 imageButtonSelector로 트리거합니다.
+   * 썸네일 이미지 업로드.
+   * filechooser 이벤트 + 전체 frame 탐색으로 안정적으로 처리합니다.
    */
   protected async uploadImage(
-    ctx: PageOrFrame,
+    page: Page,
     thumbnailPath: string,
+    contexts: PageOrFrame[],
+    imageButtonSelector: string,
     fileInputSelector: string,
-    imageButtonSelector?: string,
   ): Promise<void> {
-    console.log(`[${this.platformName}] 썸네일 업로드 중...`);
-
-    if (imageButtonSelector) {
-      const btn = ctx.locator(imageButtonSelector).first();
-      if ((await btn.count()) > 0) {
-        await humanClick(btn);
-        await humanPause(500);
-      }
+    if (config.publishSkipThumbnail) {
+      console.log(`[${this.platformName}] PUBLISH_SKIP_THUMBNAIL=true — 썸네일 업로드 생략`);
+      return;
     }
 
-    const fileInput = ctx.locator(fileInputSelector).first();
-    await fileInput.waitFor({ state: "attached", timeout: 10_000 });
-    await fileInput.setInputFiles(thumbnailPath);
-
-    console.log(`[${this.platformName}] 썸네일 업로드 완료`);
-    await humanPause(2000);
+    try {
+      await uploadImageRobust({
+        page,
+        imagePath: thumbnailPath,
+        contexts: [page, ...contexts, ...page.frames()],
+        imageButtonSelectors: toSelectorArray(imageButtonSelector),
+        fileInputSelectors: toSelectorArray(fileInputSelector),
+        platformName: this.platformName,
+        label: "썸네일",
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[${this.platformName}] 썸네일 업로드 실패 — 건너뜀: ${msg}`);
+    }
   }
 
-  /** 발행 버튼 클릭 (dry-run 시 스킵) */
+  /** 발행 버튼 클릭 — page + 모든 frame에서 visible 버튼 탐색 */
   protected async clickPublish(
-    ctx: PageOrFrame,
+    page: Page,
+    contexts: PageOrFrame[],
     publishSelector: string,
     confirmSelector?: string,
-    urlPage?: Page,
   ): Promise<string | undefined> {
-    if (config.publishDryRun) {
-      console.log(`[${this.platformName}] DRY-RUN: 발행 버튼 클릭 생략`);
-      return undefined;
-    }
-
-    const publishBtn = ctx.locator(publishSelector).first();
-    await publishBtn.waitFor({ state: "visible", timeout: 15_000 });
-    await humanClick(publishBtn);
-    await humanPause(1000);
-
-    if (confirmSelector) {
-      const confirmBtn = ctx.locator(confirmSelector).first();
-      if ((await confirmBtn.count()) > 0) {
-        await humanClick(confirmBtn);
-        await humanPause(2000);
-      }
-    }
-
-    return urlPage?.url() ?? ("url" in ctx ? ctx.url() : undefined);
+    return clickPublishButton({
+      page,
+      contexts,
+      publishSelectors: publishSelector,
+      confirmSelectors: confirmSelector,
+      platformName: this.platformName,
+      platform: this.getPlatform(),
+    });
   }
 
   /** 팝업/다이얼로그가 있으면 클릭 */

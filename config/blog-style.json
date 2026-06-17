@@ -1,0 +1,37 @@
+{
+  "$comment": "blue_directors 샘플 블로그(청사 디렉터스) 레이아웃·폰트 기준",
+  "referenceUrls": [
+    "https://blog.naver.com/blue_directors/224309169724",
+    "https://blog.naver.com/blue_directors/224297648088",
+    "https://blog.naver.com/blue_directors/224286122286"
+  ],
+  "typography": {
+    "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    "bodyFontSize": "16px",
+    "bodyLineHeight": "1.85",
+    "bodyColor": "#333333",
+    "introAlign": "center",
+    "bodyAlign": "left",
+    "h2FontSize": "22px",
+    "h2FontWeight": "700",
+    "h2Color": "#1a3a5c",
+    "h2Align": "center",
+    "h2Margin": "32px 0 14px 0",
+    "tableFontSize": "15px",
+    "listFontSize": "16px"
+  },
+  "divider": {
+    "html": "<p style=\"text-align:center;margin:28px 0;\"><span style=\"display:inline-block;width:72%;max-width:520px;border-top:1px solid #c8c8c8;\"></span></p>"
+  },
+  "spacing": {
+    "paragraphMargin": "0 0 14px 0",
+    "introParagraphMargin": "0 0 12px 0"
+  },
+  "structure": {
+    "introParagraphCount": 4,
+    "minH2Sections": 5,
+    "requireTable": true,
+    "requireList": true,
+    "requireDisclaimer": true
+  }
+}

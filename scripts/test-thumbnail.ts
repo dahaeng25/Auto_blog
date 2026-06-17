@@ -8,8 +8,7 @@ async function main(): Promise<void> {
   const renderer = new ThumbnailRenderer();
 
   const outputPath = await renderer.render({
-    text: "AI가 바꾸는 블로그의 미래",
-    subtitle: "자동화 시대, 콘텐츠 전략은 어떻게 달라질까?",
+    text: "E-7-4R 비자\n변경 절차 총정리",
   });
 
   console.log(`\n✅ 썸네일 생성 완료: ${outputPath}`);

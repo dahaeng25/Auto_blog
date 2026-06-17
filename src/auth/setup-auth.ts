@@ -1,8 +1,13 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { BrowserContext } from "playwright";
+import { config } from "../../config/index.js";
 import { PLATFORMS, type Platform } from "../../config/platforms.js";
 import { createBrowserSession } from "./browser-factory.js";
+import {
+  isNaverLoggedIn,
+  isTistoryLoggedIn,
+} from "./login-check.js";
 import { saveSession } from "./session-manager.js";
 
 /** 터미널에서 Enter 입력을 기다립니다. */
@@ -10,24 +15,6 @@ async function waitForEnter(message: string): Promise<void> {
   const rl = readline.createInterface({ input, output });
   await rl.question(message);
   rl.close();
-}
-
-/**
- * 네이버 로그인 쿠키 존재 여부로 세션 유효성을 간단히 확인합니다.
- */
-async function isNaverLoggedIn(context: BrowserContext): Promise<boolean> {
-  const cookies = await context.cookies("https://www.naver.com");
-  return cookies.some(
-    (c) => c.name === "NID_AUT" || c.name === "NID_SES",
-  );
-}
-
-/**
- * 티스토리 세션 쿠키 존재 여부로 로그인을 확인합니다.
- */
-async function isTistoryLoggedIn(context: BrowserContext): Promise<boolean> {
-  const cookies = await context.cookies("https://www.tistory.com");
-  return cookies.some((c) => c.name === "TSSESSION");
 }
 
 const LOGIN_CHECKERS: Record<Platform, (ctx: BrowserContext) => Promise<boolean>> = {
@@ -55,6 +42,22 @@ async function setupPlatformAuth(
   // verifyUrl로 이동하여 쿠키 갱신
   await page.goto(verifyUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2000);
+
+  // 티스토리: 블로그 글쓰기 페이지까지 방문해 TSSESSION·관리자 쿠키 확보
+  if (platform === "tistory" && config.tistoryBlogName) {
+    const writeUrl = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
+    console.log(`   글쓰기 페이지 방문: ${writeUrl}`);
+    await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+  }
+
+  // 네이버: 블로그 글쓰기 페이지까지 방문
+  if (platform === "naver" && config.naverBlogId) {
+    const writeUrl = PLATFORMS.naver.postWriteUrl(config.naverBlogId);
+    console.log(`   글쓰기 페이지 방문: ${writeUrl}`);
+    await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+  }
 
   const isLoggedIn = await LOGIN_CHECKERS[platform](context);
   if (!isLoggedIn) {

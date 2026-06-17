@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { config } from "../../../config/index.js";
+import type { ChatOptions } from "./types.js";
 
 let client: OpenAI | null = null;
 
@@ -17,17 +18,10 @@ function getClient(): OpenAI {
   return client;
 }
 
-export interface ChatOptions {
-  system: string;
-  user: string;
-  temperature?: number;
-}
-
 /**
  * OpenAI Chat Completions API 래퍼.
- * 모든 에이전트는 이 함수를 통해 LLM을 호출합니다.
  */
-export async function chat({
+export async function openaiChat({
   system,
   user,
   temperature = 0.7,

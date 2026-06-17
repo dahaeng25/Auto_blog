@@ -1,15 +1,18 @@
 /**
  * 엔트리포인트: npm run content:test
  * Phase 2 콘텐츠 파이프라인을 1회 실행합니다.
- * .env에 OPENAI_API_KEY가 설정되어 있어야 합니다.
  */
+import { parseTopicFromArgv, resolveBlogTopic } from "../src/cli/resolve-blog-topic.js";
 import { ContentPipeline } from "../src/content/content-pipeline.js";
 
 async function main(): Promise<void> {
+  const cliTopic = parseTopicFromArgv(process.argv.slice(2));
+  const blogTopic = await resolveBlogTopic({ cliTopic });
+
   const pipeline = new ContentPipeline();
 
   try {
-    const draft = await pipeline.run();
+    const draft = await pipeline.run({ blogTopic });
 
     console.log("\n─── 생성 결과 요약 ───");
     console.log(`제목: ${draft.title}`);

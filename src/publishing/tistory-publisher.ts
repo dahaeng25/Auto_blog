@@ -3,14 +3,15 @@ import { config } from "../../config/index.js";
 import { PLATFORMS } from "../../config/platforms.js";
 import { EDITOR_SELECTORS } from "../../config/editor-selectors.js";
 import { createBrowserSession } from "../auth/browser-factory.js";
-import { requireSession } from "../auth/session-manager.js";
+import { ensureValidSession } from "../auth/ensure-session.js";
 import { BasePublisher } from "./base-publisher.js";
 import type { PublishInput, PublishResult } from "./types.js";
+import { editorSettleDelay } from "./utils/dom-utils.js";
 import { humanType, humanPause } from "./utils/human-input.js";
-import {
-  findContentEditable,
-  pasteHtmlToEditor,
-} from "./utils/editor-paste.js";
+import { fillBodyWithImages } from "./body-images/body-image-inserter.js";
+import { clickTistoryPublicPublish } from "./utils/tistory-publish.js";
+import { assertEditorAccessible } from "../auth/login-check.js";
+import { findContentEditable } from "./utils/editor-paste.js";
 
 /**
  * 티스토리 에디터 퍼블리셔 (오픈 API 종료 → 브라우저 RPA)
@@ -31,7 +32,7 @@ export class TistoryPublisher extends BasePublisher {
 
     await this.validateThumbnail(input.thumbnailPath);
 
-    const statePath = await requireSession("tistory");
+    const statePath = await ensureValidSession("tistory");
     const session = await createBrowserSession({
       headless: config.publishHeadless,
       storageStatePath: statePath,
@@ -61,13 +62,23 @@ export class TistoryPublisher extends BasePublisher {
     await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await humanPause(2000);
 
+    await assertEditorAccessible(page, "tistory");
+
     const sel = EDITOR_SELECTORS.tistory;
 
-    // 제목 — input 요소 우선 시도
-    const titleInput = page.locator(sel.title).first();
-    if ((await titleInput.count()) > 0) {
-      await humanType(titleInput, input.title);
-    } else {
+    // 제목 — 에디터 로딩 대기 후 입력
+    let titleTyped = false;
+    for (let i = 0; i < 25; i++) {
+      const titleInput = page.locator(sel.title).first();
+      if ((await titleInput.count()) > 0 && (await titleInput.isVisible())) {
+        await humanType(titleInput, input.title);
+        titleTyped = true;
+        break;
+      }
+      await humanPause(500);
+    }
+
+    if (!titleTyped) {
       const titleEditable = await findContentEditable(page, sel.title);
       await humanType(titleEditable, input.title);
     }
@@ -79,22 +90,20 @@ export class TistoryPublisher extends BasePublisher {
       editorFrame,
       sel.editorBody,
     );
-    await pasteHtmlToEditor(page, bodyLocator, input.htmlBody);
-    await humanPause(1000);
+    await fillBodyWithImages({
+      page,
+      platform: "tistory",
+      platformName: this.platformName,
+      htmlBody: input.htmlBody,
+      thumbnailPath: input.thumbnailPath,
+      bodyLocator,
+      editorContext: editorFrame,
+      imageButtonSelector: sel.imageButton,
+      fileInputSelector: sel.fileInput,
+    });
+    await humanPause(editorSettleDelay(input.htmlBody.length));
 
-    await this.uploadImage(
-      page,
-      input.thumbnailPath,
-      sel.fileInput,
-      sel.imageButton,
-    );
-
-    return this.clickPublish(
-      page,
-      sel.publishButton,
-      sel.publishConfirm,
-      page,
-    );
+    return clickTistoryPublicPublish(page, [page, editorFrame]);
   }
 
   /** 티스토리 에디터 iframe 탐색 */

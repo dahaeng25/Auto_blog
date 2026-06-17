@@ -5,12 +5,16 @@ import { FarmingAgent } from "./agents/farming-agent.js";
 import { TitleAgent } from "./agents/title-agent.js";
 import { ContentAgent } from "./agents/content-agent.js";
 import { ThumbnailTextAgent } from "./agents/thumbnail-text-agent.js";
+import { GemsAgent } from "./agents/gems-agent.js";
+import { applyBlogStyle } from "./blog-style/apply-style.js";
 import { TopicRepository } from "./farming/topic-repository.js";
-import type { ArticleDraft } from "./types.js";
+import type { ArticleDraft, ContentRunOptions, RawTopic } from "./types.js";
 
 /**
  * Phase 2 콘텐츠 생성 파이프라인.
- * Farming → Title → Content → ThumbnailText 순서로 실행합니다.
+ *
+ * CONTENT_MODE=rss  → RSS 수집 + 4단계 에이전트
+ * CONTENT_MODE=gems → 사용자 지정 주제 + Gems 프롬프트 (API는 OpenAI/Gemini 선택)
  */
 export class ContentPipeline {
   private readonly repo: TopicRepository;
@@ -18,6 +22,7 @@ export class ContentPipeline {
   private readonly titleAgent: TitleAgent;
   private readonly contentAgent: ContentAgent;
   private readonly thumbnailTextAgent: ThumbnailTextAgent;
+  private readonly gemsAgent: GemsAgent;
 
   constructor(repo?: TopicRepository) {
     this.repo = repo ?? new TopicRepository();
@@ -25,35 +30,128 @@ export class ContentPipeline {
     this.titleAgent = new TitleAgent();
     this.contentAgent = new ContentAgent();
     this.thumbnailTextAgent = new ThumbnailTextAgent();
+    this.gemsAgent = new GemsAgent();
   }
 
-  async run(): Promise<ArticleDraft> {
+  async run(options: ContentRunOptions = {}): Promise<ArticleDraft> {
     console.log("\n═══ Phase 2: 콘텐츠 생성 파이프라인 ═══\n");
+    console.log(`[Content] 모드: ${config.contentMode}`);
 
+    if (config.contentMode === "gems") {
+      return this.runGemsMode(options.blogTopic);
+    }
+    return this.runRssMode();
+  }
+
+  /** RSS 자동 수집 + OpenAI/Gemini 4단계 에이전트 */
+  private async runRssMode(): Promise<ArticleDraft> {
     const { topicId, topic } = await this.farmingAgent.run();
     const title = await this.titleAgent.run(topic);
     const htmlBody = await this.contentAgent.run(title, topic);
     const thumbnailText = await this.thumbnailTextAgent.run(title);
 
-    const draft: ArticleDraft = {
+    return this.saveDraft({
       topicId,
       sourceTopic: topic,
       title,
       htmlBody,
       thumbnailText,
+    });
+  }
+
+  /** 사용자 지정 주제 + Gems 프롬프트 단일 생성 */
+  private async runGemsMode(blogTopicOverride?: string): Promise<ArticleDraft> {
+    const blogTopic = blogTopicOverride?.trim() || config.blogTopic;
+    if (!blogTopic) {
+      throw new Error(
+        "gems 모드에는 블로그 주제가 필요합니다.\n" +
+          "  • npm run run:once 실행 시 입력\n" +
+          "  • npm run run:once -- --topic \"키워드1, 키워드2\"\n" +
+          "  • .env BLOG_TOPIC 설정",
+      );
+    }
+
+    const topic: RawTopic = {
+      sourceUrl: `gems://manual/${encodeURIComponent(blogTopic)}`,
+      title: blogTopic,
+      summary: blogTopic,
+      sourceFeed: "gems-manual",
+    };
+
+    const existing = this.repo.getTopicBySourceUrl(topic.sourceUrl);
+
+    if (existing) {
+      // 강제 재생성
+      if (config.forceRegenerate) {
+        console.log(`[Gems] FORCE_REGENERATE=true — 기존 주제 삭제 후 재생성`);
+        this.repo.deleteTopicAndArticles(topic.sourceUrl);
+      }
+      // 기존 원고 재사용 (drafted 또는 RETRY_PUBLISH 시 published 포함)
+      else if (
+        existing.status === "drafted" ||
+        (existing.status === "published" && config.retryPublish)
+      ) {
+        const draft = this.repo.getLatestArticleByTopicId(existing.id);
+        if (draft) {
+          const label =
+            existing.status === "published" ? "퍼블리싱 재시도" : "원고 재사용";
+          console.log(
+            `[Gems] 기존 원고 ${label} (topic id=${existing.id}) — AI 생성 생략`,
+          );
+          console.log(`[Gems] 제목: ${draft.title}`);
+          if (existing.status === "published") {
+            this.repo.updateStatus(existing.id, "drafted");
+          }
+          return draft;
+        }
+        this.repo.deleteTopicAndArticles(topic.sourceUrl);
+        console.log(`[Gems] 원고 없는 레코드 정리 후 재생성`);
+      }
+      // 이미 발행 완료된 주제 (재시도 옵션 없음)
+      else if (existing.status === "published") {
+        throw new Error(
+          `이미 발행 완료된 주제입니다: "${blogTopic}"\n` +
+            `RETRY_PUBLISH=true 로 퍼블리싱만 재시도하거나,\n` +
+            `BLOG_TOPIC을 변경하거나 FORCE_REGENERATE=true 로 재생성하세요.`,
+        );
+      }
+      // farmed 등 원고 없는 중복
+      else if (!config.forceRegenerate) {
+        this.repo.deleteTopicAndArticles(topic.sourceUrl);
+        console.log(`[Gems] 불완전한 기존 레코드 정리 후 재생성`);
+      }
+    }
+
+    const topicId = this.repo.insertTopic(topic);
+    const gems = await this.gemsAgent.run(blogTopic);
+
+    return this.saveDraft({
+      topicId,
+      sourceTopic: topic,
+      title: gems.title,
+      htmlBody: gems.htmlBody,
+      thumbnailText: gems.thumbnailText,
+    });
+  }
+
+  private async saveDraft(
+    draft: Omit<ArticleDraft, "createdAt">,
+  ): Promise<ArticleDraft> {
+    const fullDraft: ArticleDraft = {
+      ...draft,
+      htmlBody: applyBlogStyle(draft.htmlBody),
       createdAt: new Date().toISOString(),
     };
 
-    const articleId = this.repo.saveArticle(draft);
-    const draftPath = await this.saveDraftFile(draft, articleId);
+    const articleId = this.repo.saveArticle(fullDraft);
+    const draftPath = await this.saveDraftFile(fullDraft, articleId);
 
     console.log(`\n✅ 원고 저장 완료 (article id=${articleId})`);
     console.log(`   파일: ${draftPath}`);
 
-    return draft;
+    return fullDraft;
   }
 
-  /** 디버깅용 JSON 백업 저장 */
   private async saveDraftFile(
     draft: ArticleDraft,
     articleId: number,

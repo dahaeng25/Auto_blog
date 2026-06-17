@@ -1,4 +1,4 @@
-import { chat } from "../llm/openai-client.js";
+import { chat } from "../llm/llm-router.js";
 import {
   THUMBNAIL_TEXT_SYSTEM_PROMPT,
   buildThumbnailTextUserPrompt,

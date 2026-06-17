@@ -3,18 +3,27 @@ import { config } from "../../config/index.js";
 import { PLATFORMS } from "../../config/platforms.js";
 import { EDITOR_SELECTORS } from "../../config/editor-selectors.js";
 import { createBrowserSession } from "../auth/browser-factory.js";
-import { requireSession } from "../auth/session-manager.js";
+import { ensureValidSession } from "../auth/ensure-session.js";
 import { BasePublisher } from "./base-publisher.js";
 import type { PublishInput, PublishResult } from "./types.js";
-import { humanType, humanPause } from "./utils/human-input.js";
+import { editorSettleDelay } from "./utils/dom-utils.js";
+import { humanPause } from "./utils/human-input.js";
+import { fillBodyWithImages } from "./body-images/body-image-inserter.js";
 import {
-  findContentEditable,
-  pasteHtmlToEditor,
-} from "./utils/editor-paste.js";
+  findNaverTitleField,
+  findNaverBodyField,
+  fillNaverTitle,
+} from "./utils/naver-editor.js";
+import { assertEditorAccessible } from "../auth/login-check.js";
+import {
+  dismissNaverDraftDialog,
+  waitForNaverEditorReady,
+} from "./utils/naver-draft-handler.js";
+import { dismissNaverRightPanel } from "./utils/naver-sidebar-handler.js";
 
 /**
  * 네이버 블로그 스마트에디터 ONE 퍼블리셔.
- * 세션 쿠키 주입 → 글쓰기 페이지 직행 → 클립보드/insertHTML 붙여넣기
+ * 제목란과 본문란을 분리하여 입력합니다.
  */
 export class NaverPublisher extends BasePublisher {
   protected platformName = "네이버";
@@ -30,7 +39,7 @@ export class NaverPublisher extends BasePublisher {
 
     await this.validateThumbnail(input.thumbnailPath);
 
-    const statePath = await requireSession("naver");
+    const statePath = await ensureValidSession("naver");
     const session = await createBrowserSession({
       headless: config.publishHeadless,
       storageStatePath: statePath,
@@ -60,35 +69,47 @@ export class NaverPublisher extends BasePublisher {
     await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await humanPause(2000);
 
+    await assertEditorAccessible(page, "naver");
+    await waitForNaverEditorReady(page);
+
     const sel = EDITOR_SELECTORS.naver;
+
+    await dismissNaverDraftDialog(page);
+    await dismissNaverRightPanel(page);
+
     const editorFrame = await this.getMainFrame(page);
 
-    await this.dismissIfVisible(editorFrame, sel.dismissDraft);
+    // 1) 제목란에 제목만 입력
+    const titleLocator = await findNaverTitleField(editorFrame);
+    await fillNaverTitle(titleLocator, input.title);
 
-    const titleLocator = await findContentEditable(editorFrame, sel.title);
-    await humanType(titleLocator, input.title);
-    await humanPause(500);
-
-    const bodyLocator = await findContentEditable(editorFrame, sel.editorBody);
-    await pasteHtmlToEditor(page, bodyLocator, input.htmlBody);
+    // 2) 본문란 탐색 (제목 입력 후 본문 영역이 활성화될 때까지 대기)
     await humanPause(1000);
+    const bodyLocator = await findNaverBodyField(editorFrame);
+    await fillBodyWithImages({
+      page,
+      platform: "naver",
+      platformName: this.platformName,
+      htmlBody: input.htmlBody,
+      thumbnailPath: input.thumbnailPath,
+      bodyLocator,
+      editorContext: editorFrame,
+      imageButtonSelector: sel.imageButton,
+      fileInputSelector: sel.fileInput,
+    });
+    await humanPause(editorSettleDelay(input.htmlBody.length));
 
-    await this.uploadImage(
-      editorFrame,
-      input.thumbnailPath,
-      sel.fileInput,
-      sel.imageButton,
-    );
+    // 글 작성 완료 후 우측 패널이 다시 열렸을 수 있음 → 발행 전 닫기
+    await dismissNaverRightPanel(page);
 
     return this.clickPublish(
-      editorFrame,
+      page,
+      [page, editorFrame],
       sel.publishButton,
       sel.publishConfirm,
-      page,
     );
   }
 
-  /** #mainFrame iframe 반환 — 없으면 메인 프레임 사용 */
   private async getMainFrame(page: Page): Promise<Frame> {
     const sel = EDITOR_SELECTORS.naver;
     const iframe = page.locator(sel.mainFrame).first();

@@ -1,4 +1,5 @@
-/** RSS에서 수집된 원시 주제 */
+export type TopicStatus = "farmed" | "drafted" | "published";
+
 export interface RawTopic {
   sourceUrl: string;
   title: string;
@@ -7,7 +8,15 @@ export interface RawTopic {
   publishedAt?: string;
 }
 
-/** DB에 저장된 주제 레코드 */
+export interface ArticleDraft {
+  topicId: number;
+  sourceTopic: RawTopic;
+  title: string;
+  htmlBody: string;
+  thumbnailText: string;
+  createdAt: string;
+}
+
 export interface TopicRecord {
   id: number;
   sourceUrl: string;
@@ -17,14 +26,8 @@ export interface TopicRecord {
   status: TopicStatus;
 }
 
-export type TopicStatus = "farmed" | "drafted" | "published";
-
-/** 에이전트 파이프라인 최종 산출물 */
-export interface ArticleDraft {
-  topicId: number;
-  sourceTopic: RawTopic;
-  title: string;
-  htmlBody: string;
-  thumbnailText: string;
-  createdAt: string;
+/** 콘텐츠 파이프라인 실행 옵션 */
+export interface ContentRunOptions {
+  /** 실행 시 지정한 블로그 주제/키워드 (.env보다 우선) */
+  blogTopic?: string;
 }
