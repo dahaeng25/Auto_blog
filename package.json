@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "setup": "node setup.mjs",
+    "setup:full": "node setup.mjs --full --wizard",
     "auth:setup": "tsx scripts/setup-auth.ts",
     "content:test": "tsx scripts/test-content.ts",
     "thumbnail:test": "tsx scripts/test-thumbnail.ts",
