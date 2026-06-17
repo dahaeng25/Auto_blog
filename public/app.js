@@ -1,79 +1,13 @@
-const API_KEY_STORAGE = "blog-orchestrator-api-key";
-
 let pollTimer = null;
-let authRequired = false;
-
-function getApiKey() {
-  return sessionStorage.getItem(API_KEY_STORAGE) ?? "";
-}
-
-function setApiKey(key) {
-  sessionStorage.setItem(API_KEY_STORAGE, key);
-}
-
-function clearApiKey() {
-  sessionStorage.removeItem(API_KEY_STORAGE);
-}
-
-function showAuthError(message) {
-  const errorEl = document.getElementById("login-error");
-  if (!message) {
-    errorEl.textContent = "";
-    errorEl.classList.add("hidden");
-    return;
-  }
-  errorEl.textContent = message;
-  errorEl.classList.remove("hidden");
-}
-
-function updateAuthUi() {
-  const authBar = document.getElementById("auth-bar");
-  const logoutBtn = document.getElementById("logout-btn");
-
-  if (!authRequired) {
-    authBar.classList.add("hidden");
-    logoutBtn.classList.add("hidden");
-    showAuthError("");
-    return;
-  }
-
-  if (getApiKey()) {
-    authBar.classList.add("hidden");
-    logoutBtn.classList.remove("hidden");
-    showAuthError("");
-    return;
-  }
-
-  authBar.classList.remove("hidden");
-  logoutBtn.classList.add("hidden");
-}
 
 async function api(path, options = {}) {
-  const headers = { ...(options.headers ?? {}) };
-  const key = getApiKey();
-  if (key) headers["X-API-Key"] = key;
-
-  const res = await fetch(path, { ...options, headers });
-  if (res.status === 401) {
-    if (authRequired) {
-      clearApiKey();
-      updateAuthUi();
-      showAuthError(
-        "API 키가 필요합니다. 헤더에 API_KEY를 입력한 뒤 인증을 눌러주세요.",
-      );
-    }
-    throw new Error("인증이 필요합니다.");
-  }
+  const res = await fetch(path, options);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const detail = body.error ?? body.message ?? `요청 실패 (${res.status})`;
     throw new Error(detail);
   }
   return res.json();
-}
-
-function showApp() {
-  startPolling();
 }
 
 function statusBadgeClass(status) {
@@ -267,47 +201,7 @@ function stopPolling() {
   }
 }
 
-async function tryLogin() {
-  const input = document.getElementById("api-key-input");
-  const key = input.value.trim();
-
-  if (!key) {
-    showAuthError("API 키를 입력하세요.");
-    return;
-  }
-
-  setApiKey(key);
-
-  try {
-    await api("/api/auth/verify");
-    updateAuthUi();
-    showApp();
-    await refreshAll();
-  } catch (err) {
-    clearApiKey();
-    updateAuthUi();
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("401") || msg.includes("인증")) {
-      showAuthError(
-        "API 키가 올바르지 않습니다. Vercel Environment Variables의 API_KEY 값과 정확히 일치하는지 확인하세요.",
-      );
-    } else {
-      showAuthError(msg);
-    }
-  }
-}
-
 async function init() {
-  document.getElementById("login-btn").addEventListener("click", tryLogin);
-  document.getElementById("api-key-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") tryLogin();
-  });
-  document.getElementById("logout-btn").addEventListener("click", () => {
-    clearApiKey();
-    updateAuthUi();
-    showAuthError("로그아웃되었습니다. 다시 사용하려면 API 키를 입력하세요.");
-    stopPolling();
-  });
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("run-btn").addEventListener("click", runPipeline);
   document.getElementById("logs-refresh").addEventListener("click", loadLogs);
@@ -325,28 +219,14 @@ async function init() {
     if (file) uploadSession("tistory", file);
   });
 
-  try {
-    const meta = await fetch("/api/meta").then((r) => r.json());
-    authRequired = Boolean(meta.authRequired);
-  } catch {
-    authRequired = false;
-  }
-
-  updateAuthUi();
-
-  if (authRequired && !getApiKey()) {
-    showAuthError(
-      "API 키 인증이 필요합니다. 헤더에서 API_KEY를 입력한 뒤 인증을 눌러주세요.",
-    );
-    return;
-  }
-
-  showApp();
+  startPolling();
 
   try {
     await refreshAll();
-  } catch {
-    /* 인증 오류는 api()에서 안내 */
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    document.getElementById("run-message").textContent = msg;
+    document.getElementById("run-message").className = "run-message error";
   }
 }
 

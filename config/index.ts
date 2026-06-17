@@ -104,11 +104,11 @@ export const config = {
 
   /** 웹 서버 포트 */
   port: Number(process.env.PORT ?? 3000),
-  /** API 인증 키 (미설정 또는 DISABLE_API_AUTH=true 시 로컬 개발 모드) */
+  /** API 인증 키 — DISABLE_API_AUTH=false 일 때만 활성화 (기본: 비활성화) */
   apiKey:
-    process.env.DISABLE_API_AUTH === "true"
-      ? ""
-      : (process.env.API_KEY ?? "").trim().replace(/^["']|["']$/g, ""),
+    process.env.DISABLE_API_AUTH === "false"
+      ? (process.env.API_KEY ?? "").trim().replace(/^["']|["']$/g, "")
+      : "",
   /** Vercel Cron 보안 키 */
   cronSecret: process.env.CRON_SECRET ?? "",
   /** 웹 서버에서 cron 스케줄러 활성화 (Vercel에서는 false) */

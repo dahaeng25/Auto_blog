@@ -22,6 +22,10 @@ export interface OrchestrationResult {
 /** 동시 실행 방지 락 */
 let isRunning = false;
 
+export function isPipelineRunning(): boolean {
+  return isRunning;
+}
+
 /**
  * Phase 2 → 3 → 4 전체 오케스트레이션.
  * 성공/실패 시 Discord Webhook으로 알림을 전송합니다.

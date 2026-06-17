@@ -14,22 +14,9 @@
         <p class="subtitle">클라우드 블로그 자동화 대시보드</p>
       </div>
       <div class="header-actions">
-        <div id="auth-bar" class="auth-bar hidden">
-          <input
-            id="api-key-input"
-            type="password"
-            placeholder="API_KEY"
-            autocomplete="off"
-            aria-label="대시보드 API 키"
-          />
-          <button id="login-btn" class="btn btn-primary btn-sm">인증</button>
-        </div>
         <button id="refresh-btn" class="btn btn-ghost">새로고침</button>
-        <button id="logout-btn" class="btn btn-ghost hidden">로그아웃</button>
       </div>
     </header>
-
-    <p id="login-error" class="auth-notice hidden"></p>
 
     <section class="status-grid">
       <div class="card status-card">
@@ -122,6 +109,6 @@
     </div>
   </div>
 
-  <script src="/app.js" type="module"></script>
+  <script src="/app.js?v=3" type="module"></script>
 </body>
 </html>
