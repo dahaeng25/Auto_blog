@@ -29,7 +29,7 @@ async function migrateLibsql(
 
   for (const sql of statements) {
     try {
-      await db.execute({ sql });
+      await db.execute({ sql, args: [] });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!/already exists/i.test(message)) throw error;
@@ -42,6 +42,7 @@ async function migrateLibsql(
       state_json  TEXT NOT NULL,
       updated_at  TEXT NOT NULL
     )`,
+    args: [],
   });
 
   migrated = true;
