@@ -54,7 +54,6 @@ web.bat
 | 변수 | 설명 |
 |------|------|
 | `OPENAI_API_KEY` | OpenAI API 키 (필수) |
-| `API_KEY` | 대시보드 로그인 비밀키 (필수) |
 | `TURSO_DATABASE_URL` | Turso DB URL (필수) |
 | `TURSO_AUTH_TOKEN` | Turso 인증 토큰 (필수) |
 | `NAVER_BLOG_ID` | 네이버 블로그 ID |
@@ -107,5 +106,3 @@ docker compose up -d --build
 | POST | `/api/run` | 파이프라인 실행 |
 | GET | `/api/articles` | 원고 목록 |
 | POST | `/api/sessions/:platform` | 세션 JSON 업로드 |
-
-`X-API-Key` 헤더에 `API_KEY` 값을 포함하세요.

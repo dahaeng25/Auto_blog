@@ -44,12 +44,6 @@ function startScheduler(): void {
 }
 
 async function main(): Promise<void> {
-  if (!config.apiKey) {
-    logger.warn(
-      "API_KEY가 설정되지 않았습니다. 프로덕션 배포 시 반드시 설정하세요.",
-    );
-  }
-
   fs.mkdirSync(config.authDir, { recursive: true });
   fs.mkdirSync(config.dataDir, { recursive: true });
   fs.mkdirSync(config.outputDir, { recursive: true });

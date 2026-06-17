@@ -5,7 +5,6 @@ import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
 import { config } from "../config/index.js";
 import type { Platform } from "../config/platforms.js";
-import { requireApiKey } from "./api/auth-hook.js";
 import { jobStore } from "./api/job-store.js";
 import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
@@ -26,13 +25,10 @@ export async function createApp(
   const { serveStatic = true } = options;
   const app = Fastify({ logger: false });
 
-  app.addHook("onRequest", requireApiKey);
-
   app.get("/health", async () => ({ ok: true }));
   app.get("/api/health", async () => ({ ok: true }));
   app.get("/api/meta", async () => ({
-    authRequired: false,
-    version: "0.2.1",
+    version: "0.2.2",
     platform: config.isVercel ? "vercel" : "server",
   }));
 
@@ -52,7 +48,6 @@ export async function createApp(
           naverBlogId: config.naverBlogId || null,
           tistoryBlogName: config.tistoryBlogName || null,
           rssFeedCount: config.rssFeedUrls.length,
-          authRequired: false,
           isVercel: config.isVercel,
         },
         sessions: {
