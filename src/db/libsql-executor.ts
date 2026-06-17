@@ -29,11 +29,24 @@ async function migrateLibsql(
   const statements = schema
     .split(";")
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter((s) => s.length > 0 && !s.startsWith("--"));
 
   for (const sql of statements) {
-    await db.execute({ sql });
+    try {
+      await db.execute({ sql });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already exists/i.test(message)) throw error;
+    }
   }
+
+  await db.execute({
+    sql: `CREATE TABLE IF NOT EXISTS platform_sessions (
+      platform    TEXT PRIMARY KEY,
+      state_json  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL
+    )`,
+  });
 
   migrated = true;
 }

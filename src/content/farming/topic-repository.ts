@@ -1,7 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import Database from "better-sqlite3";
-import { config } from "../../../config/index.js";
+import { getDb } from "../../db/client.js";
+import type { DbExecutor } from "../../db/types.js";
 import type {
   ArticleDraft,
   RawTopic,
@@ -9,332 +7,251 @@ import type {
   TopicStatus,
 } from "../types.js";
 
+type TopicRow = {
+  id: number;
+  source_url: string;
+  title: string;
+  summary: string;
+  fetched_at: string;
+  status: TopicStatus;
+};
+
+function mapTopicRow(row: Record<string, unknown>): TopicRecord {
+  return {
+    id: Number(row.id),
+    sourceUrl: String(row.source_url),
+    title: String(row.title),
+    summary: String(row.summary),
+    fetchedAt: String(row.fetched_at),
+    status: row.status as TopicStatus,
+  };
+}
+
 /**
- * SQLite 기반 주제/원고 저장소.
- * 중복 발행 방지를 위해 source_url UNIQUE 제약을 사용합니다.
+ * 주제/원고 저장소 — 로컬 SQLite 또는 Turso(libsql) 공통.
  */
 export class TopicRepository {
-  private db: Database.Database;
+  private readonly dbPromise: Promise<DbExecutor>;
 
-  constructor(dbPath: string = config.dbPath) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.initSchema();
+  constructor() {
+    this.dbPromise = getDb();
   }
 
-  private initSchema(): void {
-    const schemaPath = path.join(config.dataDir, "schema.sql");
-    const schema = fs.readFileSync(schemaPath, "utf-8");
-    this.db.exec(schema);
+  private async db(): Promise<DbExecutor> {
+    return this.dbPromise;
   }
 
-  /** source_url 기준 중복 여부 확인 */
-  existsByUrl(sourceUrl: string): boolean {
-    const row = this.db
-      .prepare("SELECT 1 FROM topics WHERE source_url = ?")
-      .get(sourceUrl);
-    return row !== undefined;
+  async existsByUrl(sourceUrl: string): Promise<boolean> {
+    const db = await this.db();
+    const result = await db.execute(
+      "SELECT 1 FROM topics WHERE source_url = ?",
+      [sourceUrl],
+    );
+    return result.rows.length > 0;
   }
 
-  /** 새 주제를 DB에 등록하고 ID를 반환 */
-  insertTopic(topic: RawTopic): number {
-    const result = this.db
-      .prepare(
-        `INSERT INTO topics (source_url, title, summary, fetched_at, status)
-         VALUES (?, ?, ?, ?, 'farmed')`,
-      )
-      .run(
-        topic.sourceUrl,
-        topic.title,
-        topic.summary,
-        new Date().toISOString(),
-      );
+  async insertTopic(topic: RawTopic): Promise<number> {
+    const db = await this.db();
+    const result = await db.execute(
+      `INSERT INTO topics (source_url, title, summary, fetched_at, status)
+       VALUES (?, ?, ?, ?, 'farmed')`,
+      [topic.sourceUrl, topic.title, topic.summary, new Date().toISOString()],
+    );
     return Number(result.lastInsertRowid);
   }
 
-  /** 주제 상태 업데이트 */
-  updateStatus(topicId: number, status: TopicStatus): void {
-    this.db
-      .prepare("UPDATE topics SET status = ? WHERE id = ?")
-      .run(status, topicId);
+  async updateStatus(topicId: number, status: TopicStatus): Promise<void> {
+    const db = await this.db();
+    await db.execute("UPDATE topics SET status = ? WHERE id = ?", [
+      status,
+      topicId,
+    ]);
   }
 
-  /** 원고 저장 및 주제 상태를 drafted로 변경 */
-  saveArticle(draft: ArticleDraft): number {
-    const insert = this.db.prepare(
-      `INSERT INTO articles (topic_id, title, html_body, thumbnail_text, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+  async saveArticle(draft: ArticleDraft): Promise<number> {
+    const db = await this.db();
+    const results = await db.batch([
+      {
+        sql: `INSERT INTO articles (topic_id, title, html_body, thumbnail_text, created_at)
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [
+          draft.topicId,
+          draft.title,
+          draft.htmlBody,
+          draft.thumbnailText,
+          draft.createdAt,
+        ],
+      },
+      {
+        sql: "UPDATE topics SET status = ? WHERE id = ?",
+        args: ["drafted", draft.topicId],
+      },
+    ]);
+    return Number(results[0]?.lastInsertRowid);
+  }
+
+  async getTopicBySourceUrl(sourceUrl: string): Promise<TopicRecord | null> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT id, source_url, title, summary, fetched_at, status
+       FROM topics WHERE source_url = ?`,
+      [sourceUrl],
     );
-
-    const tx = this.db.transaction(() => {
-      const result = insert.run(
-        draft.topicId,
-        draft.title,
-        draft.htmlBody,
-        draft.thumbnailText,
-        draft.createdAt,
-      );
-      this.updateStatus(draft.topicId, "drafted");
-      return Number(result.lastInsertRowid);
-    });
-
-    return tx();
+    if (result.rows.length === 0) return null;
+    return mapTopicRow(result.rows[0] as TopicRow);
   }
 
-  /** source_url로 주제 조회 */
-  getTopicBySourceUrl(sourceUrl: string): TopicRecord | null {
-    const row = this.db
-      .prepare(
-        `SELECT id, source_url, title, summary, fetched_at, status
-         FROM topics WHERE source_url = ?`,
-      )
-      .get(sourceUrl) as
-      | {
-          id: number;
-          source_url: string;
-          title: string;
-          summary: string;
-          fetched_at: string;
-          status: TopicStatus;
-        }
-      | undefined;
+  async getLatestArticleByTopicId(topicId: number): Promise<ArticleDraft | null> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT a.topic_id, a.title, a.html_body, a.thumbnail_text, a.created_at,
+              t.source_url, t.summary, t.title as topic_title
+       FROM articles a
+       JOIN topics t ON t.id = a.topic_id
+       WHERE a.topic_id = ?
+       ORDER BY a.id DESC
+       LIMIT 1`,
+      [topicId],
+    );
+    if (result.rows.length === 0) return null;
 
-    if (!row) return null;
-
+    const row = result.rows[0] as Record<string, unknown>;
     return {
-      id: row.id,
-      sourceUrl: row.source_url,
-      title: row.title,
-      summary: row.summary,
-      fetchedAt: row.fetched_at,
-      status: row.status,
-    };
-  }
-
-  /** 주제의 최신 원고 조회 */
-  getLatestArticleByTopicId(topicId: number): ArticleDraft | null {
-    const row = this.db
-      .prepare(
-        `SELECT a.topic_id, a.title, a.html_body, a.thumbnail_text, a.created_at,
-                t.source_url, t.summary, t.title as topic_title
-         FROM articles a
-         JOIN topics t ON t.id = a.topic_id
-         WHERE a.topic_id = ?
-         ORDER BY a.id DESC
-         LIMIT 1`,
-      )
-      .get(topicId) as
-      | {
-          topic_id: number;
-          title: string;
-          html_body: string;
-          thumbnail_text: string;
-          created_at: string;
-          source_url: string;
-          summary: string;
-          topic_title: string;
-        }
-      | undefined;
-
-    if (!row) return null;
-
-    return {
-      topicId: row.topic_id,
+      topicId: Number(row.topic_id),
       sourceTopic: {
-        sourceUrl: row.source_url,
-        title: row.topic_title,
-        summary: row.summary,
+        sourceUrl: String(row.source_url),
+        title: String(row.topic_title),
+        summary: String(row.summary),
         sourceFeed: "gems-manual",
       },
-      title: row.title,
-      htmlBody: row.html_body,
-      thumbnailText: row.thumbnail_text,
-      createdAt: row.created_at,
+      title: String(row.title),
+      htmlBody: String(row.html_body),
+      thumbnailText: String(row.thumbnail_text),
+      createdAt: String(row.created_at),
     };
   }
 
-  /** 주제와 연결된 원고 전체 삭제 후 주제도 삭제 (재생성용) */
-  deleteTopicAndArticles(sourceUrl: string): void {
-    const tx = this.db.transaction(() => {
-      const topic = this.db
-        .prepare("SELECT id FROM topics WHERE source_url = ?")
-        .get(sourceUrl) as { id: number } | undefined;
-      if (!topic) return;
+  async deleteTopicAndArticles(sourceUrl: string): Promise<void> {
+    const db = await this.db();
+    const topicResult = await db.execute(
+      "SELECT id FROM topics WHERE source_url = ?",
+      [sourceUrl],
+    );
+    if (topicResult.rows.length === 0) return;
 
-      this.db
-        .prepare("DELETE FROM articles WHERE topic_id = ?")
-        .run(topic.id);
-      this.db
-        .prepare("DELETE FROM topics WHERE id = ?")
-        .run(topic.id);
-    });
-    tx();
+    const topicId = Number(topicResult.rows[0].id);
+    await db.batch([
+      { sql: "DELETE FROM articles WHERE topic_id = ?", args: [topicId] },
+      { sql: "DELETE FROM topics WHERE id = ?", args: [topicId] },
+    ]);
   }
 
-  getTopicById(id: number): TopicRecord | null {
-    const row = this.db
-      .prepare(
-        `SELECT id, source_url, title, summary, fetched_at, status
-         FROM topics WHERE id = ?`,
-      )
-      .get(id) as
-      | {
-          id: number;
-          source_url: string;
-          title: string;
-          summary: string;
-          fetched_at: string;
-          status: TopicStatus;
-        }
-      | undefined;
-
-    if (!row) return null;
-
-    return {
-      id: row.id,
-      sourceUrl: row.source_url,
-      title: row.title,
-      summary: row.summary,
-      fetchedAt: row.fetched_at,
-      status: row.status,
-    };
+  async getTopicById(id: number): Promise<TopicRecord | null> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT id, source_url, title, summary, fetched_at, status
+       FROM topics WHERE id = ?`,
+      [id],
+    );
+    if (result.rows.length === 0) return null;
+    return mapTopicRow(result.rows[0] as TopicRow);
   }
 
-  listTopics(options?: {
+  async listTopics(options?: {
     status?: TopicStatus;
     limit?: number;
-  }): TopicRecord[] {
+  }): Promise<TopicRecord[]> {
+    const db = await this.db();
     const limit = options?.limit ?? 50;
-    const rows = options?.status
-      ? (this.db
-          .prepare(
-            `SELECT id, source_url, title, summary, fetched_at, status
-             FROM topics WHERE status = ?
-             ORDER BY id DESC LIMIT ?`,
-          )
-          .all(options.status, limit) as Array<{
-          id: number;
-          source_url: string;
-          title: string;
-          summary: string;
-          fetched_at: string;
-          status: TopicStatus;
-        }>)
-      : (this.db
-          .prepare(
-            `SELECT id, source_url, title, summary, fetched_at, status
-             FROM topics ORDER BY id DESC LIMIT ?`,
-          )
-          .all(limit) as Array<{
-          id: number;
-          source_url: string;
-          title: string;
-          summary: string;
-          fetched_at: string;
-          status: TopicStatus;
-        }>);
+    const result = options?.status
+      ? await db.execute(
+          `SELECT id, source_url, title, summary, fetched_at, status
+           FROM topics WHERE status = ?
+           ORDER BY id DESC LIMIT ?`,
+          [options.status, limit],
+        )
+      : await db.execute(
+          `SELECT id, source_url, title, summary, fetched_at, status
+           FROM topics ORDER BY id DESC LIMIT ?`,
+          [limit],
+        );
 
-    return rows.map((row) => ({
-      id: row.id,
-      sourceUrl: row.source_url,
-      title: row.title,
-      summary: row.summary,
-      fetchedAt: row.fetched_at,
-      status: row.status,
-    }));
+    return result.rows.map((row) => mapTopicRow(row as TopicRow));
   }
 
-  listArticles(
+  async listArticles(
     limit = 20,
-  ): Array<{ id: number; topicId: number; title: string; createdAt: string }> {
-    const rows = this.db
-      .prepare(
-        `SELECT id, topic_id, title, created_at
-         FROM articles ORDER BY id DESC LIMIT ?`,
-      )
-      .all(limit) as Array<{
-      id: number;
-      topic_id: number;
-      title: string;
-      created_at: string;
-    }>;
+  ): Promise<Array<{ id: number; topicId: number; title: string; createdAt: string }>> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT id, topic_id, title, created_at
+       FROM articles ORDER BY id DESC LIMIT ?`,
+      [limit],
+    );
 
-    return rows.map((row) => ({
-      id: row.id,
-      topicId: row.topic_id,
-      title: row.title,
-      createdAt: row.created_at,
+    return result.rows.map((row) => ({
+      id: Number(row.id),
+      topicId: Number(row.topic_id),
+      title: String(row.title),
+      createdAt: String(row.created_at),
     }));
   }
 
-  getArticleById(
+  async getArticleById(
     id: number,
-  ): (ArticleDraft & { id: number }) | null {
-    const row = this.db
-      .prepare(
-        `SELECT a.id, a.topic_id, a.title, a.html_body, a.thumbnail_text, a.created_at,
-                t.source_url, t.summary, t.title as topic_title
-         FROM articles a
-         JOIN topics t ON t.id = a.topic_id
-         WHERE a.id = ?`,
-      )
-      .get(id) as
-      | {
-          id: number;
-          topic_id: number;
-          title: string;
-          html_body: string;
-          thumbnail_text: string;
-          created_at: string;
-          source_url: string;
-          summary: string;
-          topic_title: string;
-        }
-      | undefined;
+  ): Promise<(ArticleDraft & { id: number }) | null> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT a.id, a.topic_id, a.title, a.html_body, a.thumbnail_text, a.created_at,
+              t.source_url, t.summary, t.title as topic_title
+       FROM articles a
+       JOIN topics t ON t.id = a.topic_id
+       WHERE a.id = ?`,
+      [id],
+    );
+    if (result.rows.length === 0) return null;
 
-    if (!row) return null;
-
+    const row = result.rows[0] as Record<string, unknown>;
     return {
-      id: row.id,
-      topicId: row.topic_id,
+      id: Number(row.id),
+      topicId: Number(row.topic_id),
       sourceTopic: {
-        sourceUrl: row.source_url,
-        title: row.topic_title,
-        summary: row.summary,
+        sourceUrl: String(row.source_url),
+        title: String(row.topic_title),
+        summary: String(row.summary),
         sourceFeed: "gems-manual",
       },
-      title: row.title,
-      htmlBody: row.html_body,
-      thumbnailText: row.thumbnail_text,
-      createdAt: row.created_at,
+      title: String(row.title),
+      htmlBody: String(row.html_body),
+      thumbnailText: String(row.thumbnail_text),
+      createdAt: String(row.created_at),
     };
   }
 
-  getStats(): {
+  async getStats(): Promise<{
     topics: { farmed: number; drafted: number; published: number };
     articles: number;
-  } {
-    const counts = this.db
-      .prepare(
-        `SELECT status, COUNT(*) as count FROM topics GROUP BY status`,
-      )
-      .all() as Array<{ status: TopicStatus; count: number }>;
+  }> {
+    const db = await this.db();
+    const counts = await db.execute(
+      "SELECT status, COUNT(*) as count FROM topics GROUP BY status",
+    );
 
     const topics = { farmed: 0, drafted: 0, published: 0 };
-    for (const row of counts) {
-      topics[row.status] = row.count;
+    for (const row of counts.rows) {
+      const status = String(row.status) as TopicStatus;
+      topics[status] = Number(row.count);
     }
 
-    const articleRow = this.db
-      .prepare(`SELECT COUNT(*) as count FROM articles`)
-      .get() as { count: number };
+    const articleResult = await db.execute(
+      "SELECT COUNT(*) as count FROM articles",
+    );
+    const articles = Number(articleResult.rows[0]?.count ?? 0);
 
-    return { topics, articles: articleRow.count };
+    return { topics, articles };
   }
 
   close(): void {
-    this.db.close();
+    /* 싱글톤 DbExecutor — 연결 유지 */
   }
 }

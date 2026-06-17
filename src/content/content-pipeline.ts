@@ -78,20 +78,20 @@ export class ContentPipeline {
       sourceFeed: "gems-manual",
     };
 
-    const existing = this.repo.getTopicBySourceUrl(topic.sourceUrl);
+    const existing = await this.repo.getTopicBySourceUrl(topic.sourceUrl);
 
     if (existing) {
       // 강제 재생성
       if (config.forceRegenerate) {
         console.log(`[Gems] FORCE_REGENERATE=true — 기존 주제 삭제 후 재생성`);
-        this.repo.deleteTopicAndArticles(topic.sourceUrl);
+        await this.repo.deleteTopicAndArticles(topic.sourceUrl);
       }
       // 기존 원고 재사용 (drafted 또는 RETRY_PUBLISH 시 published 포함)
       else if (
         existing.status === "drafted" ||
         (existing.status === "published" && config.retryPublish)
       ) {
-        const draft = this.repo.getLatestArticleByTopicId(existing.id);
+        const draft = await this.repo.getLatestArticleByTopicId(existing.id);
         if (draft) {
           const label =
             existing.status === "published" ? "퍼블리싱 재시도" : "원고 재사용";
@@ -100,11 +100,11 @@ export class ContentPipeline {
           );
           console.log(`[Gems] 제목: ${draft.title}`);
           if (existing.status === "published") {
-            this.repo.updateStatus(existing.id, "drafted");
+            await this.repo.updateStatus(existing.id, "drafted");
           }
           return draft;
         }
-        this.repo.deleteTopicAndArticles(topic.sourceUrl);
+        await this.repo.deleteTopicAndArticles(topic.sourceUrl);
         console.log(`[Gems] 원고 없는 레코드 정리 후 재생성`);
       }
       // 이미 발행 완료된 주제 (재시도 옵션 없음)
@@ -117,12 +117,12 @@ export class ContentPipeline {
       }
       // farmed 등 원고 없는 중복
       else if (!config.forceRegenerate) {
-        this.repo.deleteTopicAndArticles(topic.sourceUrl);
+        await this.repo.deleteTopicAndArticles(topic.sourceUrl);
         console.log(`[Gems] 불완전한 기존 레코드 정리 후 재생성`);
       }
     }
 
-    const topicId = this.repo.insertTopic(topic);
+    const topicId = await this.repo.insertTopic(topic);
     const gems = await this.gemsAgent.run(blogTopic);
 
     return this.saveDraft({
@@ -143,7 +143,7 @@ export class ContentPipeline {
       createdAt: new Date().toISOString(),
     };
 
-    const articleId = this.repo.saveArticle(fullDraft);
+    const articleId = await this.repo.saveArticle(fullDraft);
     const draftPath = await this.saveDraftFile(fullDraft, articleId);
 
     console.log(`\n✅ 원고 저장 완료 (article id=${articleId})`);

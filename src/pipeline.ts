@@ -1,4 +1,5 @@
 import { config } from "../config/index.js";
+import { jobStore } from "./api/job-store.js";
 import { ContentPipeline } from "./content/content-pipeline.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { ArticleDraft } from "./content/types.js";
@@ -42,6 +43,7 @@ export async function runOrchestration(
   }
 
   isRunning = true;
+  const trigger = options.trigger ?? "manual";
   const repo = new TopicRepository();
   const contentPipeline = new ContentPipeline(repo);
   const thumbnailRenderer = new ThumbnailRenderer();
@@ -50,13 +52,15 @@ export async function runOrchestration(
   logger.info("═══ 블로그 오케스트레이션 시작 ═══");
   const activeTopic = options.blogTopic ?? config.blogTopic;
 
-  logger.info(
-    `설정: MODE=${config.contentMode}, TOPIC=${activeTopic || "(rss)"}, ` +
-      `LLM=${config.llmProvider}, DRY_RUN=${config.publishDryRun}, ` +
-      `SKIP_THUMBNAIL=${config.publishSkipThumbnail}`,
-  );
-
   try {
+    await jobStore.markRunning(trigger);
+
+    logger.info(
+      `설정: MODE=${config.contentMode}, TOPIC=${activeTopic || "(rss)"}, ` +
+        `LLM=${config.llmProvider}, DRY_RUN=${config.publishDryRun}, ` +
+        `SKIP_THUMBNAIL=${config.publishSkipThumbnail}`,
+    );
+
     // Phase 2: 콘텐츠 생성
     const draft = await contentPipeline.run({ blogTopic: options.blogTopic });
 
@@ -77,7 +81,7 @@ export async function runOrchestration(
     if (!config.publishDryRun) {
       const allPublished = publishResults.every((r) => r.postUrl);
       if (allPublished) {
-        repo.updateStatus(draft.topicId, "published");
+        await repo.updateStatus(draft.topicId, "published");
         logger.info(`주제 상태 업데이트: published (id=${draft.topicId})`);
       } else {
         logger.warn("일부 플랫폼 발행 URL 없음 — 상태는 drafted 유지");
@@ -87,6 +91,7 @@ export async function runOrchestration(
     }
 
     await notifySuccess(draft.title, publishResults);
+    await jobStore.markSuccess(draft.title, thumbnailPath);
 
     logger.info("═══ 블로그 오케스트레이션 완료 ═══");
 
@@ -106,6 +111,10 @@ export async function runOrchestration(
         `Discord 알림 전송 실패: ${notifyErr instanceof Error ? notifyErr.message : notifyErr}`,
       );
     }
+
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    await jobStore.markError(errorMessage).catch(() => {});
 
     throw error;
   } finally {

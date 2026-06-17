@@ -5,11 +5,11 @@
   "framework": null,
   "functions": {
     "api/[[...path]].ts": {
-      "maxDuration": 10,
+      "maxDuration": 300,
       "memory": 2048
     },
     "api/cron.ts": {
-      "maxDuration": 10,
+      "maxDuration": 300,
       "memory": 2048
     },
     "api/dashboard.ts": {

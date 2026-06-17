@@ -6,7 +6,7 @@ import type { DbExecutor } from "./types.js";
 let executor: DbExecutor | null = null;
 
 /** Turso(Vercel) 또는 TURSO_DATABASE_URL 설정 시 libsql, 그 외 로컬 SQLite */
-function useLibsql(): boolean {
+export function useLibsql(): boolean {
   return (
     config.isVercel ||
     Boolean(process.env.TURSO_DATABASE_URL) ||

@@ -10,6 +10,7 @@ import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { TopicStatus } from "./content/types.js";
+import { ensureSchema } from "./db/migrate.js";
 import { logger } from "./monitoring/logger.js";
 import { isPipelineRunning, runOrchestration } from "./pipeline.js";
 import { saveStoredSession } from "./storage/session-store.js";
@@ -24,6 +25,8 @@ export async function createApp(
 ): Promise<FastifyInstance> {
   const { serveStatic = true } = options;
   const app = Fastify({ logger: false });
+
+  await ensureSchema();
 
   app.get("/health", async () => ({ ok: true }));
   app.get("/api/health", async () => ({ ok: true }));
