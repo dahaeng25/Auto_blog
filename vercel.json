@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "framework": null,
+  "functions": {
+    "api/[[...path]].ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    },
+    "api/cron.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 0 * * *"
+    }
+  ],
+  "env": {
+    "PUBLISH_HEADLESS": "true",
+    "USE_SERVERLESS_CHROMIUM": "true",
+    "ENABLE_WEB_SCHEDULER": "false"
+  }
+}

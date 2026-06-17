@@ -1,0 +1,25 @@
+services:
+  blog-orchestrator:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      - PUBLISH_HEADLESS=true
+      - PORT=3000
+    volumes:
+      - blog-data:/app/data
+      - blog-auth:/app/auth
+      - blog-output:/app/output
+    restart: unless-stopped
+    # Playwright + LLM 호출에 메모리 2GB 이상 권장
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+volumes:
+  blog-data:
+  blog-auth:
+  blog-output:

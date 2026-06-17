@@ -44,7 +44,7 @@ export class ContentPipeline {
       createdAt: new Date().toISOString(),
     };
 
-    const articleId = this.repo.saveArticle(draft);
+    const articleId = await this.repo.saveArticle(draft);
     const draftPath = await this.saveDraftFile(draft, articleId);
 
     console.log(`\n✅ 원고 저장 완료 (article id=${articleId})`);
