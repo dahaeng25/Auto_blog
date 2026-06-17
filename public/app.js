@@ -1,6 +1,7 @@
 const API_KEY_STORAGE = "blog-orchestrator-api-key";
 
 let pollTimer = null;
+let authRequired = false;
 
 function getApiKey() {
   return sessionStorage.getItem(API_KEY_STORAGE) ?? "";
@@ -14,6 +15,39 @@ function clearApiKey() {
   sessionStorage.removeItem(API_KEY_STORAGE);
 }
 
+function showAuthError(message) {
+  const errorEl = document.getElementById("login-error");
+  if (!message) {
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+    return;
+  }
+  errorEl.textContent = message;
+  errorEl.classList.remove("hidden");
+}
+
+function updateAuthUi() {
+  const authBar = document.getElementById("auth-bar");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  if (!authRequired) {
+    authBar.classList.add("hidden");
+    logoutBtn.classList.add("hidden");
+    showAuthError("");
+    return;
+  }
+
+  if (getApiKey()) {
+    authBar.classList.add("hidden");
+    logoutBtn.classList.remove("hidden");
+    showAuthError("");
+    return;
+  }
+
+  authBar.classList.remove("hidden");
+  logoutBtn.classList.add("hidden");
+}
+
 async function api(path, options = {}) {
   const headers = { ...(options.headers ?? {}) };
   const key = getApiKey();
@@ -21,7 +55,13 @@ async function api(path, options = {}) {
 
   const res = await fetch(path, { ...options, headers });
   if (res.status === 401) {
-    showLogin();
+    if (authRequired) {
+      clearApiKey();
+      updateAuthUi();
+      showAuthError(
+        "API 키가 필요합니다. 헤더에 API_KEY를 입력한 뒤 인증을 눌러주세요.",
+      );
+    }
     throw new Error("인증이 필요합니다.");
   }
   if (!res.ok) {
@@ -32,15 +72,7 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-function showLogin() {
-  document.getElementById("login-screen").classList.remove("hidden");
-  document.getElementById("app").classList.add("hidden");
-  stopPolling();
-}
-
 function showApp() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("app").classList.remove("hidden");
   startPolling();
 }
 
@@ -237,12 +269,10 @@ function stopPolling() {
 
 async function tryLogin() {
   const input = document.getElementById("api-key-input");
-  const errorEl = document.getElementById("login-error");
   const key = input.value.trim();
 
   if (!key) {
-    errorEl.textContent = "API 키를 입력하세요.";
-    errorEl.classList.remove("hidden");
+    showAuthError("API 키를 입력하세요.");
     return;
   }
 
@@ -250,19 +280,20 @@ async function tryLogin() {
 
   try {
     await api("/api/auth/verify");
-    errorEl.classList.add("hidden");
+    updateAuthUi();
     showApp();
     await refreshAll();
   } catch (err) {
     clearApiKey();
+    updateAuthUi();
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("401") || msg.includes("인증")) {
-      errorEl.textContent =
-        "API 키가 올바르지 않습니다. Vercel Environment Variables의 API_KEY 값과 정확히 일치하는지 확인하세요.";
+      showAuthError(
+        "API 키가 올바르지 않습니다. Vercel Environment Variables의 API_KEY 값과 정확히 일치하는지 확인하세요.",
+      );
     } else {
-      errorEl.textContent = msg;
+      showAuthError(msg);
     }
-    errorEl.classList.remove("hidden");
   }
 }
 
@@ -273,7 +304,9 @@ async function init() {
   });
   document.getElementById("logout-btn").addEventListener("click", () => {
     clearApiKey();
-    showLogin();
+    updateAuthUi();
+    showAuthError("로그아웃되었습니다. 다시 사용하려면 API 키를 입력하세요.");
+    stopPolling();
   });
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("run-btn").addEventListener("click", runPipeline);
@@ -292,29 +325,29 @@ async function init() {
     if (file) uploadSession("tistory", file);
   });
 
-  // API_KEY 미설정(로컬)이면 바로 접속, 설정됐으면 로그인 화면
   try {
     const meta = await fetch("/api/meta").then((r) => r.json());
-    if (!meta.authRequired) {
-      showApp();
-      await refreshAll();
-      return;
-    }
+    authRequired = Boolean(meta.authRequired);
   } catch {
-    /* 서버 미기동 */
+    authRequired = false;
   }
 
-  if (getApiKey()) {
-    try {
-      showApp();
-      await refreshAll();
-      return;
-    } catch {
-      clearApiKey();
-    }
+  updateAuthUi();
+
+  if (authRequired && !getApiKey()) {
+    showAuthError(
+      "API 키 인증이 필요합니다. 헤더에서 API_KEY를 입력한 뒤 인증을 눌러주세요.",
+    );
+    return;
   }
 
-  showLogin();
+  showApp();
+
+  try {
+    await refreshAll();
+  } catch {
+    /* 인증 오류는 api()에서 안내 */
+  }
 }
 
 init();

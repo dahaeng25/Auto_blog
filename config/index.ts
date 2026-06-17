@@ -104,10 +104,9 @@ export const config = {
 
   /** 웹 서버 포트 */
   port: Number(process.env.PORT ?? 3000),
-  /** API 인증 키 (미설정 시 로컬 개발 모드) */
+  /** API 인증 키 (미설정 또는 DISABLE_API_AUTH=true 시 로컬 개발 모드) */
   apiKey:
-    process.env.DISABLE_API_AUTH === "true" ||
-    process.env.AUTH_AUTO_LOGIN === "true"
+    process.env.DISABLE_API_AUTH === "true"
       ? ""
       : (process.env.API_KEY ?? "").trim().replace(/^["']|["']$/g, ""),
   /** Vercel Cron 보안 키 */
