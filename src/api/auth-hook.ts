@@ -24,9 +24,13 @@ export async function requireApiKey(
     return;
   }
 
-  const key =
+  const key = String(
     request.headers["x-api-key"] ??
-    request.headers.authorization?.replace(/^Bearer\s+/i, "");
+      request.headers.authorization?.replace(/^Bearer\s+/i, "") ??
+      "",
+  )
+    .trim()
+    .replace(/^["']|["']$/g, "");
 
   if (key !== config.apiKey) {
     await reply.status(401).send({ error: "유효하지 않은 API 키입니다." });

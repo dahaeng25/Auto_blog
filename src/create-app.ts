@@ -36,29 +36,42 @@ export async function createApp(
     platform: config.isVercel ? "vercel" : "server",
   }));
 
-  app.get("/api/status", async () => {
-    const naverSession = await hasSession("naver");
-    const tistorySession = await hasSession("tistory");
+  /** 로그인 검증 전용 — DB 없이 API_KEY만 확인 */
+  app.get("/api/auth/verify", async () => ({ ok: true }));
 
-    return {
-      job: await jobStore.get(),
-      isRunning: await isPipelineRunning(),
-      config: {
-        cronSchedule: config.cronSchedule,
-        cronTimezone: config.cronTimezone,
-        publishDryRun: config.publishDryRun,
-        publishHeadless: config.publishHeadless,
-        naverBlogId: config.naverBlogId || null,
-        tistoryBlogName: config.tistoryBlogName || null,
-        rssFeedCount: config.rssFeedUrls.length,
-        authRequired: Boolean(config.apiKey),
-        isVercel: config.isVercel,
-      },
-      sessions: {
-        naver: naverSession,
-        tistory: tistorySession,
-      },
-    };
+  app.get("/api/status", async (request, reply) => {
+    try {
+      const naverSession = await hasSession("naver");
+      const tistorySession = await hasSession("tistory");
+
+      return {
+        job: await jobStore.get(),
+        isRunning: await isPipelineRunning(),
+        config: {
+          cronSchedule: config.cronSchedule,
+          cronTimezone: config.cronTimezone,
+          publishDryRun: config.publishDryRun,
+          publishHeadless: config.publishHeadless,
+          naverBlogId: config.naverBlogId || null,
+          tistoryBlogName: config.tistoryBlogName || null,
+          rssFeedCount: config.rssFeedUrls.length,
+          authRequired: Boolean(config.apiKey),
+          isVercel: config.isVercel,
+        },
+        sessions: {
+          naver: naverSession,
+          tistory: tistorySession,
+        },
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      return reply.status(503).send({
+        error:
+          "데이터베이스 연결 실패. Vercel에 TURSO_DATABASE_URL, TURSO_AUTH_TOKEN을 설정했는지 확인하세요.",
+        detail: message,
+      });
+    }
   });
 
   app.post("/api/run", async (request, reply) => {

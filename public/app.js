@@ -26,7 +26,8 @@ async function api(path, options = {}) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `요청 실패 (${res.status})`);
+    const detail = body.error ?? body.message ?? `요청 실패 (${res.status})`;
+    throw new Error(detail);
   }
   return res.json();
 }
@@ -248,16 +249,19 @@ async function tryLogin() {
   setApiKey(key);
 
   try {
-    const status = await api("/api/status");
-    if (status.config.authRequired === false && !key) {
-      /* 로컬 개발 모드 */
-    }
+    await api("/api/auth/verify");
     errorEl.classList.add("hidden");
     showApp();
     await refreshAll();
-  } catch {
+  } catch (err) {
     clearApiKey();
-    errorEl.textContent = "API 키가 올바르지 않습니다.";
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("401") || msg.includes("인증")) {
+      errorEl.textContent =
+        "API 키가 올바르지 않습니다. Vercel Environment Variables의 API_KEY 값과 정확히 일치하는지 확인하세요.";
+    } else {
+      errorEl.textContent = msg;
+    }
     errorEl.classList.remove("hidden");
   }
 }

@@ -58,7 +58,17 @@ body {
 
 .login-card p {
   color: var(--text-muted);
-  margin-bottom: 24px;
+  margin-bottom: 12px;
+}
+
+.login-hint {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin-bottom: 20px !important;
+}
+
+.login-hint code {
+  color: var(--primary);
 }
 
 .login-card input {
