@@ -31,13 +31,10 @@ export async function createApp(
   app.get("/health", async () => ({ ok: true }));
   app.get("/api/health", async () => ({ ok: true }));
   app.get("/api/meta", async () => ({
-    authRequired: Boolean(config.apiKey),
-    version: "0.2.0",
+    authRequired: false,
+    version: "0.2.1",
     platform: config.isVercel ? "vercel" : "server",
   }));
-
-  /** 로그인 검증 전용 — DB 없이 API_KEY만 확인 */
-  app.get("/api/auth/verify", async () => ({ ok: true }));
 
   app.get("/api/status", async (request, reply) => {
     try {
@@ -55,7 +52,7 @@ export async function createApp(
           naverBlogId: config.naverBlogId || null,
           tistoryBlogName: config.tistoryBlogName || null,
           rssFeedCount: config.rssFeedUrls.length,
-          authRequired: Boolean(config.apiKey),
+          authRequired: false,
           isVercel: config.isVercel,
         },
         sessions: {

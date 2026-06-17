@@ -3,8 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
+  <script>
+    // 구버전 HTML 캐시 대비 — API 로그인 화면 제거
+    (function () {
+      var login = document.getElementById("login-screen");
+      if (login) login.remove();
+      var app = document.getElementById("app");
+      if (app) app.classList.remove("hidden");
+    })();
+  </script>
 </head>
 <body>
   <div id="app" class="app">
@@ -109,6 +121,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=3" type="module"></script>
+  <script src="/dashboard.js?v=4" type="module"></script>
 </body>
 </html>
