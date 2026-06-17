@@ -7,14 +7,16 @@ import { config } from "../../config/index.js";
  * Vercel에서는 Vercel 대시보드 → Logs에서 확인하세요.
  */
 export function readRecentLogs(maxLines = 200): string[] {
-  if (config.isVercel) {
-    return [
-      "[INFO] Vercel 서버리스 환경에서는 파일 로그가 저장되지 않습니다.",
-      "[INFO] Vercel 프로젝트 → Deployments → Functions → Logs에서 실행 로그를 확인하세요.",
-    ];
-  }
   const logsDir = path.join(config.outputDir, "logs");
-  if (!fs.existsSync(logsDir)) return [];
+  if (!fs.existsSync(logsDir)) {
+    if (config.isVercel) {
+      return [
+        "[INFO] 아직 실행 로그가 없습니다. 파이프라인 실행 후 다시 확인하세요.",
+        "[INFO] 상세 로그: Vercel → Deployments → Functions → Logs",
+      ];
+    }
+    return [];
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);

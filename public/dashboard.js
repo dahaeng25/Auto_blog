@@ -125,8 +125,27 @@ async function runPipeline() {
   msgEl.className = "run-message";
 
   try {
+    const status = await loadStatus();
     const topicInput = document.getElementById("blog-topic");
     const blogTopic = topicInput?.value?.trim() || undefined;
+
+    if (!blogTopic && !status.config.blogTopic) {
+      throw new Error(
+        "블로그 주제를 입력하거나 Vercel에 BLOG_TOPIC 환경 변수를 설정하세요.",
+      );
+    }
+
+    if (!status.config.publishDryRun) {
+      const missing = [];
+      if (!status.sessions.naver) missing.push("네이버");
+      if (!status.sessions.tistory) missing.push("티스토리");
+      if (missing.length > 0) {
+        throw new Error(
+          `${missing.join(" · ")} 세션이 없습니다. 하단 「세션 업로드」에서 auth/*.json 파일을 업로드하세요.`,
+        );
+      }
+    }
+
     const result = await api("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -3,8 +3,10 @@ import { jobStore } from "./api/job-store.js";
 import { ContentPipeline } from "./content/content-pipeline.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { ArticleDraft } from "./content/types.js";
+import { ensureWritableDirs } from "./fs/ensure-writable-dirs.js";
 import { notifyError, notifySuccess } from "./monitoring/discord-notifier.js";
 import { logger } from "./monitoring/logger.js";
+import { assertOrchestrationReady } from "./pipeline/preflight.js";
 import { PublishPipeline } from "./publishing/publish-pipeline.js";
 import type { PublishResult } from "./publishing/types.js";
 import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
@@ -53,6 +55,8 @@ export async function runOrchestration(
   const activeTopic = options.blogTopic ?? config.blogTopic;
 
   try {
+    await assertOrchestrationReady({ blogTopic: options.blogTopic });
+    await ensureWritableDirs();
     await jobStore.markRunning(trigger);
 
     logger.info(

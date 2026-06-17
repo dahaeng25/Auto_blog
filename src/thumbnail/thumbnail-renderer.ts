@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Page } from "playwright-core";
@@ -189,9 +188,7 @@ export class ThumbnailRenderer {
   async render(options: ThumbnailRenderOptions): Promise<string> {
     const brand = loadThumbnailBrand();
     const filename = options.outputFilename ?? "thumbnail_최종.png";
-    const outputDir = config.isVercel
-      ? path.join(os.tmpdir(), "blog-thumbnails")
-      : this.outputDir;
+    const outputDir = config.thumbnailsDir;
     const outputPath = path.join(outputDir, filename);
 
     await fs.mkdir(outputDir, { recursive: true });

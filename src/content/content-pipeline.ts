@@ -147,7 +147,9 @@ export class ContentPipeline {
     const draftPath = await this.saveDraftFile(fullDraft, articleId);
 
     console.log(`\n✅ 원고 저장 완료 (article id=${articleId})`);
-    console.log(`   파일: ${draftPath}`);
+    if (draftPath) {
+      console.log(`   파일: ${draftPath}`);
+    }
 
     return fullDraft;
   }
@@ -155,14 +157,20 @@ export class ContentPipeline {
   private async saveDraftFile(
     draft: ArticleDraft,
     articleId: number,
-  ): Promise<string> {
-    await fs.mkdir(config.draftsDir, { recursive: true });
+  ): Promise<string | null> {
+    try {
+      await fs.mkdir(config.draftsDir, { recursive: true });
 
-    const filename = `${articleId}_${Date.now()}.json`;
-    const filePath = path.join(config.draftsDir, filename);
+      const filename = `${articleId}_${Date.now()}.json`;
+      const filePath = path.join(config.draftsDir, filename);
 
-    await fs.writeFile(filePath, JSON.stringify(draft, null, 2), "utf-8");
-    return filePath;
+      await fs.writeFile(filePath, JSON.stringify(draft, null, 2), "utf-8");
+      return filePath;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[Content] 원고 파일 저장 생략 (DB에는 저장됨): ${message}`);
+      return null;
+    }
   }
 
   close(): void {

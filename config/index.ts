@@ -1,4 +1,5 @@
 import "dotenv/config";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CRON_SCHEDULE, CRON_TIMEZONE, RUN_ON_START } from "./cron.js";
@@ -7,6 +8,17 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
+
+const isVercel = Boolean(process.env.VERCEL);
+
+/** Vercel/Lambda는 /var/task 가 읽기 전용 — 쓰기는 /tmp 만 가능 */
+const writableRoot = isVercel
+  ? path.join(os.tmpdir(), "blog-orchestrator")
+  : projectRoot;
+
+const outputDir = isVercel
+  ? path.join(writableRoot, "output")
+  : path.join(projectRoot, "output");
 
 /**
  * 환경변수 기반 앱 설정.
@@ -21,11 +33,11 @@ const DEFAULT_RSS_FEEDS = [
 export const config = {
   projectRoot,
   authDir: path.join(projectRoot, "auth"),
-  outputDir: path.join(projectRoot, "output"),
+  outputDir,
   dataDir: path.join(projectRoot, "data"),
   dbPath: path.join(projectRoot, "data", "blog.db"),
-  draftsDir: path.join(projectRoot, "output", "drafts"),
-  thumbnailsDir: path.join(projectRoot, "output", "thumbnails"),
+  draftsDir: path.join(outputDir, "drafts"),
+  thumbnailsDir: path.join(outputDir, "thumbnails"),
   thumbnailTemplatePath: path.join(
     projectRoot,
     "src",
@@ -95,7 +107,7 @@ export const config = {
   runOnStart: RUN_ON_START,
 
   /** Vercel 서버리스 환경 여부 */
-  isVercel: Boolean(process.env.VERCEL),
+  isVercel,
   /** libsql DB URL — 로컬: file:./data/blog.db, Vercel: Turso URL */
   databaseUrl:
     process.env.TURSO_DATABASE_URL ??

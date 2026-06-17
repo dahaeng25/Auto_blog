@@ -7,7 +7,7 @@ let client: OpenAI | null = null;
 function getClient(): OpenAI {
   if (!config.openaiApiKey) {
     throw new Error(
-      "OPENAI_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.",
+      "OPENAI_API_KEY가 설정되지 않았습니다. Vercel 환경 변수 또는 .env 파일을 확인하세요.",
     );
   }
 
