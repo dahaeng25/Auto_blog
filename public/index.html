@@ -7,16 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=4" />
-  <script>
-    // 구버전 HTML 캐시 대비 — API 로그인 화면 제거
-    (function () {
-      var login = document.getElementById("login-screen");
-      if (login) login.remove();
-      var app = document.getElementById("app");
-      if (app) app.classList.remove("hidden");
-    })();
-  </script>
+  <link rel="stylesheet" href="/styles.css?v=6" />
 </head>
 <body>
   <div id="app" class="app">
@@ -121,6 +112,16 @@
     </div>
   </div>
 
-  <script src="/dashboard.js?v=5" type="module"></script>
+  <script>
+    // 구버전 HTML(로그인 화면) 캐시 대비 — DOM 로드 후 제거
+    function purgeLegacyLogin() {
+      document.getElementById("login-screen")?.remove();
+      document.querySelector(".login-screen")?.remove();
+      document.getElementById("app")?.classList.remove("hidden");
+    }
+    document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
+    purgeLegacyLogin();
+  </script>
+  <script src="/dashboard.js?v=6" type="module"></script>
 </body>
 </html>

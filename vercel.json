@@ -11,8 +11,16 @@
     "api/cron.ts": {
       "maxDuration": 10,
       "memory": 2048
+    },
+    "api/dashboard.ts": {
+      "maxDuration": 10,
+      "memory": 1024
     }
   },
+  "rewrites": [
+    { "source": "/", "destination": "/api/dashboard" },
+    { "source": "/app.js", "destination": "/dashboard.js" }
+  ],
   "crons": [
     {
       "path": "/api/cron",

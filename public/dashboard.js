@@ -1,4 +1,4 @@
-/** Blog Orchestrator dashboard v4 — API 로그인 없음 */
+/** Blog Orchestrator dashboard v6 — API 로그인 없음 */
 let pollTimer = null;
 
 async function api(path, options = {}) {
@@ -204,7 +204,10 @@ function stopPolling() {
 
 function purgeLegacyLoginUi() {
   document.getElementById("login-screen")?.remove();
+  document.querySelector(".login-screen")?.remove();
+  document.getElementById("api-key-input")?.closest(".login-card")?.remove();
   document.getElementById("app")?.classList.remove("hidden");
+  document.body.style.overflow = "";
 }
 
 async function init() {
@@ -241,4 +244,8 @@ async function init() {
   }
 }
 
-init();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
