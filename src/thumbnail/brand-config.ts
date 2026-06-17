@@ -97,14 +97,36 @@ export function loadThumbnailBrand(): ThumbnailBrandConfig {
   }
 
   const raw = JSON.parse(fs.readFileSync(brandPath, "utf-8")) as Partial<ThumbnailBrandConfig>;
+  const defaultDecor = DEFAULT_BRAND.decor!;
+  const topBar = raw.decor?.topBar;
+  const bottomBar = raw.decor?.bottomBar;
+  const textBox = raw.decor?.textBox;
   return {
     ...DEFAULT_BRAND,
     ...raw,
     text: { ...DEFAULT_BRAND.text, ...raw.text },
     decor: {
-      topBar: { ...DEFAULT_BRAND.decor?.topBar, ...raw.decor?.topBar },
-      bottomBar: { ...DEFAULT_BRAND.decor?.bottomBar, ...raw.decor?.bottomBar },
-      textBox: { ...DEFAULT_BRAND.decor?.textBox, ...raw.decor?.textBox },
+      topBar: {
+        enabled: topBar?.enabled ?? defaultDecor.topBar!.enabled,
+        height: topBar?.height ?? defaultDecor.topBar!.height,
+        color: topBar?.color ?? defaultDecor.topBar!.color,
+      },
+      bottomBar: {
+        enabled: bottomBar?.enabled ?? defaultDecor.bottomBar!.enabled,
+        height: bottomBar?.height ?? defaultDecor.bottomBar!.height,
+        color: bottomBar?.color ?? defaultDecor.bottomBar!.color,
+      },
+      textBox: {
+        enabled: textBox?.enabled ?? defaultDecor.textBox!.enabled,
+        border: textBox?.border ?? defaultDecor.textBox!.border,
+        padding: textBox?.padding ?? defaultDecor.textBox!.padding,
+        ...(textBox?.background !== undefined || defaultDecor.textBox!.background
+          ? {
+              background:
+                textBox?.background ?? defaultDecor.textBox!.background,
+            }
+          : {}),
+      },
     },
   };
 }

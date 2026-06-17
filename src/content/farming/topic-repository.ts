@@ -202,6 +202,138 @@ export class TopicRepository {
     };
   }
 
+  listTopics(options?: {
+    status?: TopicStatus;
+    limit?: number;
+  }): TopicRecord[] {
+    const limit = options?.limit ?? 50;
+    const rows = options?.status
+      ? (this.db
+          .prepare(
+            `SELECT id, source_url, title, summary, fetched_at, status
+             FROM topics WHERE status = ?
+             ORDER BY id DESC LIMIT ?`,
+          )
+          .all(options.status, limit) as Array<{
+          id: number;
+          source_url: string;
+          title: string;
+          summary: string;
+          fetched_at: string;
+          status: TopicStatus;
+        }>)
+      : (this.db
+          .prepare(
+            `SELECT id, source_url, title, summary, fetched_at, status
+             FROM topics ORDER BY id DESC LIMIT ?`,
+          )
+          .all(limit) as Array<{
+          id: number;
+          source_url: string;
+          title: string;
+          summary: string;
+          fetched_at: string;
+          status: TopicStatus;
+        }>);
+
+    return rows.map((row) => ({
+      id: row.id,
+      sourceUrl: row.source_url,
+      title: row.title,
+      summary: row.summary,
+      fetchedAt: row.fetched_at,
+      status: row.status,
+    }));
+  }
+
+  listArticles(
+    limit = 20,
+  ): Array<{ id: number; topicId: number; title: string; createdAt: string }> {
+    const rows = this.db
+      .prepare(
+        `SELECT id, topic_id, title, created_at
+         FROM articles ORDER BY id DESC LIMIT ?`,
+      )
+      .all(limit) as Array<{
+      id: number;
+      topic_id: number;
+      title: string;
+      created_at: string;
+    }>;
+
+    return rows.map((row) => ({
+      id: row.id,
+      topicId: row.topic_id,
+      title: row.title,
+      createdAt: row.created_at,
+    }));
+  }
+
+  getArticleById(
+    id: number,
+  ): (ArticleDraft & { id: number }) | null {
+    const row = this.db
+      .prepare(
+        `SELECT a.id, a.topic_id, a.title, a.html_body, a.thumbnail_text, a.created_at,
+                t.source_url, t.summary, t.title as topic_title
+         FROM articles a
+         JOIN topics t ON t.id = a.topic_id
+         WHERE a.id = ?`,
+      )
+      .get(id) as
+      | {
+          id: number;
+          topic_id: number;
+          title: string;
+          html_body: string;
+          thumbnail_text: string;
+          created_at: string;
+          source_url: string;
+          summary: string;
+          topic_title: string;
+        }
+      | undefined;
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      topicId: row.topic_id,
+      sourceTopic: {
+        sourceUrl: row.source_url,
+        title: row.topic_title,
+        summary: row.summary,
+        sourceFeed: "gems-manual",
+      },
+      title: row.title,
+      htmlBody: row.html_body,
+      thumbnailText: row.thumbnail_text,
+      createdAt: row.created_at,
+    };
+  }
+
+  getStats(): {
+    topics: { farmed: number; drafted: number; published: number };
+    articles: number;
+  } {
+    const counts = this.db
+      .prepare(
+        `SELECT status, COUNT(*) as count FROM topics GROUP BY status`,
+      )
+      .all() as Array<{ status: TopicStatus; count: number }>;
+
+    const topics = { farmed: 0, drafted: 0, published: 0 };
+    for (const row of counts) {
+      topics[row.status] = row.count;
+    }
+
+    const articleRow = this.db
+      .prepare(`SELECT COUNT(*) as count FROM articles`)
+      .get() as { count: number };
+
+    return { topics, articles: articleRow.count };
+  }
+
   close(): void {
     this.db.close();
   }

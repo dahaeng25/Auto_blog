@@ -25,7 +25,8 @@ async function getOrderedContexts(page: Page): Promise<PageOrFrame[]> {
   try {
     const iframe = page.locator(EDITOR_SELECTORS.naver.mainFrame).first();
     if ((await iframe.count()) > 0) {
-      const frame = await iframe.elementHandle()?.contentFrame();
+      const handle = await iframe.elementHandle();
+      const frame = handle ? await handle.contentFrame() : null;
       if (frame) push(frame);
     }
   } catch {
@@ -107,7 +108,7 @@ async function dismissHelpPanelViaJs(contexts: PageOrFrame[]): Promise<boolean> 
         );
 
         let hidden = false;
-        for (const panel of panels) {
+        for (const panel of Array.from(panels)) {
           if (!(panel instanceof HTMLElement) || !isVisible(panel)) continue;
 
           const innerClose = panel.querySelector(

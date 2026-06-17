@@ -40,7 +40,8 @@ async function isWritePageAccessible(
     const iframe = page.locator("iframe#mainFrame").first();
     if ((await iframe.count()) === 0) return false;
 
-    const frame = await iframe.elementHandle()?.contentFrame();
+    const handle = await iframe.elementHandle();
+    const frame = handle ? await handle.contentFrame() : null;
     if (!frame) return false;
 
     const title = frame.locator(".se-documentTitle").first();

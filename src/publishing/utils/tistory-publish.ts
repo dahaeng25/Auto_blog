@@ -47,7 +47,7 @@ async function selectPublicVisibility(page: Page): Promise<void> {
   // JS fallback — checkbox-text '공개' 또는 visibility=20
   const selected = await page.evaluate(() => {
     const spans = document.querySelectorAll("span.checkbox-text");
-    for (const span of spans) {
+    for (const span of Array.from(spans)) {
       if (span.textContent?.trim() === "공개") {
         (span as HTMLElement).click();
         return "checkbox-text";
@@ -63,7 +63,7 @@ async function selectPublicVisibility(page: Page): Promise<void> {
     }
 
     const labels = document.querySelectorAll("label");
-    for (const label of labels) {
+    for (const label of Array.from(labels)) {
       if (label.textContent?.trim() === "공개") {
         label.click();
         return "label";

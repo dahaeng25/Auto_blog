@@ -11,6 +11,8 @@ import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
 export interface OrchestrationOptions {
   /** 실행 시 지정한 블로그 주제/키워드 */
   blogTopic?: string;
+  /** 실행 트리거 식별자 (web, cron, vercel-cron 등) */
+  trigger?: string;
 }
 
 export interface OrchestrationResult {

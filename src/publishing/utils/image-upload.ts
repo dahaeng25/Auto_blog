@@ -48,7 +48,7 @@ async function uploadViaHiddenInput(
       const input = ctx.locator(sel).first();
       try {
         if ((await input.count()) > 0) {
-          await input.setInputFiles(imagePath, { force: true });
+          await input.setInputFiles(imagePath);
           await humanPause(2500);
           return true;
         }
