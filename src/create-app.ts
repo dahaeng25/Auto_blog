@@ -11,6 +11,7 @@ import { hasSession } from "./auth/session-manager.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { TopicStatus } from "./content/types.js";
 import { ensureSchema } from "./db/migrate.js";
+import { useLibsql } from "./db/client.js";
 import { logger } from "./monitoring/logger.js";
 import { isPipelineRunning, runOrchestration } from "./pipeline.js";
 import { saveStoredSession } from "./storage/session-store.js";
@@ -34,7 +35,15 @@ export async function createApp(
   const { serveStatic = true } = options;
   const app = Fastify({ logger: false });
 
-  await ensureSchema();
+  await ensureSchema().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `DB 초기화 실패: ${message}\n` +
+        (useLibsql()
+          ? "Turso(TURSO_DATABASE_URL) 연결을 확인하세요."
+          : "npm install better-sqlite3 실행 후 data/ 폴더 쓰기 권한을 확인하세요."),
+    );
+  });
 
   app.get("/health", async () => ({ ok: true }));
   app.get("/api/health", async () => ({ ok: true }));

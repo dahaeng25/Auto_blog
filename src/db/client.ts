@@ -5,13 +5,17 @@ import type { DbExecutor } from "./types.js";
 
 let executor: DbExecutor | null = null;
 
-/** Turso(Vercel) 또는 TURSO_DATABASE_URL 설정 시 libsql, 그 외 로컬 SQLite */
+/**
+ * DB 백엔드 선택.
+ * - Vercel: Turso(libsql) 필수
+ * - 로컬/Docker: 기본 SQLite (USE_TURSO=true 일 때만 Turso)
+ */
 export function useLibsql(): boolean {
-  return (
-    config.isVercel ||
-    Boolean(process.env.TURSO_DATABASE_URL) ||
-    config.databaseUrl.startsWith("libsql:")
-  );
+  if (config.isVercel) return true;
+  if (process.env.USE_TURSO === "true") {
+    return Boolean(process.env.TURSO_DATABASE_URL);
+  }
+  return false;
 }
 
 export async function getDb(): Promise<DbExecutor> {

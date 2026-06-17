@@ -6,6 +6,7 @@ import fs from "node:fs";
 import cron from "node-cron";
 import { config } from "../config/index.js";
 import { createApp } from "./create-app.js";
+import { useLibsql } from "./db/client.js";
 import { logger } from "./monitoring/logger.js";
 import { isPipelineRunning, runOrchestration } from "./pipeline.js";
 
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
   logger.info("╚══════════════════════════════════════════╝");
   logger.info(`대시보드: http://0.0.0.0:${config.port}`);
   logger.info(`DRY-RUN: ${config.publishDryRun}`);
+  logger.info(`DB: ${useLibsql() ? "Turso (libsql)" : `SQLite (${config.dbPath})`}`);
 }
 
 main().catch((err) => {
