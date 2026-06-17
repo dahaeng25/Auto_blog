@@ -22,6 +22,7 @@
   "env": {
     "PUBLISH_HEADLESS": "true",
     "USE_SERVERLESS_CHROMIUM": "true",
-    "ENABLE_WEB_SCHEDULER": "false"
+    "ENABLE_WEB_SCHEDULER": "false",
+    "DISABLE_API_AUTH": "true"
   }
 }
