@@ -22,6 +22,7 @@ if ($Wizard) { $args += "--wizard" }
 if ($WithTests) { $args += "--with-tests" }
 if ($WithAuth) { $args += "--with-auth" }
 
+<<<<<<< HEAD
 # PowerShell에서 npm이 막히는 경우 안내
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue) -and -not (Get-Command npm -ErrorAction SilentlyContinue)) {
     Write-Host ""
@@ -30,6 +31,8 @@ if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue) -and -not (Get-Comm
     exit 1
 }
 
+=======
+>>>>>>> 2746ae5881e74bccb7be8011fbb131983fcfc5d9
 # Node.js 설치 여부 확인
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host ""

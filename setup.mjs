@@ -75,6 +75,7 @@ function run(command, args, options = {}) {
   });
 }
 
+<<<<<<< HEAD
 function npmCommand() {
   // Windows PowerShell은 npm → npm.ps1 로 연결되어 실행 정책에 막힐 수 있음
   return process.platform === "win32" ? "npm.cmd" : "npm";
@@ -83,6 +84,10 @@ function npmCommand() {
 async function npm(args) {
   const cmd = npmCommand();
   return run(cmd, args, { label: `${cmd} ${args.join(" ")}` });
+=======
+async function npm(args) {
+  return run("npm", args, { label: `npm ${args.join(" ")}` });
+>>>>>>> 2746ae5881e74bccb7be8011fbb131983fcfc5d9
 }
 
 function ensureDir(relativePath) {
