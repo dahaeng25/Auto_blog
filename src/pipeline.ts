@@ -16,6 +16,10 @@ import {
 import { PublishPipeline } from "./publishing/publish-pipeline.js";
 import type { PublishResult } from "./publishing/types.js";
 import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
+import {
+  refreshThumbnailTexts,
+  shouldRefreshThumbnailTexts,
+} from "./thumbnail/resolve-thumbnail-texts.js";
 
 export interface OrchestrationOptions {
   /** 실행 시 지정한 블로그 주제/키워드 */
@@ -86,9 +90,28 @@ export async function runOrchestration(
       draft.thumbnailTopLabel?.trim() ||
       buildTopLabelFromKeywords(keywords);
 
+    let thumbnailTopLabel = topLabel;
+    let thumbnailText = draft.thumbnailText;
+
+    if (
+      activeTopic &&
+      shouldRefreshThumbnailTexts(
+        activeTopic,
+        activeTopic,
+        draft.title,
+        thumbnailTopLabel,
+        thumbnailText,
+      )
+    ) {
+      logger.info("썸네일 문구를 키워드·제목에 맞게 재생성합니다.");
+      const refreshed = await refreshThumbnailTexts(activeTopic, draft.title);
+      thumbnailTopLabel = refreshed.topLabel;
+      thumbnailText = refreshed.mainText;
+    }
+
     const thumbnailPath = await thumbnailRenderer.render({
-      text: draft.thumbnailText,
-      topLabel,
+      text: thumbnailText,
+      topLabel: thumbnailTopLabel,
       keywords,
       keywordSlug,
       ...(useNaverSample ? { outputFilename: `${keywordSlug}1.png` } : {}),
