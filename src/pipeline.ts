@@ -18,7 +18,7 @@ import type { PublishResult } from "./publishing/types.js";
 import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
 import {
   refreshThumbnailTexts,
-  shouldRefreshThumbnailTexts,
+  thumbnailMatchesTopic,
 } from "./thumbnail/resolve-thumbnail-texts.js";
 
 export interface OrchestrationOptions {
@@ -95,8 +95,7 @@ export async function runOrchestration(
 
     if (
       activeTopic &&
-      shouldRefreshThumbnailTexts(
-        activeTopic,
+      !thumbnailMatchesTopic(
         activeTopic,
         draft.title,
         thumbnailTopLabel,

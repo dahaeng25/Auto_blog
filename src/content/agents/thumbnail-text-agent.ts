@@ -9,13 +9,14 @@ import { normalizeThumbnailLineBreaks } from "../../thumbnail/normalize-thumbnai
  * 썸네일 텍스트 에이전트: 썸네일 중앙에 들어갈 짧은 문구를 생성합니다.
  */
 export class ThumbnailTextAgent {
-  async run(title: string): Promise<string> {
+  async run(title: string, keywords: string): Promise<string> {
     console.log("[ThumbnailText] 썸네일 문구 생성 중...");
+    console.log(`[ThumbnailText] 키워드: ${keywords}`);
 
     const text = await chat({
       system: THUMBNAIL_TEXT_SYSTEM_PROMPT,
-      user: buildThumbnailTextUserPrompt(title),
-      temperature: 0.9,
+      user: buildThumbnailTextUserPrompt(title, keywords),
+      temperature: 0.7,
     });
 
     const normalized = normalizeThumbnailLineBreaks(text);

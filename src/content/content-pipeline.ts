@@ -7,7 +7,14 @@ import { ContentAgent } from "./agents/content-agent.js";
 import { ThumbnailTextAgent } from "./agents/thumbnail-text-agent.js";
 import { GemsAgent } from "./agents/gems-agent.js";
 import { applyBlogStyle } from "./blog-style/apply-style.js";
-import { buildTopLabelFromKeywords } from "../publishing/images/keyword-slug.js";
+import {
+  buildTopLabelFromKeywords,
+  extractInputKeywordPhrases,
+} from "../publishing/images/keyword-slug.js";
+import {
+  refreshThumbnailTexts,
+  thumbnailMatchesTopic,
+} from "../thumbnail/resolve-thumbnail-texts.js";
 import { TopicRepository } from "./farming/topic-repository.js";
 import type { ArticleDraft, ContentRunOptions, RawTopic } from "./types.js";
 
@@ -49,7 +56,7 @@ export class ContentPipeline {
     const { topicId, topic } = await this.farmingAgent.run();
     const title = await this.titleAgent.run(topic);
     const htmlBody = await this.contentAgent.run(title, topic);
-    const thumbnailText = await this.thumbnailTextAgent.run(title);
+    const thumbnailText = await this.thumbnailTextAgent.run(title, topic.title);
 
     return this.saveDraft({
       topicId,
@@ -127,15 +134,37 @@ export class ContentPipeline {
     const topicId = await this.repo.insertTopic(topic);
     const gems = await this.gemsAgent.run(blogTopic);
 
+    const inputPhrases = extractInputKeywordPhrases(blogTopic);
+    let thumbnailTopLabel =
+      gems.thumbnailTopLabel ||
+      buildTopLabelFromKeywords(
+        inputPhrases.length > 0
+          ? inputPhrases
+          : blogTopic.split(/[,，/|·]+/).map((s) => s.trim()).filter(Boolean),
+      );
+    let thumbnailText = gems.thumbnailText;
+
+    if (
+      !thumbnailMatchesTopic(
+        blogTopic,
+        gems.title,
+        thumbnailTopLabel,
+        thumbnailText,
+      )
+    ) {
+      console.log("[Gems] 썸네일 문구가 키워드와 불일치 — 재생성");
+      const refreshed = await refreshThumbnailTexts(blogTopic, gems.title);
+      thumbnailTopLabel = refreshed.topLabel;
+      thumbnailText = refreshed.mainText;
+    }
+
     return this.saveDraft({
       topicId,
       sourceTopic: topic,
       title: gems.title,
       htmlBody: gems.htmlBody,
-      thumbnailText: gems.thumbnailText,
-      thumbnailTopLabel:
-        gems.thumbnailTopLabel ||
-        buildTopLabelFromKeywords(blogTopic.split(/[,，/|·]+/).map((s) => s.trim()).filter(Boolean)),
+      thumbnailText,
+      thumbnailTopLabel,
     });
   }
 

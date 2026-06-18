@@ -23,6 +23,20 @@ const KEYWORD_STOP_WORDS = new Set([
   "이번",
 ]);
 
+/** 사용자가 입력한 쉼표·구분자 기준 키워드 구문 (썸네일 검증용) */
+export function extractInputKeywordPhrases(keywords: string): string[] {
+  const trimmed = keywords.trim();
+  if (!trimmed) return [];
+
+  const byDelimiter = trimmed
+    .split(/[,，/|·]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (byDelimiter.length > 0) return byDelimiter.slice(0, 4);
+  return [trimmed];
+}
+
 export function extractMainKeywords(blogTopic: string, title: string): string[] {
   const source = (blogTopic.trim() || title.trim()).replace(/\s+/g, " ");
   if (!source) return ["blog"];
