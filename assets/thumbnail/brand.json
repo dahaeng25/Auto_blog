@@ -1,12 +1,12 @@
 {
-  "$comment": "blue_directors 샘플 — 고정 프레임·로고, 가운데 썸네일 문구만 매번 변경, 배경은 키워드별 AI 생성",
+  "$comment": "blue_directors 샘플 — 상단 로고·푸터는 header/footer-banner.png 고정, 가운데 문구·배경만 변경",
   "canvas": {
     "width": 886,
     "height": 886
   },
   "background": {
     "type": "dynamic",
-    "overlay": "rgba(0,0,0,0.28)"
+    "overlay": "rgba(0,0,0,0.32)"
   },
   "frame": {
     "outerBorder": "18px solid #1c1c1c",
@@ -14,19 +14,13 @@
   },
   "header": {
     "enabled": true,
-    "logo": "assets/thumbnail/header-logo.png",
-    "companyName": "주식회사 청사 디렉터스",
-    "fontSize": "22px",
-    "color": "#ffffff",
-    "top": "36px"
+    "overlayImage": "assets/thumbnail/header-banner.png",
+    "overlayHeight": "118px"
   },
   "footer": {
     "enabled": true,
-    "text": "브랜드 마케팅",
-    "fontSize": "18px",
-    "color": "rgba(255,255,255,0.9)",
-    "bottom": "28px",
-    "right": "36px"
+    "overlayImage": "assets/thumbnail/footer-banner.png",
+    "overlayHeight": "68px"
   },
   "text": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
@@ -37,7 +31,7 @@
     "lineHeight": 1.35,
     "letterSpacing": "-0.5px",
     "textShadow": "0 2px 12px rgba(0,0,0,0.45)",
-    "padding": "120px 64px 100px",
+    "padding": "130px 64px 90px",
     "maxWidth": "780px",
     "fontSizeMin": 44,
     "fontSizeMax": 58

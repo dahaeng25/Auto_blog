@@ -5,6 +5,7 @@ import type { Page } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
 import { generateThumbnailBackground } from "./background-generator.js";
+import { ensureBrandOverlayAssets } from "./brand-overlay.js";
 import {
   assetExists,
   loadThumbnailBrand,
@@ -61,27 +62,31 @@ async function applyBrandDesign(
   page: Page,
   brand: ThumbnailBrandConfig,
   photoPath: string | null,
+  overlays: { headerPath: string | null; footerPath: string | null },
 ): Promise<void> {
   const photoUrl = photoPath ? pathToFileURL(photoPath).href : null;
-  const headerLogoUrl =
-    brand.header?.enabled &&
-    brand.header.logo &&
-    assetExists(brand.header.logo)
-      ? pathToFileURL(resolveAssetPath(brand.header.logo)).href
+
+  const headerOverlayUrl =
+    overlays.headerPath && brand.header?.enabled
+      ? pathToFileURL(overlays.headerPath).href
+      : null;
+  const footerOverlayUrl =
+    overlays.footerPath && brand.footer?.enabled
+      ? pathToFileURL(overlays.footerPath).href
       : null;
 
   await page.evaluate(
-    ({ brand: b, photoUrl: bgUrl, headerLogoUrl: logoUrl }) => {
+    ({ brand: b, photoUrl: bgUrl, headerUrl, footerUrl }) => {
       const canvas = document.getElementById("thumbnail-canvas");
       const photo = document.getElementById("thumbnail-photo");
       const overlay = document.getElementById("thumbnail-overlay");
       const frameInner = document.getElementById("thumbnail-frame-inner");
-      const header = document.getElementById("thumbnail-header");
-      const headerLogo = document.getElementById(
-        "thumbnail-header-logo",
+      const headerOverlay = document.getElementById(
+        "thumbnail-header-overlay",
       ) as HTMLImageElement | null;
-      const companyName = document.getElementById("thumbnail-company-name");
-      const footer = document.getElementById("thumbnail-footer");
+      const footerOverlay = document.getElementById(
+        "thumbnail-footer-overlay",
+      ) as HTMLImageElement | null;
       const textArea = document.getElementById("text-area");
       const mainEl = document.getElementById("thumbnail-text");
 
@@ -131,32 +136,24 @@ async function applyBrandDesign(
         mainEl.style.maxWidth = b.text.maxWidth;
       }
 
-      if (header && b.header?.enabled) {
-        header.style.display = "flex";
-        if (b.header.top) header.style.top = b.header.top;
-
-        if (headerLogo && logoUrl) {
-          headerLogo.src = logoUrl;
-          headerLogo.style.display = "block";
-        }
-
-        if (companyName && b.header.companyName) {
-          companyName.textContent = b.header.companyName;
-          companyName.style.fontSize = b.header.fontSize ?? "22px";
-          companyName.style.color = b.header.color ?? "#ffffff";
-        }
+      if (headerOverlay && headerUrl) {
+        headerOverlay.src = headerUrl;
+        headerOverlay.style.display = "block";
+        headerOverlay.style.height = b.header?.overlayHeight ?? "118px";
       }
 
-      if (footer && b.footer?.enabled && b.footer.text) {
-        footer.textContent = b.footer.text;
-        footer.style.display = "block";
-        footer.style.fontSize = b.footer.fontSize ?? "18px";
-        footer.style.color = b.footer.color ?? "rgba(255,255,255,0.9)";
-        footer.style.bottom = b.footer.bottom ?? "28px";
-        footer.style.right = b.footer.right ?? "36px";
+      if (footerOverlay && footerUrl) {
+        footerOverlay.src = footerUrl;
+        footerOverlay.style.display = "block";
+        footerOverlay.style.height = b.footer?.overlayHeight ?? "68px";
       }
     },
-    { brand, photoUrl, headerLogoUrl },
+    {
+      brand,
+      photoUrl,
+      headerUrl: headerOverlayUrl,
+      footerUrl: footerOverlayUrl,
+    },
   );
 }
 
@@ -220,6 +217,7 @@ export class ThumbnailRenderer {
     await fs.mkdir(config.thumbnailsDir, { recursive: true });
 
     const photoPath = await resolvePhotoPath(options, brand);
+    const overlays = await ensureBrandOverlayAssets();
 
     const browser = await launchChromium({ headless: true });
     const context = await browser.newContext({
@@ -235,7 +233,7 @@ export class ThumbnailRenderer {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(300);
 
-      await applyBrandDesign(page, brand, photoPath);
+      await applyBrandDesign(page, brand, photoPath, overlays);
       await injectText(page, options, brand);
 
       const canvas = page.locator("#thumbnail-canvas");

@@ -43,39 +43,24 @@ body {
   pointer-events: none;
 }
 
-#thumbnail-header {
+#thumbnail-header-overlay,
+#thumbnail-footer-overlay {
   position: absolute;
-  top: 36px;
-  left: 0;
-  right: 0;
-  z-index: 4;
+  left: 18px;
+  right: 18px;
+  width: calc(100% - 36px);
+  object-fit: fill;
   display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 0 48px;
+  z-index: 5;
+  pointer-events: none;
 }
 
-#thumbnail-header-logo {
-  height: 44px;
-  width: auto;
-  object-fit: contain;
-  display: none;
+#thumbnail-header-overlay {
+  top: 18px;
 }
 
-#thumbnail-company-name {
-  font-family: "Nanum Gothic", "Malgun Gothic", sans-serif;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-#thumbnail-footer {
-  position: absolute;
-  z-index: 4;
-  display: none;
-  font-family: "Nanum Gothic", "Malgun Gothic", sans-serif;
-  font-weight: 400;
-  white-space: nowrap;
+#thumbnail-footer-overlay {
+  bottom: 18px;
 }
 
 #text-area {
@@ -83,7 +68,7 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  z-index: 3;
+  z-index: 4;
 }
 
 #thumbnail-text {

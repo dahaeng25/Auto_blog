@@ -17,6 +17,9 @@ export interface ThumbnailBrandConfig {
   };
   header?: {
     enabled: boolean;
+    /** 고정 로고·회사명 이미지 (변형 금지) */
+    overlayImage?: string;
+    overlayHeight?: string;
     logo?: string;
     companyName?: string;
     fontSize?: string;
@@ -25,6 +28,9 @@ export interface ThumbnailBrandConfig {
   };
   footer?: {
     enabled: boolean;
+    /** 고정 푸터 문구 이미지 */
+    overlayImage?: string;
+    overlayHeight?: string;
     text?: string;
     fontSize?: string;
     color?: string;
@@ -86,17 +92,21 @@ const DEFAULT_BRAND: ThumbnailBrandConfig = {
   },
   header: {
     enabled: true,
+    overlayImage: "assets/thumbnail/header-banner.png",
+    overlayHeight: "118px",
     companyName: "주식회사 청사 디렉터스",
     fontSize: "22px",
     color: "#ffffff",
-    top: "36px",
+    top: "18px",
   },
   footer: {
     enabled: true,
+    overlayImage: "assets/thumbnail/footer-banner.png",
+    overlayHeight: "68px",
     text: "브랜드 마케팅",
     fontSize: "18px",
     color: "rgba(255,255,255,0.9)",
-    bottom: "28px",
+    bottom: "18px",
     right: "36px",
   },
   text: {

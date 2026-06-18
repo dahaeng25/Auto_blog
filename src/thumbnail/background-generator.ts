@@ -5,6 +5,20 @@ import { config } from "../../config/index.js";
 
 const IMAGE_MODEL_FALLBACKS = ["dall-e-2", "dall-e-3", "gpt-image-1"] as const;
 
+/** 사람 1명 초상 대신 사용할 장면 유형 */
+const SCENE_VARIANTS = [
+  "wide angle empty modern office with conference table, documents and laptops, no people",
+  "official immigration documents, passport and rubber stamp on wooden desk, top-down view, no people",
+  "harbor port and cargo ships aerial view, maritime industry, no people",
+  "government administration building exterior, institutional architecture, no people",
+  "empty consultation office interior with bookshelves and filing cabinets, wide shot",
+  "contract papers and pen on desk with blurred office background, hands not visible",
+  "city skyline and business district view through large office window, no people",
+  "waiting lounge with empty chairs and reception desk, wide interior shot",
+  "team collaboration shot from behind, several people at distance around table, not portrait",
+  "Korean business district street and office towers, urban professional atmosphere",
+] as const;
+
 function getClient(): OpenAI | null {
   if (!config.openaiApiKey) return null;
   return new OpenAI({ apiKey: config.openaiApiKey });
@@ -15,15 +29,25 @@ function uniqueModels(): string[] {
   return [...new Set([preferred, ...IMAGE_MODEL_FALLBACKS].filter(Boolean))];
 }
 
-function buildBackgroundPrompt(keywords: string[]): string {
+function pickSceneIndex(keywords: string[], slug: string): number {
+  const seed =
+    slug.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) +
+    keywords.join("").length +
+    (Date.now() % SCENE_VARIANTS.length);
+  return seed % SCENE_VARIANTS.length;
+}
+
+function buildBackgroundPrompt(keywords: string[], slug: string): string {
   const topic = keywords.join(", ");
+  const scene = SCENE_VARIANTS[pickSceneIndex(keywords, slug)];
+
   return (
-    `Professional photorealistic photograph for a Korean business and immigration law blog. ` +
-    `Theme: ${topic}. ` +
-    `Modern bright office, consultation room, or relevant professional workplace in Korea. ` +
-    `Warm natural lighting, trustworthy corporate atmosphere. ` +
-    `Square composition, subject centered, shallow depth of field. ` +
-    `No text, no letters, no logos, no watermarks, no UI elements.`
+    `Professional stock photograph for a Korean administrative law and immigration blog article about: ${topic}. ` +
+    `Scene: ${scene}. ` +
+    `Photorealistic, bright natural lighting, trustworthy corporate mood, square 1:1 composition. ` +
+    `STRICT: No text, no logos, no watermarks. ` +
+    `STRICT: No single-person portrait, no headshot, no close-up face, no selfie, no one person as main subject. ` +
+    `Prefer wide shots, environments, objects, architecture, or distant groups.`
   );
 }
 
@@ -60,9 +84,11 @@ export async function generateThumbnailBackground(
 
   const filename = `${slug}_${Date.now()}.png`;
   const outputPath = path.join(dir, filename);
-  const prompt = buildBackgroundPrompt(keywords);
+  const prompt = buildBackgroundPrompt(keywords, slug);
+  const scene = SCENE_VARIANTS[pickSceneIndex(keywords, slug)];
 
   console.log(`[Thumbnail] 배경 생성 중 — 키워드: ${keywords.join(", ")}`);
+  console.log(`[Thumbnail] 장면 유형: ${scene}`);
 
   for (const model of uniqueModels()) {
     try {
