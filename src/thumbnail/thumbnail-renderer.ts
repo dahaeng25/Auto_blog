@@ -40,26 +40,7 @@ function fitFontSizeToWidth(
       Object.assign(el.style, st);
 
       const lines = content.includes("\n") ? content.split("\n") : null;
-
-      const measureWidth = (fontSize: number): number => {
-        el.style.fontSize = `${fontSize}px`;
-        el.style.letterSpacing = "0px";
-
-        if (lines) {
-          let maxW = 0;
-          for (const line of lines) {
-            el.textContent = line;
-            el.style.whiteSpace = "nowrap";
-            maxW = Math.max(maxW, el.scrollWidth);
-          }
-          el.textContent = content;
-          el.style.whiteSpace = st.whiteSpace ?? "pre-wrap";
-          return maxW;
-        }
-
-        el.textContent = content;
-        return el.scrollWidth;
-      };
+      const whiteSpace = st.whiteSpace ?? "pre-wrap";
 
       let low = lo;
       let high = hi;
@@ -67,7 +48,24 @@ function fitFontSizeToWidth(
 
       while (low <= high) {
         const mid = Math.floor((low + high) / 2);
-        if (measureWidth(mid) <= tw) {
+        el.style.fontSize = `${mid}px`;
+        el.style.letterSpacing = "0px";
+
+        let width = 0;
+        if (lines) {
+          for (let i = 0; i < lines.length; i++) {
+            el.textContent = lines[i]!;
+            el.style.whiteSpace = "nowrap";
+            width = Math.max(width, el.scrollWidth);
+          }
+          el.textContent = content;
+          el.style.whiteSpace = whiteSpace;
+        } else {
+          el.textContent = content;
+          width = el.scrollWidth;
+        }
+
+        if (width <= tw) {
           best = mid;
           low = mid + 1;
         } else {
@@ -78,17 +76,45 @@ function fitFontSizeToWidth(
       el.style.fontSize = `${best}px`;
       el.textContent = content;
       if (lines) {
-        el.style.whiteSpace = st.whiteSpace ?? "pre-wrap";
+        el.style.whiteSpace = whiteSpace;
       }
 
       if (expand) {
         let spacing = 0;
-        while (measureWidth(best) < tw * 0.96 && spacing < 10) {
-          spacing += 0.5;
+        while (spacing < 10) {
+          let width = 0;
           el.style.letterSpacing = `${spacing}px`;
-          if (measureWidth(best) > tw) {
-            el.style.letterSpacing = `${spacing - 0.5}px`;
-            break;
+          if (lines) {
+            for (let i = 0; i < lines.length; i++) {
+              el.textContent = lines[i]!;
+              el.style.whiteSpace = "nowrap";
+              width = Math.max(width, el.scrollWidth);
+            }
+            el.textContent = content;
+            el.style.whiteSpace = whiteSpace;
+          } else {
+            el.textContent = content;
+            width = el.scrollWidth;
+          }
+          if (width >= tw * 0.96) break;
+          spacing += 0.5;
+          if (spacing > 0) {
+            let nextWidth = 0;
+            el.style.letterSpacing = `${spacing}px`;
+            if (lines) {
+              for (let i = 0; i < lines.length; i++) {
+                el.textContent = lines[i]!;
+                el.style.whiteSpace = "nowrap";
+                nextWidth = Math.max(nextWidth, el.scrollWidth);
+              }
+            } else {
+              el.textContent = content;
+              nextWidth = el.scrollWidth;
+            }
+            if (nextWidth > tw) {
+              el.style.letterSpacing = `${spacing - 0.5}px`;
+              break;
+            }
           }
         }
       }
