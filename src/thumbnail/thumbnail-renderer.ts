@@ -10,6 +10,7 @@ import {
   resolveAssetPath,
   type ThumbnailBrandConfig,
 } from "./brand-config.js";
+import { normalizeThumbnailLineBreaks } from "./normalize-thumbnail-line-breaks.js";
 
 export interface ThumbnailRenderOptions {
   /** 가운데 메인 제목 (2줄, \\n 구분) */
@@ -145,7 +146,7 @@ async function injectTemplateText(
   }
 
   const topLabel = options.topLabel?.trim() ?? "";
-  const mainText = options.text.trim();
+  const mainText = normalizeThumbnailLineBreaks(options.text).trim();
   const canvasWidth = brand.canvas.width;
   const topTargetWidth = canvasWidth * ((top.widthPercent ?? 62) / 100);
   const mainTargetWidth = canvasWidth * ((main.widthPercent ?? 90) / 100);

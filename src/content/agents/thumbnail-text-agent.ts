@@ -3,6 +3,7 @@ import {
   THUMBNAIL_TEXT_SYSTEM_PROMPT,
   buildThumbnailTextUserPrompt,
 } from "../llm/prompts/thumbnail-text.prompt.js";
+import { normalizeThumbnailLineBreaks } from "../../thumbnail/normalize-thumbnail-line-breaks.js";
 
 /**
  * 썸네일 텍스트 에이전트: 썸네일 중앙에 들어갈 짧은 문구를 생성합니다.
@@ -17,7 +18,8 @@ export class ThumbnailTextAgent {
       temperature: 0.9,
     });
 
-    console.log(`[ThumbnailText] 생성 완료: "${text}"`);
-    return text;
+    const normalized = normalizeThumbnailLineBreaks(text);
+    console.log(`[ThumbnailText] 생성 완료: "${normalized}"`);
+    return normalized;
   }
 }

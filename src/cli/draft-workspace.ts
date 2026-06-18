@@ -5,6 +5,7 @@ import { platform } from "node:os";
 import { config } from "../../config/index.js";
 import { normalizeTopicInput } from "./resolve-blog-topic.js";
 import type { ArticleDraft } from "../content/types.js";
+import { normalizeThumbnailLineBreaks } from "../thumbnail/normalize-thumbnail-line-breaks.js";
 
 export const CURRENT_WORKSPACE = path.join(config.draftsDir, "current");
 
@@ -170,7 +171,7 @@ export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
     },
     title: title.trim(),
     htmlBody: htmlBody.trim(),
-    thumbnailText: thumbnailMain.trim(),
+    thumbnailText: normalizeThumbnailLineBreaks(thumbnailMain.trim()),
     thumbnailTopLabel: thumbnailTop.trim() || undefined,
     createdAt: meta.createdAt,
   };

@@ -4,6 +4,7 @@ import {
   extractMainKeywords,
 } from "../publishing/images/keyword-slug.js";
 import { normalizeTopicInput } from "../cli/resolve-blog-topic.js";
+import { normalizeThumbnailLineBreaks } from "./normalize-thumbnail-line-breaks.js";
 
 /** Gems 예시 JSON에 박혀 있어 그대로 복사되기 쉬운 문구 */
 const STALE_THUMBNAIL_PHRASES = [
@@ -60,7 +61,7 @@ export async function refreshThumbnailTexts(
   const topLabel = buildTopLabelFromKeywords(keywordList);
 
   const agent = new ThumbnailTextAgent();
-  const mainText = await agent.run(title);
+  const mainText = normalizeThumbnailLineBreaks(await agent.run(title));
 
   return { topLabel, mainText };
 }

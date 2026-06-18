@@ -1,6 +1,7 @@
 import { chat } from "../llm/llm-router.js";
 import { loadGemsSystemPrompt } from "../llm/gems-prompt-loader.js";
 import { buildSampleStructureInstruction } from "../blog-style/load-style.js";
+import { normalizeThumbnailLineBreaks } from "../../thumbnail/normalize-thumbnail-line-breaks.js";
 
 export interface GemsArticleOutput {
   title: string;
@@ -31,7 +32,7 @@ htmlBody 규칙:
 - 시맨틱 HTML만: <h2>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>
 - h1 금지, <strong>/<b> 금지, 마크다운 금지, 인라인 style 금지
 - thumbnailTopLabel: 상단 알약 라벨, 8~18자, 비자코드·핵심 키워드 (예: D-8-4 외국인 창업)
-- thumbnailText: 가운데 메인 제목, 2줄(\\n), 줄당 4~10자, 굵은 대제목 스타일. 검은 외곽선 느낌의 짧고 강렬한 문구
+- thumbnailText: 가운데 메인 제목, 2~3줄(실제 줄바꿈), 줄당 4~10자, 굵은 대제목 스타일. 검은 외곽선 느낌의 짧고 강렬한 문구. JSON에서는 줄바꿈만 \\n으로 이스케이프
 `;
 
 function looksLikeKeywords(input: string): boolean {
@@ -83,7 +84,7 @@ function parseGemsResponse(raw: string): GemsArticleOutput {
     title: parsed.title.trim(),
     htmlBody: parsed.htmlBody.trim(),
     thumbnailTopLabel: (parsed.thumbnailTopLabel ?? "").trim(),
-    thumbnailText: parsed.thumbnailText.trim(),
+    thumbnailText: normalizeThumbnailLineBreaks(parsed.thumbnailText.trim()),
   };
 }
 
