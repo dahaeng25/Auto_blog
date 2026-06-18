@@ -50,6 +50,10 @@ export const config = {
   imagesDir: path.join(projectRoot, "assets", "images"),
   /** true이면 썸네일에 블로그 제목 부제목도 표시 */
   thumbnailShowSubtitle: process.env.THUMBNAIL_SHOW_SUBTITLE === "true",
+  /** 키워드별 AI 배경 생성 (OpenAI DALL-E) */
+  thumbnailDynamicBackground: process.env.THUMBNAIL_DYNAMIC_BG !== "false",
+  thumbnailBackgroundModel:
+    process.env.THUMBNAIL_BG_MODEL ?? "dall-e-3",
 
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",
   tistoryBlogName: process.env.TISTORY_BLOG_NAME ?? "",

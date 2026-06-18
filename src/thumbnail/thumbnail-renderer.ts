@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import type { Page } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
+import { generateThumbnailBackground } from "./background-generator.js";
 import {
   assetExists,
   loadThumbnailBrand,
@@ -12,63 +13,105 @@ import {
 } from "./brand-config.js";
 
 export interface ThumbnailRenderOptions {
-  /** 매번 바뀌는 메인 문구 (Gems/thumbnailText 에이전트) */
+  /** 매번 바뀌는 메인 문구 (Gems/thumbnailText) */
   text: string;
-  /** 부제목 — brand.json subtitle.enabled=true 일 때만 표시 */
+  /** 메인 키워드 — 배경 이미지 생성에 사용 */
+  keywords?: string[];
+  /** 키워드 파일명 접두사 */
+  keywordSlug?: string;
   subtitle?: string;
   outputFilename?: string;
 }
 
 function calcFontSize(text: string, brand: ThumbnailBrandConfig): number {
-  const min = brand.text.fontSizeMin ?? 32;
-  const max = brand.text.fontSizeMax ?? 64;
+  const min = brand.text.fontSizeMin ?? 44;
+  const max = brand.text.fontSizeMax ?? 58;
   const len = text.replace(/\s/g, "").length;
 
-  if (len <= 8) return max;
-  if (len <= 14) return Math.round(max * 0.88);
-  if (len <= 20) return Math.round(max * 0.76);
-  if (len <= 28) return Math.round(max * 0.66);
+  if (len <= 10) return max;
+  if (len <= 16) return Math.round(max * 0.92);
+  if (len <= 24) return Math.round(max * 0.84);
+  if (len <= 32) return Math.round(max * 0.76);
   return min;
 }
 
-/** brand.json 디자인을 캔버스에 적용 (고정) */
+async function resolvePhotoPath(
+  options: ThumbnailRenderOptions,
+  brand: ThumbnailBrandConfig,
+): Promise<string | null> {
+  const keywords = options.keywords?.filter(Boolean) ?? [];
+  const slug = options.keywordSlug ?? "thumbnail";
+
+  if (
+    brand.background.type === "dynamic" &&
+    config.thumbnailDynamicBackground &&
+    keywords.length > 0
+  ) {
+    return generateThumbnailBackground(keywords, slug);
+  }
+
+  if (brand.background.type === "image" && assetExists(brand.background.image)) {
+    return resolveAssetPath(brand.background.image!);
+  }
+
+  return null;
+}
+
 async function applyBrandDesign(
   page: Page,
   brand: ThumbnailBrandConfig,
+  photoPath: string | null,
 ): Promise<void> {
-  const bgImage =
-    brand.background.type === "image" && assetExists(brand.background.image)
-      ? pathToFileURL(resolveAssetPath(brand.background.image!)).href
-      : null;
-
-  const logoImage =
-    brand.logo.enabled && assetExists(brand.logo.image)
-      ? pathToFileURL(resolveAssetPath(brand.logo.image!)).href
+  const photoUrl = photoPath ? pathToFileURL(photoPath).href : null;
+  const headerLogoUrl =
+    brand.header?.enabled &&
+    brand.header.logo &&
+    assetExists(brand.header.logo)
+      ? pathToFileURL(resolveAssetPath(brand.header.logo)).href
       : null;
 
   await page.evaluate(
-    ({ brand: b, bgUrl, logoUrl }) => {
+    ({ brand: b, photoUrl: bgUrl, headerLogoUrl: logoUrl }) => {
       const canvas = document.getElementById("thumbnail-canvas");
-      const bg = document.getElementById("thumbnail-bg");
-      const logo = document.getElementById("thumbnail-logo") as HTMLImageElement | null;
+      const photo = document.getElementById("thumbnail-photo");
+      const overlay = document.getElementById("thumbnail-overlay");
+      const frameInner = document.getElementById("thumbnail-frame-inner");
+      const header = document.getElementById("thumbnail-header");
+      const headerLogo = document.getElementById(
+        "thumbnail-header-logo",
+      ) as HTMLImageElement | null;
+      const companyName = document.getElementById("thumbnail-company-name");
+      const footer = document.getElementById("thumbnail-footer");
       const textArea = document.getElementById("text-area");
-      const accent = document.getElementById("thumbnail-accent");
-      const topBar = document.getElementById("thumbnail-top-bar");
-      const bottomBar = document.getElementById("thumbnail-bottom-bar");
-      const textBox = document.getElementById("thumbnail-text-box");
+      const mainEl = document.getElementById("thumbnail-text");
 
-      if (!canvas || !bg || !textArea) return;
+      if (!canvas || !photo || !textArea) return;
 
       canvas.style.width = `${b.canvas.width}px`;
       canvas.style.height = `${b.canvas.height}px`;
 
+      if (b.frame?.outerBorder) {
+        canvas.style.border = b.frame.outerBorder;
+      }
+
+      if (frameInner && b.frame?.innerBorder) {
+        frameInner.style.border = b.frame.innerBorder;
+        frameInner.style.display = "block";
+      }
+
       if (bgUrl) {
-        bg.style.backgroundImage = `url(${bgUrl})`;
-        bg.style.background = `url(${bgUrl}) center/cover no-repeat`;
+        photo.style.backgroundImage = `url(${bgUrl})`;
       } else if (b.background.type === "gradient" && b.background.gradient) {
-        bg.style.background = b.background.gradient;
+        photo.style.background = b.background.gradient;
       } else if (b.background.color) {
-        bg.style.background = b.background.color;
+        photo.style.background = b.background.color;
+      } else {
+        photo.style.background =
+          "linear-gradient(165deg, #0c2540 0%, #1a4a7a 45%, #0f3258 100%)";
+      }
+
+      if (overlay && b.background.overlay) {
+        overlay.style.background = b.background.overlay;
       }
 
       textArea.style.alignItems =
@@ -78,7 +121,6 @@ async function applyBrandDesign(
       textArea.style.textAlign = b.text.align;
       textArea.style.padding = b.text.padding;
 
-      const mainEl = document.getElementById("thumbnail-text");
       if (mainEl) {
         mainEl.style.fontFamily = b.text.fontFamily;
         mainEl.style.fontWeight = b.text.fontWeight;
@@ -89,45 +131,35 @@ async function applyBrandDesign(
         mainEl.style.maxWidth = b.text.maxWidth;
       }
 
-      if (logo && logoUrl) {
-        logo.src = logoUrl;
-        logo.style.display = "block";
-        logo.style.width = `${b.logo.width}px`;
-        logo.style.top = `${b.logo.top}px`;
-        logo.style.left = `${b.logo.left}px`;
-      }
+      if (header && b.header?.enabled) {
+        header.style.display = "flex";
+        if (b.header.top) header.style.top = b.header.top;
 
-      if (accent && b.accent.enabled) {
-        accent.style.display = "block";
-        accent.style.height = `${b.accent.height}px`;
-        accent.style.background = b.accent.gradient;
-      }
+        if (headerLogo && logoUrl) {
+          headerLogo.src = logoUrl;
+          headerLogo.style.display = "block";
+        }
 
-      if (topBar && b.decor?.topBar?.enabled) {
-        topBar.style.display = "block";
-        topBar.style.height = `${b.decor.topBar.height}px`;
-        topBar.style.background = b.decor.topBar.color;
-      }
-
-      if (bottomBar && b.decor?.bottomBar?.enabled) {
-        bottomBar.style.display = "block";
-        bottomBar.style.height = `${b.decor.bottomBar.height}px`;
-        bottomBar.style.background = b.decor.bottomBar.color;
-      }
-
-      if (textBox && b.decor?.textBox?.enabled) {
-        textBox.style.border = b.decor.textBox.border;
-        textBox.style.padding = b.decor.textBox.padding;
-        if (b.decor.textBox.background) {
-          textBox.style.background = b.decor.textBox.background;
+        if (companyName && b.header.companyName) {
+          companyName.textContent = b.header.companyName;
+          companyName.style.fontSize = b.header.fontSize ?? "22px";
+          companyName.style.color = b.header.color ?? "#ffffff";
         }
       }
+
+      if (footer && b.footer?.enabled && b.footer.text) {
+        footer.textContent = b.footer.text;
+        footer.style.display = "block";
+        footer.style.fontSize = b.footer.fontSize ?? "18px";
+        footer.style.color = b.footer.color ?? "rgba(255,255,255,0.9)";
+        footer.style.bottom = b.footer.bottom ?? "28px";
+        footer.style.right = b.footer.right ?? "36px";
+      }
     },
-    { brand, bgUrl: bgImage, logoUrl: logoImage },
+    { brand, photoUrl, headerLogoUrl },
   );
 }
 
-/** 매번 바뀌는 문구만 주입 */
 async function injectText(
   page: Page,
   options: ThumbnailRenderOptions,
@@ -171,27 +203,23 @@ async function injectText(
 }
 
 /**
- * 브랜드 템플릿(고정) + thumbnailText(가변)로 썸네일 PNG 생성.
+ * 고정 프레임(로고·테두리) + 키워드별 AI 배경 + 썸네일 문구로 PNG 생성.
  */
 export class ThumbnailRenderer {
   private readonly templatePath: string;
-  private readonly outputDir: string;
 
-  constructor(
-    templatePath: string = config.thumbnailTemplatePath,
-    outputDir: string = config.thumbnailsDir,
-  ) {
+  constructor(templatePath: string = config.thumbnailTemplatePath) {
     this.templatePath = templatePath;
-    this.outputDir = outputDir;
   }
 
   async render(options: ThumbnailRenderOptions): Promise<string> {
     const brand = loadThumbnailBrand();
     const filename = options.outputFilename ?? "thumbnail_최종.png";
-    const outputDir = config.thumbnailsDir;
-    const outputPath = path.join(outputDir, filename);
+    const outputPath = path.join(config.thumbnailsDir, filename);
 
-    await fs.mkdir(outputDir, { recursive: true });
+    await fs.mkdir(config.thumbnailsDir, { recursive: true });
+
+    const photoPath = await resolvePhotoPath(options, brand);
 
     const browser = await launchChromium({ headless: true });
     const context = await browser.newContext({
@@ -207,7 +235,7 @@ export class ThumbnailRenderer {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(300);
 
-      await applyBrandDesign(page, brand);
+      await applyBrandDesign(page, brand, photoPath);
       await injectText(page, options, brand);
 
       const canvas = page.locator("#thumbnail-canvas");

@@ -83,6 +83,8 @@ export async function runOrchestration(
 
     const thumbnailPath = await thumbnailRenderer.render({
       text: draft.thumbnailText,
+      keywords,
+      keywordSlug,
       ...(config.thumbnailShowSubtitle ? { subtitle: draft.title } : {}),
       ...(useNaverSample ? { outputFilename: `${keywordSlug}1.png` } : {}),
     });
