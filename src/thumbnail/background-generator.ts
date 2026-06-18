@@ -99,8 +99,9 @@ export async function generateThumbnailBackground(
         n: 1,
       });
 
-      const imageUrl = response.data[0]?.url;
-      const b64 = response.data[0]?.b64_json;
+      const data = response.data ?? [];
+      const imageUrl = data[0]?.url;
+      const b64 = data[0]?.b64_json;
 
       if (imageUrl) {
         await downloadImage(imageUrl, outputPath);

@@ -7,6 +7,7 @@ import { ContentAgent } from "./agents/content-agent.js";
 import { ThumbnailTextAgent } from "./agents/thumbnail-text-agent.js";
 import { GemsAgent } from "./agents/gems-agent.js";
 import { applyBlogStyle } from "./blog-style/apply-style.js";
+import { buildTopLabelFromKeywords } from "../publishing/images/keyword-slug.js";
 import { TopicRepository } from "./farming/topic-repository.js";
 import type { ArticleDraft, ContentRunOptions, RawTopic } from "./types.js";
 
@@ -131,6 +132,9 @@ export class ContentPipeline {
       title: gems.title,
       htmlBody: gems.htmlBody,
       thumbnailText: gems.thumbnailText,
+      thumbnailTopLabel:
+        gems.thumbnailTopLabel ||
+        buildTopLabelFromKeywords(blogTopic.split(/[,，/|·]+/).map((s) => s.trim()).filter(Boolean)),
     });
   }
 

@@ -14,6 +14,8 @@ export interface ArticleDraft {
   title: string;
   htmlBody: string;
   thumbnailText: string;
+  /** 썸네일 상단 알약 라벨 (주제 키워드) */
+  thumbnailTopLabel?: string;
   createdAt: string;
 }
 

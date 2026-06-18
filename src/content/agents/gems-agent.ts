@@ -5,6 +5,7 @@ import { buildSampleStructureInstruction } from "../blog-style/load-style.js";
 export interface GemsArticleOutput {
   title: string;
   htmlBody: string;
+  thumbnailTopLabel: string;
   thumbnailText: string;
 }
 
@@ -17,7 +18,8 @@ const OUTPUT_FORMAT_INSTRUCTION =
 {
   "title": "SEO 최적화 블로그 제목",
   "htmlBody": "<p>도입...</p><h2>소제목</h2><p>본문...</p>",
-  "thumbnailText": "썸네일\\n짧은 문구"
+  "thumbnailTopLabel": "D-8-4 외국인 창업",
+  "thumbnailText": "비자 전쟁에서\\n살아남는 법"
 }
 
 ` +
@@ -26,7 +28,8 @@ const OUTPUT_FORMAT_INSTRUCTION =
 htmlBody 규칙:
 - 시맨틱 HTML만: <h2>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>
 - h1 금지, <strong>/<b> 금지, 마크다운 금지, 인라인 style 금지
-- thumbnailText: 5~12자, 2줄 이내(\\n으로 줄바꿈), 샘플처럼 함축적 핵심 키워드. 가족친화인증·요건 및 혜택 같은 고정 문구 금지
+- thumbnailTopLabel: 상단 알약 라벨, 8~18자, 비자코드·핵심 키워드 (예: D-8-4 외국인 창업)
+- thumbnailText: 가운데 메인 제목, 2줄(\\n), 줄당 4~10자, 굵은 대제목 스타일. 검은 외곽선 느낌의 짧고 강렬한 문구
 `;
 
 function looksLikeKeywords(input: string): boolean {
@@ -75,6 +78,7 @@ function parseGemsResponse(raw: string): GemsArticleOutput {
   return {
     title: parsed.title.trim(),
     htmlBody: parsed.htmlBody.trim(),
+    thumbnailTopLabel: (parsed.thumbnailTopLabel ?? "").trim(),
     thumbnailText: parsed.thumbnailText.trim(),
   };
 }
@@ -104,7 +108,8 @@ export class GemsAgent {
 
     console.log(`[Gems] 제목: ${result.title}`);
     console.log(`[Gems] 본문: ${result.htmlBody.length}자`);
-    console.log(`[Gems] 썸네일 문구: ${result.thumbnailText}`);
+    console.log(`[Gems] 상단 라벨: ${result.thumbnailTopLabel}`);
+    console.log(`[Gems] 썸네일 제목: ${result.thumbnailText}`);
 
     return result;
   }

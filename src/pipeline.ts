@@ -10,6 +10,7 @@ import { assertOrchestrationReady } from "./pipeline/preflight.js";
 import { prepareNaverImageSet } from "./publishing/images/prepare-naver-images.js";
 import {
   buildKeywordSlug,
+  buildTopLabelFromKeywords,
   extractMainKeywords,
 } from "./publishing/images/keyword-slug.js";
 import { PublishPipeline } from "./publishing/publish-pipeline.js";
@@ -81,11 +82,15 @@ export async function runOrchestration(
       config.naverUseSampleStyle &&
       getEnabledPlatforms().includes("naver");
 
+    const topLabel =
+      draft.thumbnailTopLabel?.trim() ||
+      buildTopLabelFromKeywords(keywords);
+
     const thumbnailPath = await thumbnailRenderer.render({
       text: draft.thumbnailText,
+      topLabel,
       keywords,
       keywordSlug,
-      ...(config.thumbnailShowSubtitle ? { subtitle: draft.title } : {}),
       ...(useNaverSample ? { outputFilename: `${keywordSlug}1.png` } : {}),
     });
 

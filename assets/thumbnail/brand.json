@@ -1,26 +1,46 @@
 {
-  "$comment": "blue_directors 샘플 — 상단 로고·푸터는 header/footer-banner.png 고정, 가운데 문구·배경만 변경",
+  "$comment": "bg.png 빈 템플릿 — 로고·푸터·알약 테두리는 bg에 포함, 텍스트만 주입",
   "canvas": {
     "width": 886,
     "height": 886
   },
   "background": {
-    "type": "dynamic",
-    "overlay": "rgba(0,0,0,0.32)"
+    "type": "image",
+    "image": "assets/thumbnail/bg.png"
   },
-  "frame": {
-    "outerBorder": "18px solid #1c1c1c",
-    "innerBorder": "3px solid #c9a227"
+  "topLabel": {
+    "top": "54px",
+    "widthPercent": 62,
+    "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    "fontWeight": "800",
+    "color": "#ffffff",
+    "fontSizeMin": 26,
+    "fontSizeMax": 44,
+    "pill": {
+      "border": "none",
+      "background": "transparent",
+      "borderRadius": "0",
+      "padding": "4px 8px"
+    },
+    "cover": {
+      "enabled": false
+    }
   },
-  "header": {
-    "enabled": true,
-    "overlayImage": "assets/thumbnail/header-banner.png",
-    "overlayHeight": "118px"
-  },
-  "footer": {
-    "enabled": true,
-    "overlayImage": "assets/thumbnail/footer-banner.png",
-    "overlayHeight": "68px"
+  "mainTitle": {
+    "top": "36%",
+    "widthPercent": 90,
+    "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    "fontWeight": "800",
+    "color": "#ffffff",
+    "strokeWidth": "5px",
+    "strokeColor": "#000000",
+    "fontSizeMin": 64,
+    "fontSizeMax": 104,
+    "lineHeight": 1.15,
+    "maxWidth": "90%",
+    "cover": {
+      "enabled": false
+    }
   },
   "text": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
@@ -28,39 +48,22 @@
     "color": "#ffffff",
     "align": "center",
     "verticalAlign": "center",
-    "lineHeight": 1.35,
+    "lineHeight": 1.15,
     "letterSpacing": "-0.5px",
-    "textShadow": "0 2px 12px rgba(0,0,0,0.45)",
-    "padding": "130px 64px 90px",
-    "maxWidth": "780px",
-    "fontSizeMin": 44,
-    "fontSizeMax": 58
+    "textShadow": "none",
+    "padding": "0",
+    "maxWidth": "90%",
+    "fontSizeMin": 64,
+    "fontSizeMax": 104
   },
-  "subtitle": {
-    "enabled": false,
-    "fontSize": "20px",
-    "color": "rgba(255,255,255,0.75)"
-  },
-  "logo": {
-    "enabled": false,
-    "image": "assets/thumbnail/logo.png",
-    "width": 140,
-    "top": 40,
-    "left": 40
-  },
+  "subtitle": { "enabled": false, "fontSize": "20px", "color": "#ffffff" },
+  "logo": { "enabled": false, "width": 140, "top": 40, "left": 40 },
   "decor": {
     "topBar": { "enabled": false, "height": 10, "color": "#c9a227" },
     "bottomBar": { "enabled": false, "height": 10, "color": "#c9a227" },
-    "textBox": {
-      "enabled": false,
-      "border": "2px solid rgba(201,162,39,0.55)",
-      "padding": "28px 36px",
-      "background": "rgba(12,37,64,0.35)"
-    }
+    "textBox": { "enabled": false, "border": "", "padding": "" }
   },
-  "accent": {
-    "enabled": false,
-    "height": 6,
-    "gradient": "linear-gradient(90deg, #c9a227, #e8c547)"
-  }
+  "accent": { "enabled": false, "height": 6, "gradient": "" },
+  "header": { "enabled": false },
+  "footer": { "enabled": false }
 }

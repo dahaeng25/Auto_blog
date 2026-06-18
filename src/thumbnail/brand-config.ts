@@ -28,7 +28,6 @@ export interface ThumbnailBrandConfig {
   };
   footer?: {
     enabled: boolean;
-    /** 고정 푸터 문구 이미지 */
     overlayImage?: string;
     overlayHeight?: string;
     text?: string;
@@ -36,6 +35,49 @@ export interface ThumbnailBrandConfig {
     color?: string;
     bottom?: string;
     right?: string;
+  };
+  topLabel?: {
+    top: string;
+    /** 알약 안 텍스트가 채울 가로 비율(%) */
+    widthPercent?: number;
+    fontFamily: string;
+    fontWeight: string;
+    color: string;
+    fontSizeMin: number;
+    fontSizeMax: number;
+    pill: {
+      border: string;
+      background: string;
+      borderRadius: string;
+      padding: string;
+    };
+    cover?: {
+      enabled: boolean;
+      width: string;
+      height: string;
+      backdropFilter?: string;
+    };
+  };
+  mainTitle?: {
+    top: string;
+    /** 제목 텍스트가 채울 가로 비율(%) */
+    widthPercent?: number;
+    fontFamily: string;
+    fontWeight: string;
+    color: string;
+    strokeWidth: string;
+    strokeColor: string;
+    fontSizeMin: number;
+    fontSizeMax: number;
+    lineHeight: number;
+    maxWidth: string;
+    cover?: {
+      enabled: boolean;
+      top: string;
+      width: string;
+      height: string;
+      backdropFilter?: string;
+    };
   };
   text: {
     fontFamily: string;
@@ -83,32 +125,50 @@ export interface ThumbnailBrandConfig {
 const DEFAULT_BRAND: ThumbnailBrandConfig = {
   canvas: { width: 886, height: 886 },
   background: {
-    type: "dynamic",
-    overlay: "rgba(0,0,0,0.28)",
+    type: "image",
+    image: "assets/thumbnail/bg.png",
   },
-  frame: {
-    outerBorder: "18px solid #1c1c1c",
-    innerBorder: "3px solid #c9a227",
-  },
-  header: {
-    enabled: true,
-    overlayImage: "assets/thumbnail/header-banner.png",
-    overlayHeight: "118px",
-    companyName: "주식회사 청사 디렉터스",
-    fontSize: "22px",
+  topLabel: {
+    top: "54px",
+    widthPercent: 62,
+    fontFamily: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    fontWeight: "800",
     color: "#ffffff",
-    top: "18px",
+    fontSizeMin: 26,
+    fontSizeMax: 44,
+    pill: {
+      border: "none",
+      background: "transparent",
+      borderRadius: "0",
+      padding: "6px 24px",
+    },
+    cover: {
+      enabled: false,
+      width: "74%",
+      height: "54px",
+    },
   },
-  footer: {
-    enabled: true,
-    overlayImage: "assets/thumbnail/footer-banner.png",
-    overlayHeight: "68px",
-    text: "브랜드 마케팅",
-    fontSize: "18px",
-    color: "rgba(255,255,255,0.9)",
-    bottom: "18px",
-    right: "36px",
+  mainTitle: {
+    top: "36%",
+    widthPercent: 90,
+    fontFamily: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    fontWeight: "800",
+    color: "#ffffff",
+    strokeWidth: "5px",
+    strokeColor: "#000000",
+    fontSizeMin: 64,
+    fontSizeMax: 104,
+    lineHeight: 1.15,
+    maxWidth: "90%",
+    cover: {
+      enabled: false,
+      top: "33%",
+      width: "96%",
+      height: "30%",
+    },
   },
+  header: { enabled: false },
+  footer: { enabled: false },
   text: {
     fontFamily: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
     fontWeight: "800",
@@ -147,13 +207,39 @@ export function loadThumbnailBrand(): ThumbnailBrandConfig {
   const bottomBar = raw.decor?.bottomBar;
   const textBox = raw.decor?.textBox;
 
+  const defaultTop = DEFAULT_BRAND.topLabel!;
+  const defaultMain = DEFAULT_BRAND.mainTitle!;
+
   return {
     ...DEFAULT_BRAND,
     ...raw,
     background: { ...DEFAULT_BRAND.background, ...raw.background },
+    topLabel: {
+      ...defaultTop,
+      ...raw.topLabel,
+      pill: { ...defaultTop.pill, ...raw.topLabel?.pill },
+      cover: raw.topLabel?.cover
+        ? { ...defaultTop.cover, ...raw.topLabel.cover }
+        : defaultTop.cover,
+    },
+    mainTitle: {
+      ...defaultMain,
+      ...raw.mainTitle,
+      cover: raw.mainTitle?.cover
+        ? { ...defaultMain.cover, ...raw.mainTitle.cover }
+        : defaultMain.cover,
+    },
     frame: { ...DEFAULT_BRAND.frame, ...raw.frame },
-    header: { ...DEFAULT_BRAND.header, ...raw.header },
-    footer: { ...DEFAULT_BRAND.footer, ...raw.footer },
+    header: {
+      enabled: raw.header?.enabled ?? DEFAULT_BRAND.header?.enabled ?? false,
+      ...DEFAULT_BRAND.header,
+      ...raw.header,
+    },
+    footer: {
+      enabled: raw.footer?.enabled ?? DEFAULT_BRAND.footer?.enabled ?? false,
+      ...DEFAULT_BRAND.footer,
+      ...raw.footer,
+    },
     text: { ...DEFAULT_BRAND.text, ...raw.text },
     decor: {
       topBar: {

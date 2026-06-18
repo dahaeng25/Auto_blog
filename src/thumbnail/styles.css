@@ -17,65 +17,54 @@ body {
 #thumbnail-canvas {
   position: relative;
   overflow: hidden;
-  background: #1c1c1c;
 }
 
-#thumbnail-photo {
+#thumbnail-base {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   z-index: 0;
 }
 
-#thumbnail-overlay {
+.text-zone-cover {
   position: absolute;
-  inset: 0;
   z-index: 1;
-  pointer-events: none;
-}
-
-#thumbnail-frame-inner {
-  position: absolute;
-  inset: 18px;
-  border: 3px solid #c9a227;
-  z-index: 2;
-  pointer-events: none;
-}
-
-#thumbnail-header-overlay,
-#thumbnail-footer-overlay {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  width: calc(100% - 36px);
-  object-fit: fill;
   display: none;
-  z-index: 5;
   pointer-events: none;
 }
 
-#thumbnail-header-overlay {
-  top: 18px;
-}
-
-#thumbnail-footer-overlay {
-  bottom: 18px;
-}
-
-#text-area {
+#top-label-wrap {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
   display: flex;
-  flex-direction: column;
-  z-index: 4;
+  align-items: center;
+  justify-content: center;
 }
 
-#thumbnail-text {
+#top-label-pill {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+#thumbnail-top-label {
+  display: block;
+}
+
+#thumbnail-main-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  text-align: center;
   word-break: keep-all;
   white-space: pre-wrap;
-}
-
-#thumbnail-subtitle {
-  display: none;
+  margin: 0 auto;
 }

@@ -56,7 +56,12 @@ export function extractMainKeywords(blogTopic: string, title: string): string[] 
   return [source.slice(0, 24)];
 }
 
-/** 파일명용 키워드 조합 (한글·영문·숫자·하이픈) */
+/** 상단 알약 라벨용 짧은 키워드 문구 */
+export function buildTopLabelFromKeywords(keywords: string[]): string {
+  if (keywords.length === 0) return "블로그";
+  return keywords.slice(0, 3).join(" ").slice(0, 28);
+}
+
 export function buildKeywordSlug(keywords: string[]): string {
   const joined = keywords
     .map((k) =>

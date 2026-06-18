@@ -4,8 +4,6 @@ import { pathToFileURL } from "node:url";
 import type { Page } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
-import { generateThumbnailBackground } from "./background-generator.js";
-import { ensureBrandOverlayAssets } from "./brand-overlay.js";
 import {
   assetExists,
   loadThumbnailBrand,
@@ -14,193 +12,251 @@ import {
 } from "./brand-config.js";
 
 export interface ThumbnailRenderOptions {
-  /** 매번 바뀌는 메인 문구 (Gems/thumbnailText) */
+  /** 가운데 메인 제목 (2줄, \\n 구분) */
   text: string;
-  /** 메인 키워드 — 배경 이미지 생성에 사용 */
+  /** 상단 알약 라벨 (주제 키워드) */
+  topLabel?: string;
   keywords?: string[];
-  /** 키워드 파일명 접두사 */
   keywordSlug?: string;
   subtitle?: string;
   outputFilename?: string;
 }
 
-function calcFontSize(text: string, brand: ThumbnailBrandConfig): number {
-  const min = brand.text.fontSizeMin ?? 44;
-  const max = brand.text.fontSizeMax ?? 58;
-  const len = text.replace(/\s/g, "").length;
+function fitFontSizeToWidth(
+  page: Page,
+  selector: string,
+  text: string,
+  targetWidth: number,
+  min: number,
+  max: number,
+  styles: Record<string, string>,
+  expandLetterSpacing = false,
+): Promise<number> {
+  return page.evaluate(
+    ({ selector: sel, text: content, targetWidth: tw, min: lo, max: hi, styles: st, expand }) => {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (!el) throw new Error(`요소 없음: ${sel}`);
 
-  if (len <= 10) return max;
-  if (len <= 16) return Math.round(max * 0.92);
-  if (len <= 24) return Math.round(max * 0.84);
-  if (len <= 32) return Math.round(max * 0.76);
-  return min;
+      Object.assign(el.style, st);
+
+      const lines = content.includes("\n") ? content.split("\n") : null;
+
+      const measureWidth = (fontSize: number): number => {
+        el.style.fontSize = `${fontSize}px`;
+        el.style.letterSpacing = "0px";
+
+        if (lines) {
+          let maxW = 0;
+          for (const line of lines) {
+            el.textContent = line;
+            el.style.whiteSpace = "nowrap";
+            maxW = Math.max(maxW, el.scrollWidth);
+          }
+          el.textContent = content;
+          el.style.whiteSpace = st.whiteSpace ?? "pre-wrap";
+          return maxW;
+        }
+
+        el.textContent = content;
+        return el.scrollWidth;
+      };
+
+      let low = lo;
+      let high = hi;
+      let best = lo;
+
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (measureWidth(mid) <= tw) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      el.style.fontSize = `${best}px`;
+      el.textContent = content;
+      if (lines) {
+        el.style.whiteSpace = st.whiteSpace ?? "pre-wrap";
+      }
+
+      if (expand) {
+        let spacing = 0;
+        while (measureWidth(best) < tw * 0.96 && spacing < 10) {
+          spacing += 0.5;
+          el.style.letterSpacing = `${spacing}px`;
+          if (measureWidth(best) > tw) {
+            el.style.letterSpacing = `${spacing - 0.5}px`;
+            break;
+          }
+        }
+      }
+
+      return best;
+    },
+    {
+      selector,
+      text,
+      targetWidth,
+      min,
+      max,
+      styles,
+      expand: expandLetterSpacing,
+    },
+  );
 }
 
-async function resolvePhotoPath(
+async function injectTemplateText(
+  page: Page,
   options: ThumbnailRenderOptions,
   brand: ThumbnailBrandConfig,
-): Promise<string | null> {
-  const keywords = options.keywords?.filter(Boolean) ?? [];
-  const slug = options.keywordSlug ?? "thumbnail";
-
-  if (
-    brand.background.type === "dynamic" &&
-    config.thumbnailDynamicBackground &&
-    keywords.length > 0
-  ) {
-    return generateThumbnailBackground(keywords, slug);
+): Promise<void> {
+  const top = brand.topLabel;
+  const main = brand.mainTitle;
+  if (!top || !main) {
+    throw new Error("brand.json에 topLabel·mainTitle 설정이 필요합니다.");
   }
 
+  const topLabel = options.topLabel?.trim() ?? "";
+  const mainText = options.text.trim();
+  const canvasWidth = brand.canvas.width;
+  const topTargetWidth = canvasWidth * ((top.widthPercent ?? 62) / 100);
+  const mainTargetWidth = canvasWidth * ((main.widthPercent ?? 90) / 100);
+
+  await page.evaluate(
+    ({ top, main, topTargetWidth, canvasWidth }) => {
+      const wrap = document.getElementById("top-label-wrap");
+      const pill = document.getElementById("top-label-pill");
+      const mainEl = document.getElementById("thumbnail-main-title");
+      const topCover = document.getElementById("top-label-cover");
+      const mainCover = document.getElementById("main-title-cover");
+
+      if (!wrap || !pill || !mainEl) {
+        throw new Error("썸네일 템플릿 DOM 요소를 찾을 수 없습니다.");
+      }
+
+      wrap.style.top = top.top;
+      wrap.style.width = `${topTargetWidth}px`;
+      wrap.style.justifyContent = "center";
+
+      pill.style.border = top.pill.border;
+      pill.style.background = top.pill.background;
+      pill.style.borderRadius = top.pill.borderRadius;
+      pill.style.padding = top.pill.padding;
+      pill.style.width = "100%";
+      pill.style.justifyContent = "center";
+
+      mainEl.style.top = main.top;
+      mainEl.style.width = `${main.widthPercent ?? 90}%`;
+      mainEl.style.left = "50%";
+      mainEl.style.transform = "translateX(-50%)";
+      mainEl.style.maxWidth = main.maxWidth;
+      mainEl.style.padding = "0";
+      mainEl.style.textAlign = "center";
+
+      if (topCover) topCover.style.display = "none";
+      if (mainCover) mainCover.style.display = "none";
+    },
+    { top, main, topTargetWidth, canvasWidth },
+  );
+
+  await fitFontSizeToWidth(
+    page,
+    "#thumbnail-top-label",
+    topLabel,
+    topTargetWidth,
+    top.fontSizeMin,
+    top.fontSizeMax,
+    {
+      fontFamily: top.fontFamily,
+      fontWeight: top.fontWeight,
+      color: top.color,
+      whiteSpace: "nowrap",
+      textAlign: "center",
+      display: "block",
+      width: "100%",
+    },
+    true,
+  );
+
+  await fitFontSizeToWidth(
+    page,
+    "#thumbnail-main-title",
+    mainText,
+    mainTargetWidth,
+    main.fontSizeMin,
+    main.fontSizeMax,
+    {
+      fontFamily: main.fontFamily,
+      fontWeight: main.fontWeight,
+      color: main.color,
+      lineHeight: String(main.lineHeight),
+      whiteSpace: "pre-wrap",
+      wordBreak: "keep-all",
+      textAlign: "center",
+      width: "max-content",
+      maxWidth: "none",
+      webkitTextStroke: `${main.strokeWidth} ${main.strokeColor}`,
+      paintOrder: "stroke fill",
+    },
+    false,
+  );
+
+  await page.evaluate(({ widthPercent, maxWidth }) => {
+    const mainEl = document.getElementById("thumbnail-main-title");
+    if (mainEl) {
+      mainEl.style.width = `${widthPercent}%`;
+      mainEl.style.maxWidth = maxWidth;
+    }
+  }, { widthPercent: main.widthPercent ?? 90, maxWidth: main.maxWidth });
+}
+
+function resolveBaseImage(brand: ThumbnailBrandConfig): string | null {
   if (brand.background.type === "image" && assetExists(brand.background.image)) {
     return resolveAssetPath(brand.background.image!);
   }
-
   return null;
 }
 
-async function applyBrandDesign(
+async function applyTemplate(
   page: Page,
   brand: ThumbnailBrandConfig,
-  photoPath: string | null,
-  overlays: { headerPath: string | null; footerPath: string | null },
+  baseImagePath: string | null,
 ): Promise<void> {
-  const photoUrl = photoPath ? pathToFileURL(photoPath).href : null;
-
-  const headerOverlayUrl =
-    overlays.headerPath && brand.header?.enabled
-      ? pathToFileURL(overlays.headerPath).href
-      : null;
-  const footerOverlayUrl =
-    overlays.footerPath && brand.footer?.enabled
-      ? pathToFileURL(overlays.footerPath).href
-      : null;
+  const baseUrl = baseImagePath ? pathToFileURL(baseImagePath).href : null;
 
   await page.evaluate(
-    ({ brand: b, photoUrl: bgUrl, headerUrl, footerUrl }) => {
+    ({ brand: b, baseUrl: bg }) => {
       const canvas = document.getElementById("thumbnail-canvas");
-      const photo = document.getElementById("thumbnail-photo");
-      const overlay = document.getElementById("thumbnail-overlay");
-      const frameInner = document.getElementById("thumbnail-frame-inner");
-      const headerOverlay = document.getElementById(
-        "thumbnail-header-overlay",
-      ) as HTMLImageElement | null;
-      const footerOverlay = document.getElementById(
-        "thumbnail-footer-overlay",
-      ) as HTMLImageElement | null;
-      const textArea = document.getElementById("text-area");
-      const mainEl = document.getElementById("thumbnail-text");
-
-      if (!canvas || !photo || !textArea) return;
+      const base = document.getElementById("thumbnail-base") as HTMLImageElement | null;
+      if (!canvas || !base) return;
 
       canvas.style.width = `${b.canvas.width}px`;
       canvas.style.height = `${b.canvas.height}px`;
 
-      if (b.frame?.outerBorder) {
-        canvas.style.border = b.frame.outerBorder;
-      }
-
-      if (frameInner && b.frame?.innerBorder) {
-        frameInner.style.border = b.frame.innerBorder;
-        frameInner.style.display = "block";
-      }
-
-      if (bgUrl) {
-        photo.style.backgroundImage = `url(${bgUrl})`;
-      } else if (b.background.type === "gradient" && b.background.gradient) {
-        photo.style.background = b.background.gradient;
-      } else if (b.background.color) {
-        photo.style.background = b.background.color;
-      } else {
-        photo.style.background =
-          "linear-gradient(165deg, #0c2540 0%, #1a4a7a 45%, #0f3258 100%)";
-      }
-
-      if (overlay && b.background.overlay) {
-        overlay.style.background = b.background.overlay;
-      }
-
-      textArea.style.alignItems =
-        b.text.align === "center" ? "center" : "flex-start";
-      textArea.style.justifyContent =
-        b.text.verticalAlign === "center" ? "center" : "flex-end";
-      textArea.style.textAlign = b.text.align;
-      textArea.style.padding = b.text.padding;
-
-      if (mainEl) {
-        mainEl.style.fontFamily = b.text.fontFamily;
-        mainEl.style.fontWeight = b.text.fontWeight;
-        mainEl.style.color = b.text.color;
-        mainEl.style.lineHeight = String(b.text.lineHeight);
-        mainEl.style.letterSpacing = b.text.letterSpacing;
-        mainEl.style.textShadow = b.text.textShadow;
-        mainEl.style.maxWidth = b.text.maxWidth;
-      }
-
-      if (headerOverlay && headerUrl) {
-        headerOverlay.src = headerUrl;
-        headerOverlay.style.display = "block";
-        headerOverlay.style.height = b.header?.overlayHeight ?? "118px";
-      }
-
-      if (footerOverlay && footerUrl) {
-        footerOverlay.src = footerUrl;
-        footerOverlay.style.display = "block";
-        footerOverlay.style.height = b.footer?.overlayHeight ?? "68px";
+      if (bg) {
+        base.src = bg;
+        base.style.display = "block";
       }
     },
-    {
-      brand,
-      photoUrl,
-      headerUrl: headerOverlayUrl,
-      footerUrl: footerOverlayUrl,
-    },
+    { brand, baseUrl },
   );
-}
 
-async function injectText(
-  page: Page,
-  options: ThumbnailRenderOptions,
-  brand: ThumbnailBrandConfig,
-): Promise<void> {
-  const fontSize = calcFontSize(options.text, brand);
-  const showSubtitle =
-    brand.subtitle.enabled &&
-    config.thumbnailShowSubtitle &&
-    Boolean(options.subtitle);
-
-  await page.evaluate(
-    ({ text, subtitle, fontSize: size, showSub, subStyle }) => {
-      const mainEl = document.getElementById("thumbnail-text");
-      const subEl = document.getElementById("thumbnail-subtitle");
-      if (!mainEl) throw new Error("#thumbnail-text 없음");
-
-      mainEl.textContent = text;
-      mainEl.style.fontSize = `${size}px`;
-
-      if (subEl) {
-        if (showSub && subtitle) {
-          subEl.textContent = subtitle;
-          subEl.style.display = "block";
-          subEl.style.fontSize = subStyle.fontSize;
-          subEl.style.color = subStyle.color;
-          subEl.style.marginTop = "16px";
-        } else {
-          subEl.style.display = "none";
-        }
-      }
+  await page.waitForFunction(
+    () => {
+      const img = document.getElementById(
+        "thumbnail-base",
+      ) as HTMLImageElement | null;
+      return Boolean(img?.complete && img.naturalWidth > 0);
     },
-    {
-      text: options.text,
-      subtitle: options.subtitle ?? "",
-      fontSize,
-      showSub: showSubtitle,
-      subStyle: brand.subtitle,
-    },
+    undefined,
+    { timeout: 15_000 },
   );
 }
 
 /**
- * 고정 프레임(로고·테두리) + 키워드별 AI 배경 + 썸네일 문구로 PNG 생성.
+ * bg.png 고정 템플릿 + 상단 라벨·가운데 제목만 주입.
  */
 export class ThumbnailRenderer {
   private readonly templatePath: string;
@@ -213,11 +269,15 @@ export class ThumbnailRenderer {
     const brand = loadThumbnailBrand();
     const filename = options.outputFilename ?? "thumbnail_최종.png";
     const outputPath = path.join(config.thumbnailsDir, filename);
+    const baseImagePath = resolveBaseImage(brand);
+
+    if (!baseImagePath) {
+      throw new Error(
+        "썸네일 배경 파일이 없습니다. assets/thumbnail/bg.png 를 확인하세요.",
+      );
+    }
 
     await fs.mkdir(config.thumbnailsDir, { recursive: true });
-
-    const photoPath = await resolvePhotoPath(options, brand);
-    const overlays = await ensureBrandOverlayAssets();
 
     const browser = await launchChromium({ headless: true });
     const context = await browser.newContext({
@@ -233,8 +293,8 @@ export class ThumbnailRenderer {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(300);
 
-      await applyBrandDesign(page, brand, photoPath, overlays);
-      await injectText(page, options, brand);
+      await applyTemplate(page, brand, baseImagePath);
+      await injectTemplateText(page, options, brand);
 
       const canvas = page.locator("#thumbnail-canvas");
       await canvas.screenshot({ path: outputPath, type: "png" });
