@@ -32,4 +32,6 @@ export interface TopicRecord {
 export interface ContentRunOptions {
   /** 실행 시 지정한 블로그 주제/키워드 (.env보다 우선) */
   blogTopic?: string;
+  /** true면 동일 주제 기존 원고를 무시하고 새로 생성 */
+  forceRegenerate?: boolean;
 }

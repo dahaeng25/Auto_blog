@@ -22,6 +22,7 @@ const FILES = {
 export interface DraftWorkspaceMeta {
   topicId: number;
   createdAt: string;
+  keywords?: string;
   thumbnailPath?: string;
 }
 
@@ -83,6 +84,7 @@ export async function exportDraftWorkspace(
   const meta: DraftWorkspaceMeta = {
     topicId: draft.topicId,
     createdAt: draft.createdAt,
+    keywords,
   };
 
   await Promise.all([
@@ -116,6 +118,7 @@ export async function exportDraftWorkspace(
       JSON.stringify(meta, null, 2),
       "utf-8",
     ),
+    fs.rm(path.join(CURRENT_WORKSPACE, FILES.thumbnailPath), { force: true }),
   ]);
 
   await writePreviewHtml();
@@ -260,6 +263,11 @@ export async function openDraftEditors(): Promise<void> {
   await openFile(preview);
 }
 
+/** 기본 앱으로 파일 열기 (썸네일 미리보기 등) */
+export function openPathInViewer(filePath: string): Promise<void> {
+  return openFile(filePath);
+}
+
 function openFile(filePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const os = platform();
@@ -285,4 +293,50 @@ function openFile(filePath: string): Promise<void> {
 
 export function getWorkspaceDir(): string {
   return CURRENT_WORKSPACE;
+}
+
+/** 워크스페이스 썸네일 문구 파일 갱신 */
+export async function updateWorkspaceThumbnailTexts(
+  topLabel: string,
+  mainText: string,
+  keywords?: string,
+): Promise<void> {
+  await fs.mkdir(CURRENT_WORKSPACE, { recursive: true });
+  await Promise.all([
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.thumbnailTop),
+      topLabel,
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.thumbnailMain),
+      mainText,
+      "utf-8",
+    ),
+  ]);
+
+  if (keywords) {
+    const metaPath = path.join(CURRENT_WORKSPACE, FILES.meta);
+    try {
+      const meta = JSON.parse(
+        await fs.readFile(metaPath, "utf-8"),
+      ) as DraftWorkspaceMeta;
+      meta.keywords = keywords;
+      await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+    } catch {
+      // meta 없으면 썸네일 텍스트 파일만 갱신
+    }
+  }
+}
+
+export async function readWorkspaceMeta(): Promise<DraftWorkspaceMeta | null> {
+  try {
+    const raw = await fs.readFile(
+      path.join(CURRENT_WORKSPACE, FILES.meta),
+      "utf-8",
+    );
+    return JSON.parse(raw) as DraftWorkspaceMeta;
+  } catch {
+    return null;
+  }
 }

@@ -39,7 +39,7 @@ export class ContentPipeline {
     console.log(`[Content] 모드: ${config.contentMode}`);
 
     if (config.contentMode === "gems") {
-      return this.runGemsMode(options.blogTopic);
+      return this.runGemsMode(options.blogTopic, options.forceRegenerate);
     }
     return this.runRssMode();
   }
@@ -61,7 +61,7 @@ export class ContentPipeline {
   }
 
   /** 사용자 지정 주제 + Gems 프롬프트 단일 생성 */
-  private async runGemsMode(blogTopicOverride?: string): Promise<ArticleDraft> {
+  private async runGemsMode(blogTopicOverride?: string, forceRegenerate?: boolean): Promise<ArticleDraft> {
     const blogTopic = blogTopicOverride?.trim() || config.blogTopic;
     if (!blogTopic) {
       throw new Error(
@@ -80,11 +80,12 @@ export class ContentPipeline {
     };
 
     const existing = await this.repo.getTopicBySourceUrl(topic.sourceUrl);
+    const shouldForceRegenerate = forceRegenerate ?? config.forceRegenerate;
 
     if (existing) {
       // 강제 재생성
-      if (config.forceRegenerate) {
-        console.log(`[Gems] FORCE_REGENERATE=true — 기존 주제 삭제 후 재생성`);
+      if (shouldForceRegenerate) {
+        console.log(`[Gems] 기존 주제 삭제 후 재생성 (forceRegenerate)`);
         await this.repo.deleteTopicAndArticles(topic.sourceUrl);
       }
       // 기존 원고 재사용 (drafted 또는 RETRY_PUBLISH 시 published 포함)
@@ -117,7 +118,7 @@ export class ContentPipeline {
         );
       }
       // farmed 등 원고 없는 중복
-      else if (!config.forceRegenerate) {
+      else if (!shouldForceRegenerate) {
         await this.repo.deleteTopicAndArticles(topic.sourceUrl);
         console.log(`[Gems] 불완전한 기존 레코드 정리 후 재생성`);
       }

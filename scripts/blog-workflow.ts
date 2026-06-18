@@ -2,6 +2,7 @@
  * 엔트리포인트: npm run blog:workflow -- --step full
  * 배치파일(blog-run.bat)에서 호출합니다.
  */
+import { parseTopicFromArgv } from "../src/cli/resolve-blog-topic.js";
 import {
   runWorkflow,
   type WorkflowStep,
@@ -38,11 +39,13 @@ function parseKeywordsFile(argv: string[]): string | undefined {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const step = parseStep(argv);
+  const blogTopic = parseTopicFromArgv(argv);
   const keywordsFile = parseKeywordsFile(argv);
   const skipEdit = argv.includes("--skip-edit");
 
   await runWorkflow({
     step,
+    blogTopic,
     keywordsFile,
     skipEditPrompt: skipEdit,
   });

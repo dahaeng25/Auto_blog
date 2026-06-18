@@ -9,7 +9,6 @@ import { logger } from "../monitoring/logger.js";
 import { prepareNaverImageSet } from "../publishing/images/prepare-naver-images.js";
 import {
   buildKeywordSlug,
-  buildTopLabelFromKeywords,
   extractMainKeywords,
 } from "../publishing/images/keyword-slug.js";
 import { PublishPipeline } from "../publishing/publish-pipeline.js";
@@ -22,10 +21,16 @@ import {
   openDraftEditors,
   openPathInViewer,
   readKeywordsFromFile,
+  readWorkspaceMeta,
   saveThumbnailPath,
+  updateWorkspaceThumbnailTexts,
   workspaceExists,
   writePreviewHtml,
 } from "./draft-workspace.js";
+import {
+  refreshThumbnailTexts,
+  shouldRefreshThumbnailTexts,
+} from "../thumbnail/resolve-thumbnail-texts.js";
 
 export type WorkflowStep =
   | "content"
@@ -83,6 +88,38 @@ async function waitForEnter(message: string): Promise<void> {
   }
 }
 
+/** 썸네일 문구를 키워드·제목에 맞게 동기화 */
+async function ensureThumbnailTextsSynced(
+  keywords: string,
+  title: string,
+  topLabel: string,
+  mainText: string,
+): Promise<{ topLabel: string; mainText: string }> {
+  const meta = await readWorkspaceMeta();
+  const needsRefresh = shouldRefreshThumbnailTexts(
+    meta?.keywords,
+    keywords,
+    title,
+    topLabel,
+    mainText,
+  );
+
+  if (!needsRefresh) {
+    return { topLabel, mainText };
+  }
+
+  console.log("[Thumbnail] 키워드·제목에 맞게 썸네일 문구를 다시 생성합니다...");
+  const refreshed = await refreshThumbnailTexts(keywords, title);
+  await updateWorkspaceThumbnailTexts(
+    refreshed.topLabel,
+    refreshed.mainText,
+    keywords,
+  );
+  console.log(`[Thumbnail] 상단: ${refreshed.topLabel}`);
+  console.log(`[Thumbnail] 가운데: ${refreshed.mainText.replace(/\n/g, " / ")}`);
+  return refreshed;
+}
+
 /** Phase 2: AI 글 작성 + 편집 폴더 저장 */
 export async function runContentStep(
   options: WorkflowRunOptions,
@@ -94,11 +131,28 @@ export async function runContentStep(
 
   const pipeline = new ContentPipeline();
   try {
-    const draft = await pipeline.run({ blogTopic: keywords });
-    const workspace = await exportDraftWorkspace(draft, keywords);
+    const draft = await pipeline.run({
+      blogTopic: keywords,
+      forceRegenerate: true,
+    });
+
+    const thumbnailTexts = await ensureThumbnailTextsSynced(
+      keywords,
+      draft.title,
+      draft.thumbnailTopLabel ?? "",
+      draft.thumbnailText,
+    );
+
+    const draftWithThumbnail = {
+      ...draft,
+      thumbnailTopLabel: thumbnailTexts.topLabel,
+      thumbnailText: thumbnailTexts.mainText,
+    };
+
+    const workspace = await exportDraftWorkspace(draftWithThumbnail, keywords);
 
     console.log("\n─── 글 작성 완료 ───");
-    console.log(`제목: ${draft.title}`);
+    console.log(`제목: ${draftWithThumbnail.title}`);
     console.log(`편집 폴더: ${workspace}`);
     console.log("  • title.txt — 제목");
     console.log("  • body.html — 본문 (HTML)");
@@ -127,18 +181,24 @@ export async function runThumbnailStep(): Promise<string> {
   await ensureWritableDirs();
 
   const { keywords, draft } = await loadDraftFromWorkspace();
+  const thumbnailTexts = await ensureThumbnailTextsSynced(
+    keywords,
+    draft.title,
+    draft.thumbnailTopLabel ?? "",
+    draft.thumbnailText,
+  );
+
   const keywordList = extractMainKeywords(keywords, draft.title);
   const keywordSlug = buildKeywordSlug(keywordList);
   const useNaverSample =
     config.naverUseSampleStyle && getEnabledPlatforms().includes("naver");
 
-  const topLabel =
-    draft.thumbnailTopLabel?.trim() ||
-    buildTopLabelFromKeywords(keywordList);
+  const topLabel = thumbnailTexts.topLabel;
+  const mainText = thumbnailTexts.mainText;
 
   const renderer = new ThumbnailRenderer();
   const thumbnailPath = await renderer.render({
-    text: draft.thumbnailText,
+    text: mainText,
     topLabel,
     keywords: keywordList,
     keywordSlug,
@@ -152,6 +212,14 @@ export async function runThumbnailStep(): Promise<string> {
   return thumbnailPath;
 }
 
+/** 썸네일 생성 후 이미지 뷰어로 미리보기 */
+export async function runThumbnailPreviewStep(): Promise<string> {
+  const thumbnailPath = await runThumbnailStep();
+  await openPathInViewer(thumbnailPath);
+  console.log("썸네일 미리보기를 열었습니다.");
+  return thumbnailPath;
+}
+
 /** Phase 4: 업로드 */
 export async function runPublishStep(): Promise<void> {
   await ensureWritableDirs();
@@ -161,7 +229,7 @@ export async function runPublishStep(): Promise<void> {
 
   if (!savedPath) {
     throw new Error(
-      "썸네일이 없습니다. 먼저 [4] 썸네일 생성을 실행하세요.",
+      "썸네일이 없습니다. 먼저 [5] 썸네일 생성을 실행하세요.",
     );
   }
 
@@ -221,12 +289,11 @@ export async function runPublishStep(): Promise<void> {
 
 /** 전체: 글작성 → 편집 → 썸네일 → 업로드 */
 export async function runFullWorkflow(
-  keywordsFile: string,
-  options: { skipEditPrompt?: boolean } = {},
+  options: WorkflowRunOptions,
 ): Promise<void> {
   console.log("\n═══ 전체 실행 (글작성 → 검토 → 썸네일 → 업로드) ═══\n");
 
-  await runContentStep(keywordsFile);
+  await runContentStep(options);
 
   if (!options.skipEditPrompt) {
     await runEditStep();
@@ -240,7 +307,7 @@ export async function runFullWorkflow(
 
   const proceed = await promptContinue("썸네일까지 완료했습니다. 업로드를 진행할까요?");
   if (!proceed) {
-    console.log("\n업로드를 건너뜁니다. 나중에 [5] 업로드만 실행하세요.");
+    console.log("\n업로드를 건너뜁니다. 나중에 [7] 업로드만 실행하세요.");
     return;
   }
 
@@ -249,11 +316,9 @@ export async function runFullWorkflow(
 }
 
 export async function runWorkflow(options: WorkflowRunOptions): Promise<void> {
-  const keywordsFile = options.keywordsFile ?? DEFAULT_KEYWORDS_FILE;
-
   switch (options.step) {
     case "content":
-      await runContentStep(keywordsFile);
+      await runContentStep(options);
       break;
     case "edit":
       await runEditStep();
@@ -261,13 +326,14 @@ export async function runWorkflow(options: WorkflowRunOptions): Promise<void> {
     case "thumbnail":
       await runThumbnailStep();
       break;
+    case "thumbnail-preview":
+      await runThumbnailPreviewStep();
+      break;
     case "publish":
       await runPublishStep();
       break;
     case "full":
-      await runFullWorkflow(keywordsFile, {
-        skipEditPrompt: options.skipEditPrompt,
-      });
+      await runFullWorkflow(options);
       break;
     default:
       throw new Error(`알 수 없는 단계: ${options.step}`);
