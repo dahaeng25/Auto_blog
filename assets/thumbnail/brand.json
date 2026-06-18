@@ -1,10 +1,32 @@
 {
-  "$comment": "blue_directors(청사 디렉터스) 샘플 썸네일 — 네이버 1:1 정방형, 문구만 변경",
+  "$comment": "blue_directors 샘플 — 고정 프레임·로고, 가운데 썸네일 문구만 매번 변경, 배경은 키워드별 AI 생성",
   "canvas": {
     "width": 886,
     "height": 886
   },
-  "background": { "type": "image", "image": "assets/thumbnail/bg.png" }
+  "background": {
+    "type": "dynamic",
+    "overlay": "rgba(0,0,0,0.28)"
+  },
+  "frame": {
+    "outerBorder": "18px solid #1c1c1c",
+    "innerBorder": "3px solid #c9a227"
+  },
+  "header": {
+    "enabled": true,
+    "logo": "assets/thumbnail/header-logo.png",
+    "companyName": "주식회사 청사 디렉터스",
+    "fontSize": "22px",
+    "color": "#ffffff",
+    "top": "36px"
+  },
+  "footer": {
+    "enabled": true,
+    "text": "브랜드 마케팅",
+    "fontSize": "18px",
+    "color": "rgba(255,255,255,0.9)",
+    "bottom": "28px",
+    "right": "36px"
   },
   "text": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
@@ -12,13 +34,13 @@
     "color": "#ffffff",
     "align": "center",
     "verticalAlign": "center",
-    "lineHeight": 1.45,
+    "lineHeight": 1.35,
     "letterSpacing": "-0.5px",
-    "textShadow": "0 2px 8px rgba(0,0,0,0.25)",
-    "padding": "100px 72px",
-    "maxWidth": "760px",
-    "fontSizeMin": 34,
-    "fontSizeMax": 52
+    "textShadow": "0 2px 12px rgba(0,0,0,0.45)",
+    "padding": "120px 64px 100px",
+    "maxWidth": "780px",
+    "fontSizeMin": 44,
+    "fontSizeMax": 58
   },
   "subtitle": {
     "enabled": false,
@@ -33,10 +55,10 @@
     "left": 40
   },
   "decor": {
-    "topBar": { "enabled": true, "height": 10, "color": "#c9a227" },
-    "bottomBar": { "enabled": true, "height": 10, "color": "#c9a227" },
+    "topBar": { "enabled": false, "height": 10, "color": "#c9a227" },
+    "bottomBar": { "enabled": false, "height": 10, "color": "#c9a227" },
     "textBox": {
-      "enabled": true,
+      "enabled": false,
       "border": "2px solid rgba(201,162,39,0.55)",
       "padding": "28px 36px",
       "background": "rgba(12,37,64,0.35)"
