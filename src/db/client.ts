@@ -11,6 +11,8 @@ let executor: DbExecutor | null = null;
  * - 로컬/Docker: 기본 SQLite (USE_TURSO=true 일 때만 Turso)
  */
 export function useLibsql(): boolean {
+  // 32비트 Windows 등 — libsql 네이티브 바이너리 미지원
+  if (process.arch === "ia32" || process.arch === "x32") return false;
   if (config.isVercel) return true;
   if (process.env.USE_TURSO === "true") {
     return Boolean(process.env.TURSO_DATABASE_URL);
