@@ -12,7 +12,7 @@ let executor: DbExecutor | null = null;
  */
 export function useLibsql(): boolean {
   // 32비트 Windows 등 — libsql 네이티브 바이너리 미지원
-  if (process.arch === "ia32" || process.arch === "x32") return false;
+  if (process.arch === "ia32") return false;
   if (config.isVercel) return true;
   if (process.env.USE_TURSO === "true") {
     return Boolean(process.env.TURSO_DATABASE_URL);

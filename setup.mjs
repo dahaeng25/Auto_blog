@@ -139,7 +139,7 @@ function checkNodeVersion() {
     warn("오류 시 Visual Studio C++ Build Tools 설치가 필요할 수 있습니다.");
   }
 
-  if (process.arch === "ia32" || process.arch === "x32") {
+  if (process.arch === "ia32") {
     warn("32비트 Windows가 감지되었습니다.");
     warn("로컬 SQLite(better-sqlite3)로 동작합니다. Turso(libsql)는 사용하지 않습니다.");
     warn("가능하면 Node.js 64비트(x64) 설치를 권장합니다.");
