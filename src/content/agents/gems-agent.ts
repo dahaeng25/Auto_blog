@@ -26,7 +26,7 @@ const OUTPUT_FORMAT_INSTRUCTION =
 htmlBody 규칙:
 - 시맨틱 HTML만: <h2>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>
 - h1 금지, <strong>/<b> 금지, 마크다운 금지, 인라인 style 금지
-- thumbnailText: 5~12자, 2줄 이내, 샘플처럼 함축적 핵심 키워드
+- thumbnailText: 5~12자, 2줄 이내(\\n으로 줄바꿈), 샘플처럼 함축적 핵심 키워드. 가족친화인증·요건 및 혜택 같은 고정 문구 금지
 `;
 
 function looksLikeKeywords(input: string): boolean {
