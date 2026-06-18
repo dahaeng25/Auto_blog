@@ -53,7 +53,7 @@ export const config = {
   /** 키워드별 AI 배경 생성 (OpenAI DALL-E) */
   thumbnailDynamicBackground: process.env.THUMBNAIL_DYNAMIC_BG !== "false",
   thumbnailBackgroundModel:
-    process.env.THUMBNAIL_BG_MODEL ?? "dall-e-3",
+    process.env.THUMBNAIL_BG_MODEL ?? "dall-e-2",
 
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",
   tistoryBlogName: process.env.TISTORY_BLOG_NAME ?? "",

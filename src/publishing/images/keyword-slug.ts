@@ -1,4 +1,28 @@
 /** 블로그 주제·제목에서 메인 키워드 추출 */
+const KEYWORD_STOP_WORDS = new Set([
+  "현직",
+  "행정사가",
+  "행정사",
+  "알려주는",
+  "알려드리는",
+  "총정리",
+  "완벽",
+  "가이드",
+  "블로그",
+  "정리",
+  "방법",
+  "절차",
+  "신청",
+  "하는",
+  "있는",
+  "위한",
+  "대한",
+  "관련",
+  "모든",
+  "오늘",
+  "이번",
+]);
+
 export function extractMainKeywords(blogTopic: string, title: string): string[] {
   const source = (blogTopic.trim() || title.trim()).replace(/\s+/g, " ");
   if (!source) return ["blog"];
@@ -9,20 +33,27 @@ export function extractMainKeywords(blogTopic: string, title: string): string[] 
     .filter(Boolean);
 
   if (byDelimiter.length > 1) {
-    return byDelimiter.slice(0, 5);
+    return byDelimiter.slice(0, 4);
   }
+
+  const codes =
+    source.match(/\b[A-Z]{1,3}-?\d+(?:[A-Z]|\-\d+)*\b/gi) ?? [];
 
   const words = source
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .split(/\s+/)
     .map((w) => w.trim())
-    .filter((w) => w.length >= 2);
+    .filter(
+      (w) =>
+        w.length >= 2 &&
+        !KEYWORD_STOP_WORDS.has(w) &&
+        !/^(이|가|을|를|의|에|에서|으로|와|과|도)$/.test(w),
+    );
 
-  if (words.length > 0) {
-    return words.slice(0, 5);
-  }
+  const merged = [...new Set([...codes, ...words])].slice(0, 4);
+  if (merged.length > 0) return merged;
 
-  return [source.slice(0, 20)];
+  return [source.slice(0, 24)];
 }
 
 /** 파일명용 키워드 조합 (한글·영문·숫자·하이픈) */
