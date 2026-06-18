@@ -1,6 +1,8 @@
 {
-  "$comment": "blue_directors 샘플 블로그(청사 디렉터스) 레이아웃·폰트 기준",
+  "$comment": "blue_directors 샘플 블로그(청사 디렉터스) 레이아웃·폰트 기준 — 네이버 전용",
+  "referenceBlog": "https://blog.naver.com/blue_directors",
   "referenceUrls": [
+    "https://blog.naver.com/blue_directors",
     "https://blog.naver.com/blue_directors/224309169724",
     "https://blog.naver.com/blue_directors/224297648088",
     "https://blog.naver.com/blue_directors/224286122286"

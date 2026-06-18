@@ -96,6 +96,9 @@ export class NaverPublisher extends BasePublisher {
       editorContext: editorFrame,
       imageButtonSelector: sel.imageButton,
       fileInputSelector: sel.fileInput,
+      preparedImages: input.naverImages
+        ? [input.naverImages.thumbnail, ...input.naverImages.bodyImages]
+        : undefined,
     });
     await humanPause(editorSettleDelay(input.htmlBody.length));
 

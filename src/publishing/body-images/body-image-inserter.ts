@@ -11,6 +11,8 @@ import {
   toSelectorArray,
   uploadImageRobust,
 } from "../utils/image-upload.js";
+import type { PreparedImageAsset } from "../images/prepare-naver-images.js";
+import { setNaverImageAltText } from "../utils/naver-image-meta.js";
 import { splitHtmlIntoSections } from "./html-splitter.js";
 import { loadBodyImages, type ResolvedBodyImage } from "./image-manifest.js";
 
@@ -24,6 +26,8 @@ export interface FillBodyWithImagesOptions {
   editorContext: Frame | Page;
   imageButtonSelector: string;
   fileInputSelector: string;
+  /** 네이버 — 키워드 파일명·메타가 적용된 이미지 */
+  preparedImages?: PreparedImageAsset[];
 }
 
 async function countNaverImages(frame: Frame): Promise<number> {
@@ -51,11 +55,13 @@ async function uploadEditorImage(
   options: FillBodyWithImagesOptions,
   imagePath: string,
   label: string,
+  altText?: string,
 ): Promise<void> {
-  const contexts =
-    options.platform === "naver"
-      ? [options.page, options.editorContext, ...options.page.frames()]
-      : [options.page, options.editorContext];
+  const contexts = [
+    options.page,
+    options.editorContext,
+    ...options.page.frames(),
+  ];
 
   await uploadImageRobust({
     page: options.page,
@@ -65,7 +71,19 @@ async function uploadEditorImage(
     fileInputSelectors: toSelectorArray(options.fileInputSelector),
     platformName: options.platformName,
     label,
+    editorFallback:
+      options.platform === "tistory" ? options.bodyLocator : undefined,
   });
+
+  if (options.platform === "naver" && altText) {
+    const frame = options.editorContext as Frame;
+    await setNaverImageAltText(
+      options.page,
+      frame,
+      altText,
+      options.platformName,
+    );
+  }
 }
 
 /** 네이버: 마지막 업로드 이미지에 링크 연결 */
@@ -139,6 +157,8 @@ async function fillNaverBodyWithImages(
   bodyImages: ResolvedBodyImage[],
 ): Promise<void> {
   const frame = options.editorContext as Frame;
+  const prepared = options.preparedImages;
+  const thumbMeta = prepared?.find((p) => p.sequence === 1);
 
   await humanClick(options.bodyLocator);
   await focusNaverBodyEnd(frame);
@@ -146,7 +166,13 @@ async function fillNaverBodyWithImages(
   if (!config.publishSkipThumbnail) {
     await dismissNaverRightPanelIfVisible(options.page);
     const beforeThumb = await countNaverImages(frame);
-    await uploadEditorImage(options, options.thumbnailPath, "메인 썸네일");
+    const thumbPath = thumbMeta?.absolutePath ?? options.thumbnailPath;
+    await uploadEditorImage(
+      options,
+      thumbPath,
+      `메인 썸네일${thumbMeta ? ` (${thumbMeta.filename})` : ""}`,
+      thumbMeta?.altText,
+    );
     await waitForNaverImageIncrease(frame, beforeThumb);
     await dismissNaverRightPanelIfVisible(options.page);
   }
@@ -159,17 +185,24 @@ async function fillNaverBodyWithImages(
     const image = bodyImages[i];
     if (!image) continue;
 
+    const preparedBody = prepared?.find((p) => p.sequence === i + 2);
+    const imagePath = preparedBody?.absolutePath ?? image.absolutePath;
+    const label = preparedBody
+      ? `본문 이미지 ${preparedBody.sequence} (${preparedBody.filename})`
+      : `본문 이미지 ${image.id}`;
+
     await dismissNaverRightPanelIfVisible(options.page);
     const before = await countNaverImages(frame);
-    await uploadEditorImage(options, image.absolutePath, `본문 이미지 ${image.id}`);
+    await uploadEditorImage(options, imagePath, label, preparedBody?.altText);
     await waitForNaverImageIncrease(frame, before);
     await dismissNaverRightPanelIfVisible(options.page);
 
-    if (image.linkUrl) {
+    const linkUrl = preparedBody?.linkUrl ?? image.linkUrl;
+    if (linkUrl) {
       await attachLinkToLastNaverImage(
         options.page,
         frame,
-        image.linkUrl,
+        linkUrl,
         options.platformName,
       );
     }
@@ -181,6 +214,9 @@ async function fillTistoryBodyWithImages(
   sections: string[],
   bodyImages: ResolvedBodyImage[],
 ): Promise<void> {
+  await humanClick(options.bodyLocator);
+  await humanPause(1000);
+
   if (!config.publishSkipThumbnail) {
     await uploadEditorImage(options, options.thumbnailPath, "메인 썸네일");
     await humanPause(1000);

@@ -1,9 +1,12 @@
 import type { Locator, Page } from "playwright";
+import fs from "node:fs";
+import path from "node:path";
 import {
   findFirstVisible,
   splitSelectors,
   type PageOrFrame,
 } from "./dom-utils.js";
+import { pasteHtmlToEditor } from "./editor-paste.js";
 import { humanClick, humanPause } from "./human-input.js";
 
 interface UploadImageOptions {
@@ -14,6 +17,8 @@ interface UploadImageOptions {
   fileInputSelectors: string[];
   platformName: string;
   label?: string;
+  /** filechooser/input 실패 시 에디터에 base64 img 삽입 */
+  editorFallback?: Locator;
 }
 
 /** filechooser 이벤트로 이미지 업로드 (가장 안정적) */
@@ -60,6 +65,51 @@ async function uploadViaHiddenInput(
   return false;
 }
 
+function imageToDataUrl(imagePath: string): string {
+  const ext = path.extname(imagePath).toLowerCase();
+  const mime =
+    ext === ".jpg" || ext === ".jpeg"
+      ? "image/jpeg"
+      : ext === ".webp"
+        ? "image/webp"
+        : ext === ".gif"
+          ? "image/gif"
+          : "image/png";
+  const data = fs.readFileSync(imagePath);
+  return `data:${mime};base64,${data.toString("base64")}`;
+}
+
+/** 에디터에 base64 img 태그로 삽입 (티스토리 TinyMCE 폴백) */
+async function insertImageViaHtml(
+  page: Page,
+  editorLocator: Locator,
+  imagePath: string,
+): Promise<boolean> {
+  try {
+    const src = imageToDataUrl(imagePath);
+    const html = `<p><img src="${src}" alt="" /></p>`;
+    await pasteHtmlToEditor(page, editorLocator, html);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 이미지 버튼이 나타날 때까지 대기 */
+async function waitForImageButton(
+  contexts: PageOrFrame[],
+  selectors: string[],
+  timeoutMs = 15_000,
+): Promise<{ locator: Locator; context: PageOrFrame } | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const found = await findFirstVisible(contexts, selectors);
+    if (found) return found;
+    await humanPause(500);
+  }
+  return null;
+}
+
 /**
  * 이미지 업로드 — filechooser 우선, hidden input fallback.
  */
@@ -74,11 +124,12 @@ export async function uploadImageRobust(
     fileInputSelectors,
     platformName,
     label = "이미지",
+    editorFallback,
   } = options;
 
   console.log(`[${platformName}] ${label} 업로드 시도...`);
 
-  const button = await findFirstVisible(contexts, imageButtonSelectors);
+  const button = await waitForImageButton(contexts, imageButtonSelectors);
   if (button) {
     const ok = await uploadViaFileChooser(page, button.locator, imagePath);
     if (ok) {
@@ -98,6 +149,15 @@ export async function uploadImageRobust(
   if (viaInput) {
     console.log(`[${platformName}] ${label} 업로드 완료 (hidden input)`);
     return;
+  }
+
+  if (editorFallback) {
+    console.log(`[${platformName}] 버튼/input 실패 → HTML 이미지 삽입 시도`);
+    const viaHtml = await insertImageViaHtml(page, editorFallback, imagePath);
+    if (viaHtml) {
+      console.log(`[${platformName}] ${label} 업로드 완료 (HTML 삽입)`);
+      return;
+    }
   }
 
   throw new Error(

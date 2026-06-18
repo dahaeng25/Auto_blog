@@ -4,10 +4,7 @@
     "width": 886,
     "height": 886
   },
-  "background": {
-    "type": "gradient",
-    "gradient": "linear-gradient(165deg, #0c2540 0%, #1a4a7a 45%, #0f3258 100%)",
-    "image": "assets/thumbnail/bg.png"
+  "background": { "type": "image", "image": "assets/thumbnail/bg.png" }
   },
   "text": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
