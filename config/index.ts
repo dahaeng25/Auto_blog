@@ -50,6 +50,10 @@ export const config = {
   imagesDir: path.join(projectRoot, "assets", "images"),
   /** true이면 썸네일에 블로그 제목 부제목도 표시 */
   thumbnailShowSubtitle: process.env.THUMBNAIL_SHOW_SUBTITLE === "true",
+  /** 키워드별 AI 배경 생성 (OpenAI DALL-E) */
+  thumbnailDynamicBackground: process.env.THUMBNAIL_DYNAMIC_BG === "true",
+  thumbnailBackgroundModel:
+    process.env.THUMBNAIL_BG_MODEL ?? "dall-e-2",
 
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",
   tistoryBlogName: process.env.TISTORY_BLOG_NAME ?? "",
@@ -107,6 +111,11 @@ export const config = {
   publishHeadless: process.env.PUBLISH_HEADLESS !== "false",
   /** true이면 썸네일 업로드 단계를 건너뜀 (에디터 입력만 테스트) */
   publishSkipThumbnail: process.env.PUBLISH_SKIP_THUMBNAIL === "true",
+  /**
+   * 네이버 발행 시 blue_directors 샘플 스타일·이미지 사용
+   * (키워드 기반 파일명 1~N, 매번 다른 메타태그)
+   */
+  naverUseSampleStyle: process.env.NAVER_USE_SAMPLE_STYLE !== "false",
 
   rssFeedUrls: (process.env.RSS_FEED_URLS ?? "")
     .split(",")

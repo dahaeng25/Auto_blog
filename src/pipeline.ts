@@ -1,4 +1,4 @@
-import { config } from "../config/index.js";
+import { config, getEnabledPlatforms } from "../config/index.js";
 import { jobStore } from "./api/job-store.js";
 import { ContentPipeline } from "./content/content-pipeline.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
@@ -7,9 +7,19 @@ import { ensureWritableDirs } from "./fs/ensure-writable-dirs.js";
 import { notifyError, notifySuccess } from "./monitoring/discord-notifier.js";
 import { logger } from "./monitoring/logger.js";
 import { assertOrchestrationReady } from "./pipeline/preflight.js";
+import { prepareNaverImageSet } from "./publishing/images/prepare-naver-images.js";
+import {
+  buildKeywordSlug,
+  buildTopLabelFromKeywords,
+  extractMainKeywords,
+} from "./publishing/images/keyword-slug.js";
 import { PublishPipeline } from "./publishing/publish-pipeline.js";
 import type { PublishResult } from "./publishing/types.js";
 import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
+import {
+  refreshThumbnailTexts,
+  thumbnailMatchesTopic,
+} from "./thumbnail/resolve-thumbnail-texts.js";
 
 export interface OrchestrationOptions {
   /** 실행 시 지정한 블로그 주제/키워드 */
@@ -68,18 +78,61 @@ export async function runOrchestration(
     // Phase 2: 콘텐츠 생성
     const draft = await contentPipeline.run({ blogTopic: options.blogTopic });
 
-    // Phase 3: 썸네일 렌더링
+    // Phase 3: 썸네일 렌더링 (네이버 샘플 스타일 시 키워드1.png 파일명)
     logger.info("Phase 3: 썸네일 생성");
+    const keywords = extractMainKeywords(activeTopic, draft.title);
+    const keywordSlug = buildKeywordSlug(keywords);
+    const useNaverSample =
+      config.naverUseSampleStyle &&
+      getEnabledPlatforms().includes("naver");
+
+    const topLabel =
+      draft.thumbnailTopLabel?.trim() ||
+      buildTopLabelFromKeywords(keywords);
+
+    let thumbnailTopLabel = topLabel;
+    let thumbnailText = draft.thumbnailText;
+
+    if (
+      activeTopic &&
+      !thumbnailMatchesTopic(
+        activeTopic,
+        draft.title,
+        thumbnailTopLabel,
+        thumbnailText,
+      )
+    ) {
+      logger.info("썸네일 문구를 키워드·제목에 맞게 재생성합니다.");
+      const refreshed = await refreshThumbnailTexts(activeTopic, draft.title);
+      thumbnailTopLabel = refreshed.topLabel;
+      thumbnailText = refreshed.mainText;
+    }
+
     const thumbnailPath = await thumbnailRenderer.render({
-      text: draft.thumbnailText,
-      ...(config.thumbnailShowSubtitle ? { subtitle: draft.title } : {}),
+      text: thumbnailText,
+      topLabel: thumbnailTopLabel,
+      keywords,
+      keywordSlug,
+      ...(useNaverSample ? { outputFilename: `${keywordSlug}1.png` } : {}),
     });
+
+    let naverImages;
+    if (useNaverSample) {
+      naverImages = await prepareNaverImageSet({
+        thumbnailPath,
+        htmlBody: draft.htmlBody,
+        title: draft.title,
+        blogTopic: activeTopic,
+      });
+    }
 
     // Phase 4: 네이버 + 티스토리 퍼블리싱
     const publishResults = await publishPipeline.run({
       title: draft.title,
       htmlBody: draft.htmlBody,
-      thumbnailPath,
+      thumbnailPath: naverImages?.thumbnail.absolutePath ?? thumbnailPath,
+      blogTopic: activeTopic,
+      naverImages,
     });
 
     if (!config.publishDryRun) {

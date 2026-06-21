@@ -1,13 +1,46 @@
 {
-  "$comment": "blue_directors(청사 디렉터스) 샘플 썸네일 — 네이버 1:1 정방형, 문구만 변경",
+  "$comment": "bg.png 빈 템플릿 — 로고·푸터·알약 테두리는 bg에 포함, 텍스트만 주입",
   "canvas": {
     "width": 886,
     "height": 886
   },
   "background": {
-    "type": "gradient",
-    "gradient": "linear-gradient(165deg, #0c2540 0%, #1a4a7a 45%, #0f3258 100%)",
+    "type": "image",
     "image": "assets/thumbnail/bg.png"
+  },
+  "topLabel": {
+    "top": "54px",
+    "widthPercent": 62,
+    "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    "fontWeight": "800",
+    "color": "#ffffff",
+    "fontSizeMin": 26,
+    "fontSizeMax": 44,
+    "pill": {
+      "border": "none",
+      "background": "transparent",
+      "borderRadius": "0",
+      "padding": "4px 8px"
+    },
+    "cover": {
+      "enabled": false
+    }
+  },
+  "mainTitle": {
+    "top": "36%",
+    "widthPercent": 90,
+    "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
+    "fontWeight": "800",
+    "color": "#ffffff",
+    "strokeWidth": "5px",
+    "strokeColor": "#000000",
+    "fontSizeMin": 64,
+    "fontSizeMax": 104,
+    "lineHeight": 1.15,
+    "maxWidth": "90%",
+    "cover": {
+      "enabled": false
+    }
   },
   "text": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
@@ -15,39 +48,22 @@
     "color": "#ffffff",
     "align": "center",
     "verticalAlign": "center",
-    "lineHeight": 1.45,
+    "lineHeight": 1.15,
     "letterSpacing": "-0.5px",
-    "textShadow": "0 2px 8px rgba(0,0,0,0.25)",
-    "padding": "100px 72px",
-    "maxWidth": "760px",
-    "fontSizeMin": 34,
-    "fontSizeMax": 52
+    "textShadow": "none",
+    "padding": "0",
+    "maxWidth": "90%",
+    "fontSizeMin": 64,
+    "fontSizeMax": 104
   },
-  "subtitle": {
-    "enabled": false,
-    "fontSize": "20px",
-    "color": "rgba(255,255,255,0.75)"
-  },
-  "logo": {
-    "enabled": false,
-    "image": "assets/thumbnail/logo.png",
-    "width": 140,
-    "top": 40,
-    "left": 40
-  },
+  "subtitle": { "enabled": false, "fontSize": "20px", "color": "#ffffff" },
+  "logo": { "enabled": false, "width": 140, "top": 40, "left": 40 },
   "decor": {
-    "topBar": { "enabled": true, "height": 10, "color": "#c9a227" },
-    "bottomBar": { "enabled": true, "height": 10, "color": "#c9a227" },
-    "textBox": {
-      "enabled": true,
-      "border": "2px solid rgba(201,162,39,0.55)",
-      "padding": "28px 36px",
-      "background": "rgba(12,37,64,0.35)"
-    }
+    "topBar": { "enabled": false, "height": 10, "color": "#c9a227" },
+    "bottomBar": { "enabled": false, "height": 10, "color": "#c9a227" },
+    "textBox": { "enabled": false, "border": "", "padding": "" }
   },
-  "accent": {
-    "enabled": false,
-    "height": 6,
-    "gradient": "linear-gradient(90deg, #c9a227, #e8c547)"
-  }
+  "accent": { "enabled": false, "height": 6, "gradient": "" },
+  "header": { "enabled": false },
+  "footer": { "enabled": false }
 }

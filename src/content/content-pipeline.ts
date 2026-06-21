@@ -7,6 +7,14 @@ import { ContentAgent } from "./agents/content-agent.js";
 import { ThumbnailTextAgent } from "./agents/thumbnail-text-agent.js";
 import { GemsAgent } from "./agents/gems-agent.js";
 import { applyBlogStyle } from "./blog-style/apply-style.js";
+import {
+  buildTopLabelFromKeywords,
+  extractInputKeywordPhrases,
+} from "../publishing/images/keyword-slug.js";
+import {
+  refreshThumbnailTexts,
+  thumbnailMatchesTopic,
+} from "../thumbnail/resolve-thumbnail-texts.js";
 import { TopicRepository } from "./farming/topic-repository.js";
 import type { ArticleDraft, ContentRunOptions, RawTopic } from "./types.js";
 
@@ -38,7 +46,7 @@ export class ContentPipeline {
     console.log(`[Content] 모드: ${config.contentMode}`);
 
     if (config.contentMode === "gems") {
-      return this.runGemsMode(options.blogTopic);
+      return this.runGemsMode(options.blogTopic, options.forceRegenerate);
     }
     return this.runRssMode();
   }
@@ -48,7 +56,7 @@ export class ContentPipeline {
     const { topicId, topic } = await this.farmingAgent.run();
     const title = await this.titleAgent.run(topic);
     const htmlBody = await this.contentAgent.run(title, topic);
-    const thumbnailText = await this.thumbnailTextAgent.run(title);
+    const thumbnailText = await this.thumbnailTextAgent.run(title, topic.title);
 
     return this.saveDraft({
       topicId,
@@ -60,7 +68,7 @@ export class ContentPipeline {
   }
 
   /** 사용자 지정 주제 + Gems 프롬프트 단일 생성 */
-  private async runGemsMode(blogTopicOverride?: string): Promise<ArticleDraft> {
+  private async runGemsMode(blogTopicOverride?: string, forceRegenerate?: boolean): Promise<ArticleDraft> {
     const blogTopic = blogTopicOverride?.trim() || config.blogTopic;
     if (!blogTopic) {
       throw new Error(
@@ -79,11 +87,12 @@ export class ContentPipeline {
     };
 
     const existing = await this.repo.getTopicBySourceUrl(topic.sourceUrl);
+    const shouldForceRegenerate = forceRegenerate ?? config.forceRegenerate;
 
     if (existing) {
       // 강제 재생성
-      if (config.forceRegenerate) {
-        console.log(`[Gems] FORCE_REGENERATE=true — 기존 주제 삭제 후 재생성`);
+      if (shouldForceRegenerate) {
+        console.log(`[Gems] 기존 주제 삭제 후 재생성 (forceRegenerate)`);
         await this.repo.deleteTopicAndArticles(topic.sourceUrl);
       }
       // 기존 원고 재사용 (drafted 또는 RETRY_PUBLISH 시 published 포함)
@@ -116,7 +125,7 @@ export class ContentPipeline {
         );
       }
       // farmed 등 원고 없는 중복
-      else if (!config.forceRegenerate) {
+      else if (!shouldForceRegenerate) {
         await this.repo.deleteTopicAndArticles(topic.sourceUrl);
         console.log(`[Gems] 불완전한 기존 레코드 정리 후 재생성`);
       }
@@ -125,12 +134,37 @@ export class ContentPipeline {
     const topicId = await this.repo.insertTopic(topic);
     const gems = await this.gemsAgent.run(blogTopic);
 
+    const inputPhrases = extractInputKeywordPhrases(blogTopic);
+    let thumbnailTopLabel =
+      gems.thumbnailTopLabel ||
+      buildTopLabelFromKeywords(
+        inputPhrases.length > 0
+          ? inputPhrases
+          : blogTopic.split(/[,，/|·]+/).map((s) => s.trim()).filter(Boolean),
+      );
+    let thumbnailText = gems.thumbnailText;
+
+    if (
+      !thumbnailMatchesTopic(
+        blogTopic,
+        gems.title,
+        thumbnailTopLabel,
+        thumbnailText,
+      )
+    ) {
+      console.log("[Gems] 썸네일 문구가 키워드와 불일치 — 재생성");
+      const refreshed = await refreshThumbnailTexts(blogTopic, gems.title);
+      thumbnailTopLabel = refreshed.topLabel;
+      thumbnailText = refreshed.mainText;
+    }
+
     return this.saveDraft({
       topicId,
       sourceTopic: topic,
       title: gems.title,
       htmlBody: gems.htmlBody,
-      thumbnailText: gems.thumbnailText,
+      thumbnailText,
+      thumbnailTopLabel,
     });
   }
 

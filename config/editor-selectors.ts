@@ -20,6 +20,11 @@ export const EDITOR_SELECTORS = {
     /** 파일 input */
     fileInput:
       'input[type="file"][accept*="image"], input[type="file"]',
+    /** 업로드 이미지 대체 텍스트(alt) 입력 */
+    imageAltInput:
+      'input[placeholder*="대체"], input[aria-label*="대체"], textarea[placeholder*="대체"], textarea[placeholder*="설명"], input[placeholder*="이미지 설명"]',
+    imageAltConfirm:
+      'button:has-text("확인"), button:has-text("적용"), button.se-popup-button-confirm',
     /** 업로드된 이미지에 링크 연결 */
     imageLinkButton:
       'button[data-name="link"], button[data-name="oglink"], button[aria-label*="링크"], .se-link-toolbar-button',
@@ -61,13 +66,14 @@ export const EDITOR_SELECTORS = {
   tistory: {
     title: '#post-title-inp, input[name="title"], textarea#post-title-inp',
     /** 에디터 iframe (티스토리 버전별) */
-    editorFrame: "iframe#editor-tistory, iframe.editor_iframe, iframe[id*='editor']",
+    editorFrame:
+      "iframe#editor-tistory_ifr, iframe#editor-tistory, iframe.editor_iframe, iframe[title='에디터 영역'], iframe[id*='editor']",
     editorBody:
-      '[contenteditable="true"], .mce-content-body, div#tinymce',
+      'body[contenteditable="true"], [contenteditable="true"], .mce-content-body, div#tinymce',
     imageButton:
-      'button:has-text("이미지"), .btn_attach, [aria-label="이미지"], .mce-i-image, a[role="button"]:has-text("이미지"), .attach-btn .btn-image',
+      'button[data-ke-type="image"], button[data-ke-type="photo"], .btn_toolbar button[data-ke-type="image"], button:has-text("이미지"), .btn_attach, [aria-label="이미지"], [aria-label*="사진"], .mce-i-image, a[role="button"]:has-text("이미지"), .attach-btn .btn-image, .mce-tistory-upload-btn, button.btn_image',
     fileInput:
-      'input[type="file"][accept*="image"], input[type="file"]',
+      '#fileUpload, input[name="uploadedfile"], input#attach-image, input[type="file"][accept*="image"], input[type="file"]',
     /** 발행 패널 내 대표 이미지 영역 (티스토리) */
     thumbnailArea:
       '.box_thumbnail, .thumb_editor, [class*="thumbnail"], .represent-image',

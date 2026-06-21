@@ -75,7 +75,6 @@ function run(command, args, options = {}) {
   });
 }
 
-<<<<<<< HEAD
 function npmCommand() {
   // Windows PowerShell은 npm → npm.ps1 로 연결되어 실행 정책에 막힐 수 있음
   return process.platform === "win32" ? "npm.cmd" : "npm";
@@ -84,10 +83,6 @@ function npmCommand() {
 async function npm(args) {
   const cmd = npmCommand();
   return run(cmd, args, { label: `${cmd} ${args.join(" ")}` });
-=======
-async function npm(args) {
-  return run("npm", args, { label: `npm ${args.join(" ")}` });
->>>>>>> 2746ae5881e74bccb7be8011fbb131983fcfc5d9
 }
 
 function ensureDir(relativePath) {
@@ -142,6 +137,12 @@ function checkNodeVersion() {
     );
     warn("Node 20 또는 22 LTS 사용을 권장합니다.");
     warn("오류 시 Visual Studio C++ Build Tools 설치가 필요할 수 있습니다.");
+  }
+
+  if (process.arch === "ia32") {
+    warn("32비트 Windows가 감지되었습니다.");
+    warn("로컬 SQLite(better-sqlite3)로 동작합니다. Turso(libsql)는 사용하지 않습니다.");
+    warn("가능하면 Node.js 64비트(x64) 설치를 권장합니다.");
   }
 }
 

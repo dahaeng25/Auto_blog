@@ -19,65 +19,52 @@ body {
   overflow: hidden;
 }
 
-#thumbnail-bg {
+#thumbnail-base {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   z-index: 0;
 }
 
-#thumbnail-top-bar,
-#thumbnail-bottom-bar {
+.text-zone-cover {
+  position: absolute;
+  z-index: 1;
+  display: none;
+  pointer-events: none;
+}
+
+#top-label-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#top-label-pill {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+#thumbnail-top-label {
+  display: block;
+}
+
+#thumbnail-main-title {
   position: absolute;
   left: 0;
   right: 0;
-  display: none;
   z-index: 3;
-}
-
-#thumbnail-top-bar {
-  top: 0;
-}
-
-#thumbnail-bottom-bar {
-  bottom: 0;
-}
-
-#thumbnail-logo {
-  position: absolute;
-  z-index: 2;
-  display: none;
-  object-fit: contain;
-}
-
-#text-area {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  z-index: 2;
-}
-
-#thumbnail-text-box {
-  display: inline-block;
-  max-width: 100%;
-}
-
-#thumbnail-text {
+  text-align: center;
   word-break: keep-all;
   white-space: pre-wrap;
-}
-
-#thumbnail-subtitle {
-  display: none;
-}
-
-#thumbnail-accent {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: none;
-  z-index: 3;
+  margin: 0 auto;
 }
