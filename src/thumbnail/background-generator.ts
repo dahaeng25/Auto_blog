@@ -37,17 +37,63 @@ function pickSceneIndex(keywords: string[], slug: string): number {
   return seed % SCENE_VARIANTS.length;
 }
 
-function buildBackgroundPrompt(keywords: string[], slug: string): string {
+function pickSceneForSection(
+  keywords: string[],
+  slug: string,
+  sectionTitle: string,
+  sectionIndex: number,
+): string {
+  const haystack = `${keywords.join(" ")} ${sectionTitle}`.toLowerCase();
+
+  if (/결혼|배우자|f-6|f6|혼인/.test(haystack)) {
+    return "wedding rings and marriage certificate documents on desk with soft lighting, no people, no faces";
+  }
+  if (/창업|사업|투자|d-8|d8|법인/.test(haystack)) {
+    return "startup business plan documents, laptop and coffee on modern office desk, wide shot, no people";
+  }
+  if (/비자|체류|출입국|immigration|visa/.test(haystack)) {
+    return "passport, visa application forms and official stamp on wooden desk, top-down view, no people";
+  }
+  if (/서류|준비|신청|접수/.test(haystack)) {
+    return "organized stack of official application documents and folders on office desk, no people";
+  }
+  if (/절차|과정|단계|방법/.test(haystack)) {
+    return "flowchart papers and checklist clipboard on professional desk, wide angle, no people";
+  }
+  if (/요건|자격|조건|심사/.test(haystack)) {
+    return "magnifying glass over official documents on desk, compliance review concept, no people";
+  }
+
+  const seed =
+    slug.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) +
+    sectionTitle.length +
+    sectionIndex;
+  return SCENE_VARIANTS[seed % SCENE_VARIANTS.length];
+}
+
+function buildBackgroundPrompt(
+  keywords: string[],
+  slug: string,
+  sectionTitle?: string,
+  sectionIndex?: number,
+): string {
   const topic = keywords.join(", ");
-  const scene = SCENE_VARIANTS[pickSceneIndex(keywords, slug)];
+  const title = sectionTitle ?? topic;
+  const scene = sectionTitle
+    ? pickSceneForSection(keywords, slug, sectionTitle, sectionIndex ?? 0)
+    : SCENE_VARIANTS[pickSceneIndex(keywords, slug) % SCENE_VARIANTS.length];
+  const sectionContext = sectionTitle
+    ? `This image is for the blog section titled "${sectionTitle}". `
+    : "";
 
   return (
-    `Professional stock photograph for a Korean administrative law and immigration blog article about: ${topic}. ` +
-    `Scene: ${scene}. ` +
-    `Photorealistic, bright natural lighting, trustworthy corporate mood, square 1:1 composition. ` +
-    `STRICT: No text, no logos, no watermarks. ` +
-    `STRICT: No single-person portrait, no headshot, no close-up face, no selfie, no one person as main subject. ` +
-    `Prefer wide shots, environments, objects, architecture, or distant groups.`
+    `Professional photorealistic stock photo for a Korean administrative scrivener blog. ` +
+    `Article topic: ${topic}. ${sectionContext}` +
+    `Visual scene: ${scene}. ` +
+    `Bright natural lighting, trustworthy corporate mood, square 1:1 composition, high detail. ` +
+    `STRICT: No text, no logos, no watermarks, no Korean/English letters in image. ` +
+    `STRICT: No single-person portrait, no headshot, no close-up face, no selfie. ` +
+    `Prefer wide shots, environments, objects, documents, architecture.`
   );
 }
 
@@ -73,6 +119,18 @@ export async function generateThumbnailBackground(
   keywords: string[],
   slug: string,
 ): Promise<string | null> {
+  return generateSectionBackground(keywords, keywords.join(", "), slug, 0);
+}
+
+/**
+ * 단락(h2) 주제에 맞는 서브썸네일 배경 사진 생성.
+ */
+export async function generateSectionBackground(
+  keywords: string[],
+  sectionTitle: string,
+  slug: string,
+  sectionIndex: number,
+): Promise<string | null> {
   const client = getClient();
   if (!client) {
     console.warn("[Thumbnail] OPENAI_API_KEY 없음 — AI 배경 생략, 기본 배경 사용");
@@ -82,12 +140,16 @@ export async function generateThumbnailBackground(
   const dir = path.join(config.thumbnailsDir, "backgrounds");
   await fs.mkdir(dir, { recursive: true });
 
-  const filename = `${slug}_${Date.now()}.png`;
+  const filename = `${slug}_s${sectionIndex}_${Date.now()}.png`;
   const outputPath = path.join(dir, filename);
-  const prompt = buildBackgroundPrompt(keywords, slug);
-  const scene = SCENE_VARIANTS[pickSceneIndex(keywords, slug)];
+  const prompt = buildBackgroundPrompt(keywords, slug, sectionTitle, sectionIndex);
+  const scene = sectionTitle
+    ? pickSceneForSection(keywords, slug, sectionTitle, sectionIndex)
+    : SCENE_VARIANTS[pickSceneIndex(keywords, slug) % SCENE_VARIANTS.length];
 
-  console.log(`[Thumbnail] 배경 생성 중 — 키워드: ${keywords.join(", ")}`);
+  console.log(
+    `[Thumbnail] 배경 생성 중 — 키워드: ${keywords.join(", ")}, 단락: ${sectionTitle}`,
+  );
   console.log(`[Thumbnail] 장면 유형: ${scene}`);
 
   for (const model of uniqueModels()) {

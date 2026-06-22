@@ -90,6 +90,26 @@ export function buildKeywordSlug(keywords: string[]): string {
   return slug || "blog";
 }
 
+/** 블로그 제목 기반 파일명 슬러그 (예: F-6결혼비자발급가이드) */
+export function buildTitleSlug(title: string): string {
+  const compact = title
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[\\/:*?"<>|,，.!?'"]/g, "")
+    .slice(0, 56);
+
+  const slug = compact.replace(/[^a-zA-Z0-9\u3131-\uD79D-]/g, "");
+  return slug || "blog";
+}
+
+/** 서브썸네일 파일명: {제목슬러그}-{번호}.png */
+export function buildSubThumbnailFilename(
+  title: string,
+  sequence: number,
+): string {
+  return `${buildTitleSlug(title)}-${sequence}.png`;
+}
+
 /** HTML 본문 h2 소제목 추출 (이미지 메타 문맥용) */
 export function extractH2Titles(html: string): string[] {
   const titles: string[] = [];

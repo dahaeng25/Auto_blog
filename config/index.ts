@@ -55,6 +55,27 @@ export const config = {
   thumbnailBackgroundModel:
     process.env.THUMBNAIL_BG_MODEL ?? "dall-e-2",
 
+  /** 단락별 서브썸네일 생성 (700×700) */
+  subThumbnailEnabled: process.env.SUB_THUMBNAIL_ENABLED !== "false",
+  subThumbnailSize: Number(process.env.SUB_THUMBNAIL_SIZE ?? "700"),
+  subThumbnailBackgroundOpacity: Number(
+    process.env.SUB_THUMBNAIL_BG_OPACITY ?? "0.65",
+  ),
+  /** 텍스트 박스 배경 투명도 (0~1) */
+  subThumbnailTextBackgroundOpacity: Number(
+    process.env.SUB_THUMBNAIL_TEXT_BG_OPACITY ?? "0.38",
+  ),
+  /** 서브썸네일 AI 배경 — 기본 켜짐 (OPENAI_API_KEY 필요) */
+  subThumbnailDynamicBackground:
+    process.env.SUB_THUMBNAIL_DYNAMIC_BG !== "false",
+  subThumbnailTemplatePath: path.join(
+    projectRoot,
+    "src",
+    "thumbnail",
+    "sub-thumbnail-template.html",
+  ),
+  contactPhone: process.env.CONTACT_PHONE ?? "1844-1346",
+
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",
   tistoryBlogName: process.env.TISTORY_BLOG_NAME ?? "",
   /** Blogger 블로그 숫자 ID (Blogger 설정 → 기본) */

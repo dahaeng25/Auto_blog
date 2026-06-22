@@ -9,10 +9,13 @@ import { logger } from "../monitoring/logger.js";
 import { prepareNaverImageSet } from "../publishing/images/prepare-naver-images.js";
 import {
   buildKeywordSlug,
+  buildSubThumbnailFilename,
+  extractH2Titles,
   extractMainKeywords,
 } from "../publishing/images/keyword-slug.js";
 import { PublishPipeline } from "../publishing/publish-pipeline.js";
 import { ThumbnailRenderer } from "../thumbnail/thumbnail-renderer.js";
+import { generateSubThumbnails } from "../thumbnail/generate-sub-thumbnails.js";
 import { normalizeTopicInput } from "./resolve-blog-topic.js";
 import {
   exportDraftWorkspace,
@@ -23,6 +26,7 @@ import {
   readKeywordsFromFile,
   readWorkspaceMeta,
   saveThumbnailPath,
+  saveSubThumbnailPaths,
   updateWorkspaceThumbnailTexts,
   workspaceExists,
   writePreviewHtml,
@@ -207,8 +211,22 @@ export async function runThumbnailStep(): Promise<string> {
 
   await saveThumbnailPath(thumbnailPath);
 
+  const subThumbnails = await generateSubThumbnails({
+    htmlBody: draft.htmlBody,
+    keywords: keywordList,
+    keywordSlug,
+    title: draft.title,
+  });
+  await saveSubThumbnailPaths(subThumbnails.map((s) => s.path));
+
   console.log("\n─── 썸네일 생성 완료 ───");
-  console.log(`경로: ${thumbnailPath}`);
+  console.log(`메인: ${thumbnailPath}`);
+  if (subThumbnails.length > 0) {
+    console.log(`서브썸네일: ${subThumbnails.length}개`);
+    for (const sub of subThumbnails) {
+      console.log(`  • ${sub.filename} — ${sub.sectionTitle}`);
+    }
+  }
   return thumbnailPath;
 }
 
@@ -224,7 +242,7 @@ export async function runThumbnailPreviewStep(): Promise<string> {
 export async function runPublishStep(): Promise<void> {
   await ensureWritableDirs();
 
-  const { keywords, draft, thumbnailPath: savedPath } =
+  const { keywords, draft, thumbnailPath: savedPath, subThumbnailPaths } =
     await loadDraftFromWorkspace();
 
   if (!savedPath) {
@@ -246,11 +264,20 @@ export async function runPublishStep(): Promise<void> {
 
   let naverImages;
   if (useNaverSample) {
+    const h2Titles = extractH2Titles(draft.htmlBody);
+    const subThumbnails = (subThumbnailPaths ?? []).map((p, i) => ({
+      path: p,
+      sectionTitle: h2Titles[i] ?? `단락 ${i + 1}`,
+      sequence: i + 2,
+      filename: buildSubThumbnailFilename(draft.title, i + 2),
+    }));
+
     naverImages = await prepareNaverImageSet({
       thumbnailPath: savedPath,
       htmlBody: draft.htmlBody,
       title: draft.title,
       blogTopic: keywords,
+      subThumbnails: subThumbnails.length > 0 ? subThumbnails : undefined,
     });
   }
 

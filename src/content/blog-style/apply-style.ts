@@ -35,13 +35,27 @@ function restyleParagraphs(block: string, align: string, margin: string): string
   });
 }
 
+function restyleH3(section: string): string {
+  const { typography: typo } = loadBlogStyle();
+  const style =
+    `font-family:${typo.fontFamily};font-size:${typo.h3FontSize};font-weight:${typo.h3FontWeight};` +
+    `color:${typo.h3Color};text-align:${typo.h3Align};margin:${typo.h3Margin};line-height:1.4;`;
+
+  return section.replace(/<h3(\s[^>]*)?>/gi, (_full, attrs = "") => {
+    const clean = stripInlineStyle(`<h3${attrs}>`);
+    return clean.replace(/<h3/, `<h3 style="${style}"`);
+  });
+}
+
 function restyleH2(section: string): string {
   const { typography: typo } = loadBlogStyle();
   const style =
     `font-family:${typo.fontFamily};font-size:${typo.h2FontSize};font-weight:${typo.h2FontWeight};` +
     `color:${typo.h2Color};text-align:${typo.h2Align};margin:${typo.h2Margin};line-height:1.4;`;
 
-  let result = section.replace(/<h2(\s[^>]*)?>/gi, (full, attrs = "") => {
+  let result = restyleH3(section);
+
+  result = result.replace(/<h2(\s[^>]*)?>/gi, (full, attrs = "") => {
     const clean = stripInlineStyle(`<h2${attrs}>`);
     return clean.replace(/<h2/, `<h2 style="${style}"`);
   });

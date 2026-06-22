@@ -13,7 +13,7 @@ import {
 } from "../utils/image-upload.js";
 import type { PreparedImageAsset } from "../images/prepare-naver-images.js";
 import { setNaverImageAltText } from "../utils/naver-image-meta.js";
-import { splitHtmlIntoSections } from "./html-splitter.js";
+import { splitHtmlForPublishing } from "./html-splitter.js";
 import { loadBodyImages, type ResolvedBodyImage } from "./image-manifest.js";
 
 export interface FillBodyWithImagesOptions {
@@ -129,7 +129,7 @@ async function attachLinkToLastNaverImage(
   await applyLinkInDialog(contexts, url, page, platformName);
 }
 
-/** 티스토리: HTML 링크 블록으로 대체 (이미지 업로드 후 링크 UI가 불안정할 때) */
+/** 티스토리: HTML 링크 블록으로 대체 */
 async function attachLinkToLastTistoryImage(
   page: Page,
   editorLocator: Locator,
@@ -151,10 +151,44 @@ async function insertNaverSection(
   await humanPause(400);
 }
 
+function resolveBodyImageForSection(
+  subThumbnailIndex: number | null,
+  prepared: PreparedImageAsset[] | undefined,
+  staticImages: ResolvedBodyImage[],
+): {
+  path: string;
+  label: string;
+  altText?: string;
+  linkUrl?: string;
+} | null {
+  if (subThumbnailIndex === null) return null;
+
+  const sequence = subThumbnailIndex + 2;
+  const preparedBody = prepared?.find((p) => p.sequence === sequence);
+  if (preparedBody) {
+    return {
+      path: preparedBody.absolutePath,
+      label: `서브썸네일 ${preparedBody.sequence} (${preparedBody.filename})`,
+      altText: preparedBody.altText,
+      linkUrl: preparedBody.linkUrl,
+    };
+  }
+
+  const staticImage = staticImages[subThumbnailIndex];
+  if (!staticImage) return null;
+
+  return {
+    path: staticImage.absolutePath,
+    label: `본문 이미지 ${staticImage.id}`,
+    linkUrl: staticImage.linkUrl,
+  };
+}
+
 async function fillNaverBodyWithImages(
   options: FillBodyWithImagesOptions,
-  sections: string[],
-  bodyImages: ResolvedBodyImage[],
+  intro: string | null,
+  sections: ReturnType<typeof splitHtmlForPublishing>["sections"],
+  staticImages: ResolvedBodyImage[],
 ): Promise<void> {
   const frame = options.editorContext as Frame;
   const prepared = options.preparedImages;
@@ -177,32 +211,45 @@ async function fillNaverBodyWithImages(
     await dismissNaverRightPanelIfVisible(options.page);
   }
 
+  if (intro) {
+    console.log(`[${options.platformName}] 도입부 입력`);
+    await dismissNaverRightPanelIfVisible(options.page);
+    await insertNaverSection(frame, options.bodyLocator, intro);
+  }
+
   for (let i = 0; i < sections.length; i++) {
-    console.log(`[${options.platformName}] 본문 구간 ${i + 1}/${sections.length} 입력`);
+    const section = sections[i]!;
+    console.log(
+      `[${options.platformName}] 단락 ${i + 1}/${sections.length}${section.h2Title ? `: ${section.h2Title}` : ""}`,
+    );
+
+    const imageInfo = resolveBodyImageForSection(
+      section.subThumbnailIndex,
+      prepared,
+      staticImages,
+    );
+
+    if (imageInfo) {
+      await dismissNaverRightPanelIfVisible(options.page);
+      const before = await countNaverImages(frame);
+      await uploadEditorImage(
+        options,
+        imageInfo.path,
+        imageInfo.label,
+        imageInfo.altText,
+      );
+      await waitForNaverImageIncrease(frame, before);
+      await dismissNaverRightPanelIfVisible(options.page);
+    }
+
     await dismissNaverRightPanelIfVisible(options.page);
-    await insertNaverSection(frame, options.bodyLocator, sections[i]);
+    await insertNaverSection(frame, options.bodyLocator, section.html);
 
-    const image = bodyImages[i];
-    if (!image) continue;
-
-    const preparedBody = prepared?.find((p) => p.sequence === i + 2);
-    const imagePath = preparedBody?.absolutePath ?? image.absolutePath;
-    const label = preparedBody
-      ? `본문 이미지 ${preparedBody.sequence} (${preparedBody.filename})`
-      : `본문 이미지 ${image.id}`;
-
-    await dismissNaverRightPanelIfVisible(options.page);
-    const before = await countNaverImages(frame);
-    await uploadEditorImage(options, imagePath, label, preparedBody?.altText);
-    await waitForNaverImageIncrease(frame, before);
-    await dismissNaverRightPanelIfVisible(options.page);
-
-    const linkUrl = preparedBody?.linkUrl ?? image.linkUrl;
-    if (linkUrl) {
+    if (imageInfo?.linkUrl) {
       await attachLinkToLastNaverImage(
         options.page,
         frame,
-        linkUrl,
+        imageInfo.linkUrl,
         options.platformName,
       );
     }
@@ -211,8 +258,9 @@ async function fillNaverBodyWithImages(
 
 async function fillTistoryBodyWithImages(
   options: FillBodyWithImagesOptions,
-  sections: string[],
-  bodyImages: ResolvedBodyImage[],
+  intro: string | null,
+  sections: ReturnType<typeof splitHtmlForPublishing>["sections"],
+  staticImages: ResolvedBodyImage[],
 ): Promise<void> {
   await humanClick(options.bodyLocator);
   await humanPause(1000);
@@ -222,22 +270,32 @@ async function fillTistoryBodyWithImages(
     await humanPause(1000);
   }
 
+  if (intro) {
+    await pasteHtmlToEditor(options.page, options.bodyLocator, intro);
+    await humanPause(500);
+  }
+
   for (let i = 0; i < sections.length; i++) {
-    console.log(`[${options.platformName}] 본문 구간 ${i + 1}/${sections.length} 입력`);
-    await pasteHtmlToEditor(options.page, options.bodyLocator, sections[i]);
+    const section = sections[i]!;
+    const imageInfo = resolveBodyImageForSection(
+      section.subThumbnailIndex,
+      options.preparedImages,
+      staticImages,
+    );
+
+    if (imageInfo) {
+      await uploadEditorImage(options, imageInfo.path, imageInfo.label);
+      await humanPause(1500);
+    }
+
+    await pasteHtmlToEditor(options.page, options.bodyLocator, section.html);
     await humanPause(500);
 
-    const image = bodyImages[i];
-    if (!image) continue;
-
-    await uploadEditorImage(options, image.absolutePath, `본문 이미지 ${image.id}`);
-    await humanPause(1500);
-
-    if (image.linkUrl) {
+    if (imageInfo?.linkUrl) {
       await attachLinkToLastTistoryImage(
         options.page,
         options.bodyLocator,
-        image.linkUrl,
+        imageInfo.linkUrl,
         options.platformName,
       );
     }
@@ -245,25 +303,22 @@ async function fillTistoryBodyWithImages(
 }
 
 /**
- * 구간 분할 본문 입력 + 메인 썸네일 + 본문 이미지(02~) 순차 삽입
+ * 메인 썸네일 + 단락별 서브썸네일(상단 배치) + 본문 HTML 순차 삽입
  */
 export async function fillBodyWithImages(
   options: FillBodyWithImagesOptions,
 ): Promise<void> {
-  const bodyImages = loadBodyImages();
-  const sections = splitHtmlIntoSections(
-    options.htmlBody,
-    Math.max(bodyImages.length, 1),
-  );
+  const staticImages = loadBodyImages();
+  const { intro, sections } = splitHtmlForPublishing(options.htmlBody);
 
   console.log(
-    `[${options.platformName}] 본문 구간 ${sections.length}개, 이미지 ${bodyImages.length}개`,
+    `[${options.platformName}] 도입부 ${intro ? "있음" : "없음"}, h2 단락 ${sections.length}개`,
   );
 
   if (options.platform === "naver") {
-    await fillNaverBodyWithImages(options, sections, bodyImages);
+    await fillNaverBodyWithImages(options, intro, sections, staticImages);
     return;
   }
 
-  await fillTistoryBodyWithImages(options, sections, bodyImages);
+  await fillTistoryBodyWithImages(options, intro, sections, staticImages);
 }

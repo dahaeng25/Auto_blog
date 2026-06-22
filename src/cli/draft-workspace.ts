@@ -18,6 +18,7 @@ const FILES = {
   meta: "draft-meta.json",
   preview: "preview.html",
   thumbnailPath: "thumbnail-path.txt",
+  subThumbnailPaths: "sub-thumbnail-paths.json",
 } as const;
 
 export interface DraftWorkspaceMeta {
@@ -25,12 +26,14 @@ export interface DraftWorkspaceMeta {
   createdAt: string;
   keywords?: string;
   thumbnailPath?: string;
+  subThumbnailPaths?: string[];
 }
 
 export interface LoadedWorkspace {
   keywords: string;
   draft: ArticleDraft;
   thumbnailPath?: string;
+  subThumbnailPaths?: string[];
 }
 
 /** 키워드 파일 읽기 (# 으로 시작하는 줄은 주석) */
@@ -161,6 +164,17 @@ export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
     // thumbnail-path.txt 없으면 meta 값 사용
   }
 
+  let subThumbnailPaths = meta.subThumbnailPaths;
+  try {
+    const raw = await fs.readFile(
+      path.join(CURRENT_WORKSPACE, FILES.subThumbnailPaths),
+      "utf-8",
+    );
+    subThumbnailPaths = JSON.parse(raw) as string[];
+  } catch {
+    // sub-thumbnail-paths.json 없으면 meta 값 사용
+  }
+
   const draft: ArticleDraft = {
     topicId: meta.topicId,
     sourceTopic: {
@@ -180,6 +194,7 @@ export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
     keywords: keywords.trim(),
     draft,
     thumbnailPath: thumbnailPath?.trim() || undefined,
+    subThumbnailPaths,
   };
 }
 
@@ -199,6 +214,22 @@ export async function saveThumbnailPath(thumbnailPath: string): Promise<void> {
     await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
   } catch {
     // meta 없으면 thumbnail-path.txt 만 저장
+  }
+}
+
+export async function saveSubThumbnailPaths(paths: string[]): Promise<void> {
+  const jsonPath = path.join(CURRENT_WORKSPACE, FILES.subThumbnailPaths);
+  await fs.writeFile(jsonPath, JSON.stringify(paths, null, 2), "utf-8");
+
+  const metaPath = path.join(CURRENT_WORKSPACE, FILES.meta);
+  try {
+    const meta = JSON.parse(
+      await fs.readFile(metaPath, "utf-8"),
+    ) as DraftWorkspaceMeta;
+    meta.subThumbnailPaths = paths;
+    await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+  } catch {
+    // meta 없으면 json 파일만 저장
   }
 }
 

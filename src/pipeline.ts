@@ -16,6 +16,7 @@ import {
 import { PublishPipeline } from "./publishing/publish-pipeline.js";
 import type { PublishResult } from "./publishing/types.js";
 import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
+import { generateSubThumbnails } from "./thumbnail/generate-sub-thumbnails.js";
 import {
   refreshThumbnailTexts,
   thumbnailMatchesTopic,
@@ -116,6 +117,13 @@ export async function runOrchestration(
       ...(useNaverSample ? { outputFilename: `${keywordSlug}1.png` } : {}),
     });
 
+    const subThumbnails = await generateSubThumbnails({
+      htmlBody: draft.htmlBody,
+      keywords,
+      keywordSlug,
+      title: draft.title,
+    });
+
     let naverImages;
     if (useNaverSample) {
       naverImages = await prepareNaverImageSet({
@@ -123,6 +131,7 @@ export async function runOrchestration(
         htmlBody: draft.htmlBody,
         title: draft.title,
         blogTopic: activeTopic,
+        subThumbnails,
       });
     }
 

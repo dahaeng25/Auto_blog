@@ -14,6 +14,11 @@ export interface BlogTypography {
   h2Color: string;
   h2Align: string;
   h2Margin: string;
+  h3FontSize: string;
+  h3FontWeight: string;
+  h3Color: string;
+  h3Align: string;
+  h3Margin: string;
   tableFontSize: string;
   listFontSize: string;
 }
@@ -49,6 +54,11 @@ const DEFAULT_STYLE: BlogStyleConfig = {
     h2Color: "#1a3a5c",
     h2Align: "center",
     h2Margin: "32px 0 14px 0",
+    h3FontSize: "18px",
+    h3FontWeight: "700",
+    h3Color: "#2a4a6c",
+    h3Align: "left",
+    h3Margin: "20px 0 10px 0",
     tableFontSize: "15px",
     listFontSize: "16px",
   },
@@ -97,7 +107,8 @@ htmlBody 구성 순서 (샘플과 동일한 흐름):
 1) 도입부: 가운데 정렬 인사·공감 문단 ${style.structure.introParagraphCount}개 내외 (<p>만 사용)
 2) 구분선 역할: 주요 섹션 사이 여백 (스타일은 시스템이 자동 적용)
 3) 본문: <h2> 소제목 ${style.structure.minH2Sections}개 이상 — 샘플처럼 짧고 명확한 제목
-   예) "○○ 인증", "중요한 요건!", "절차가 어떻게 되나요?", "가장 중요한 포인트!", "○○와 함께", "○○는 다릅니다."
+   예) "○○ 인증", "중요한 요건!", "절차가 어떻게 되나요?", "가장 중요한 포인트!"
+   각 h2 아래: 리드 문단 1개 → <h3> 소주제 1~2개 → 상세 <p> 2~3개
 4) ${style.structure.requireTable ? "핵심 요건·비교는 <table> 1회 이상" : ""}
 5) ${style.structure.requireList ? "체크포인트·절차는 <ul><li>" : ""}
 6) 마무리 CTA: 가운데 정렬 문의 유도 문단
@@ -106,6 +117,7 @@ htmlBody 구성 순서 (샘플과 동일한 흐름):
 폰트·크기 (인라인 style 금지 — 시스템이 샘플과 같이 자동 적용):
 - 본문 16px, 줄간격 1.85, 색상 #333
 - h2 22px 굵게, 가운데 정렬, 네이비 #1a3a5c
+- h3 18px 굵게, 왼쪽 정렬, #2a4a6c
 - 도입·마무리 문단 가운데 정렬
 
 금지: <strong>, <b>, h1, 마크다운, 인라인 style 속성 직접 작성

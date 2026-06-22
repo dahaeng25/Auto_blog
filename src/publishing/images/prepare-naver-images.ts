@@ -7,6 +7,7 @@ import {
   extractH2Titles,
   extractMainKeywords,
 } from "./keyword-slug.js";
+import type { GeneratedSubThumbnail } from "../../thumbnail/generate-sub-thumbnails.js";
 
 export interface PreparedImageAsset {
   absolutePath: string;
@@ -58,11 +59,13 @@ export interface PrepareNaverImagesInput {
   htmlBody: string;
   title: string;
   blogTopic?: string;
+  /** 단락별 서브썸네일 (있으면 정적 본문 이미지 대신 사용) */
+  subThumbnails?: GeneratedSubThumbnail[];
 }
 
 /**
- * blue_directors 샘플 이미지를 복사해 키워드 조합 파일명(1~)과
- * 매번 다른 메타(alt/title)를 부여합니다.
+ * 메인 썸네일 + 단락별 서브썸네일(또는 정적 본문 이미지)을
+ * 키워드 slug 파일명(1~)으로 준비합니다.
  */
 export async function prepareNaverImageSet(
   input: PrepareNaverImagesInput,
@@ -85,36 +88,62 @@ export async function prepareNaverImageSet(
     thumbFilename,
   );
 
-  const sourceBody = loadBodyImages();
   const bodyImages: PreparedImageAsset[] = [];
 
-  for (let i = 0; i < sourceBody.length; i++) {
-    const entry = sourceBody[i];
-    const sequence = i + 2;
-    const ext = path.extname(entry.absolutePath) || ".png";
-    const filename = `${keywordSlug}${sequence}${ext}`;
-    const context = h2Titles[i] ?? `본문 ${sequence - 1}`;
-    const meta = buildImageMeta(keywords, input.title, sequence, context);
-    const absolutePath = await copyRenamed(
-      entry.absolutePath,
-      runDir,
-      filename,
-    );
+  if (input.subThumbnails && input.subThumbnails.length > 0) {
+    for (const sub of input.subThumbnails) {
+      const ext = path.extname(sub.path) || ".png";
+      const filename = sub.filename || `${keywordSlug}${sub.sequence}${ext}`;
+      const meta = buildImageMeta(
+        keywords,
+        input.title,
+        sub.sequence,
+        sub.sectionTitle,
+      );
+      const absolutePath = await copyRenamed(sub.path, runDir, filename);
 
-    bodyImages.push({
-      absolutePath,
-      filename,
-      sequence,
-      altText: meta.altText,
-      titleMeta: meta.titleMeta,
-      linkUrl: entry.linkUrl,
-    });
+      bodyImages.push({
+        absolutePath,
+        filename,
+        sequence: sub.sequence,
+        altText: meta.altText,
+        titleMeta: meta.titleMeta,
+      });
+    }
+  } else {
+    const sourceBody = loadBodyImages();
+    for (let i = 0; i < sourceBody.length; i++) {
+      const entry = sourceBody[i];
+      const sequence = i + 2;
+      const ext = path.extname(entry.absolutePath) || ".png";
+      const filename = `${keywordSlug}${sequence}${ext}`;
+      const context = h2Titles[i] ?? `본문 ${sequence - 1}`;
+      const meta = buildImageMeta(keywords, input.title, sequence, context);
+      const absolutePath = await copyRenamed(
+        entry.absolutePath,
+        runDir,
+        filename,
+      );
+
+      bodyImages.push({
+        absolutePath,
+        filename,
+        sequence,
+        altText: meta.altText,
+        titleMeta: meta.titleMeta,
+        linkUrl: entry.linkUrl,
+      });
+    }
   }
 
   console.log(
     `[NaverImages] 키워드=${keywords.join(", ")} → 파일 접두사 "${keywordSlug}"`,
   );
-  console.log(`[NaverImages] 준비 완료: 썸네일 1개 + 본문 ${bodyImages.length}개`);
+  const imageType =
+    input.subThumbnails?.length ? "서브썸네일" : "정적 본문";
+  console.log(
+    `[NaverImages] 준비 완료: 썸네일 1개 + ${imageType} ${bodyImages.length}개`,
+  );
 
   return {
     keywordSlug,

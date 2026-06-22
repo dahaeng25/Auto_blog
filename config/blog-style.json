@@ -19,6 +19,11 @@
     "h2Color": "#1a3a5c",
     "h2Align": "center",
     "h2Margin": "32px 0 14px 0",
+    "h3FontSize": "18px",
+    "h3FontWeight": "700",
+    "h3Color": "#2a4a6c",
+    "h3Align": "left",
+    "h3Margin": "20px 0 10px 0",
     "tableFontSize": "15px",
     "listFontSize": "16px"
   },
@@ -31,7 +36,7 @@
   },
   "structure": {
     "introParagraphCount": 4,
-    "minH2Sections": 5,
+    "minH2Sections": 6,
     "requireTable": true,
     "requireList": true,
     "requireDisclaimer": true

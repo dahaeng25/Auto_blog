@@ -84,6 +84,19 @@ function phraseMatchesHaystack(haystack: string, phrase: string): boolean {
   return words.every((word) => compactHaystack.includes(compactText(word)));
 }
 
+function mainTextMatchesKeywords(keywords: string, mainText: string): boolean {
+  const inputPhrases = extractInputKeywordPhrases(keywords);
+  if (inputPhrases.length > 0) {
+    return inputPhrases.some((phrase) => phraseMatchesHaystack(mainText, phrase));
+  }
+
+  const keywordList = extractMainKeywords(keywords, "").filter(
+    (kw) => kw.length >= 2 && !THUMBNAIL_GENERIC_WORDS.has(kw),
+  );
+  if (keywordList.length === 0) return mainText.trim().length > 0;
+  return keywordList.some((kw) => phraseMatchesHaystack(mainText, kw));
+}
+
 function buildFallbackThumbnailMainText(keywords: string, title: string): string {
   const phrases = extractInputKeywordPhrases(keywords);
   const list =
@@ -138,15 +151,21 @@ export function thumbnailMatchesTopic(
   const inputPhrases = extractInputKeywordPhrases(keywords);
 
   if (inputPhrases.length > 0) {
-    return inputPhrases.every((phrase) => phraseMatchesHaystack(haystack, phrase));
+    if (!inputPhrases.every((phrase) => phraseMatchesHaystack(haystack, phrase))) {
+      return false;
+    }
+    return mainTextMatchesKeywords(keywords, main);
   }
 
   const keywordList = extractMainKeywords(keywords, title).filter(
     (kw) => kw.length >= 2 && !THUMBNAIL_GENERIC_WORDS.has(kw),
   );
 
-  if (keywordList.length === 0) return true;
-  return keywordList.every((kw) => phraseMatchesHaystack(haystack, kw));
+  if (keywordList.length === 0) return mainTextMatchesKeywords(keywords, main);
+  if (!keywordList.every((kw) => phraseMatchesHaystack(haystack, kw))) {
+    return false;
+  }
+  return mainTextMatchesKeywords(keywords, main);
 }
 
 /** 키워드·제목 기준으로 썸네일 상·하단 문구 생성 */

@@ -35,3 +35,51 @@ export function splitHtmlIntoSections(html: string, maxSections = 8): string[] {
 
   return sections.length > 0 ? sections : [normalized];
 }
+
+export interface PublishSection {
+  html: string;
+  h2Title: string | null;
+  /** 서브썸네일 배열 인덱스 (0부터) */
+  subThumbnailIndex: number | null;
+}
+
+/**
+ * 퍼블리싱용 분할: 도입부 + h2 단락별 구간.
+ * 서브썸네일은 h2 단락 상단에 1:1 매핑.
+ */
+export function splitHtmlForPublishing(html: string): {
+  intro: string | null;
+  sections: PublishSection[];
+} {
+  const normalized = html.trim();
+  if (!normalized) {
+    return { intro: null, sections: [] };
+  }
+
+  const firstH2 = normalized.search(/<h2[\s>]/i);
+  if (firstH2 === -1) {
+    return { intro: normalized, sections: [] };
+  }
+
+  const intro =
+    firstH2 > 0 ? normalized.slice(0, firstH2).trim() || null : null;
+  const body = normalized.slice(firstH2);
+
+  const sections = body
+    .split(/(?=<h2[\s>])/i)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((sectionHtml, index) => {
+      const h2Match = sectionHtml.match(/<h2[^>]*>(.*?)<\/h2>/is);
+      const h2Title = h2Match
+        ? h2Match[1].replace(/<[^>]+>/g, "").trim()
+        : null;
+      return {
+        html: sectionHtml,
+        h2Title,
+        subThumbnailIndex: h2Title ? index : null,
+      };
+    });
+
+  return { intro, sections };
+}
