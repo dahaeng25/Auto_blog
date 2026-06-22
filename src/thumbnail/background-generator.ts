@@ -3,7 +3,13 @@ import path from "node:path";
 import OpenAI from "openai";
 import { config } from "../../config/index.js";
 
-const IMAGE_MODEL_FALLBACKS = ["dall-e-2", "dall-e-3", "gpt-image-1"] as const;
+/** dall-e 시리즈는 계정/API에 따라 미지원인 경우가 많아 gpt-image-1 우선 */
+const IMAGE_MODEL_FALLBACKS = [
+  "gpt-image-1",
+  "gpt-image-1-mini",
+  "dall-e-3",
+  "dall-e-2",
+] as const;
 
 /** 사람 1명 초상 대신 사용할 장면 유형 */
 const SCENE_VARIANTS = [
@@ -19,6 +25,11 @@ const SCENE_VARIANTS = [
   "Korean business district street and office towers, urban professional atmosphere",
 ] as const;
 
+/** 성공한 모델 캐시 / 실패 모델 스킵 (반복 API 호출 방지) */
+let cachedWorkingModel: string | null = null;
+const unavailableModels = new Set<string>();
+const warnedModels = new Set<string>();
+
 function getClient(): OpenAI | null {
   if (!config.openaiApiKey) return null;
   return new OpenAI({ apiKey: config.openaiApiKey });
@@ -27,6 +38,19 @@ function getClient(): OpenAI | null {
 function uniqueModels(): string[] {
   const preferred = config.thumbnailBackgroundModel.trim();
   return [...new Set([preferred, ...IMAGE_MODEL_FALLBACKS].filter(Boolean))];
+}
+
+function modelsToTry(): string[] {
+  if (cachedWorkingModel) return [cachedWorkingModel];
+  return uniqueModels().filter((m) => !unavailableModels.has(m));
+}
+
+function markModelUnavailable(model: string, reason: string): void {
+  unavailableModels.add(model);
+  if (!warnedModels.has(model)) {
+    warnedModels.add(model);
+    console.warn(`[Thumbnail] ${model} 사용 불가 — ${reason} (이후 생략)`);
+  }
 }
 
 function pickSceneIndex(keywords: string[], slug: string): number {
@@ -78,7 +102,6 @@ function buildBackgroundPrompt(
   sectionIndex?: number,
 ): string {
   const topic = keywords.join(", ");
-  const title = sectionTitle ?? topic;
   const scene = sectionTitle
     ? pickSceneForSection(keywords, slug, sectionTitle, sectionIndex ?? 0)
     : SCENE_VARIANTS[pickSceneIndex(keywords, slug) % SCENE_VARIANTS.length];
@@ -97,7 +120,10 @@ function buildBackgroundPrompt(
   );
 }
 
-function imageSizeForModel(model: string): "256x256" | "512x512" | "1024x1024" {
+type ImageSize = "256x256" | "512x512" | "1024x1024" | "auto";
+
+function imageSizeForModel(model: string): ImageSize {
+  if (model.startsWith("gpt-image")) return "1024x1024";
   if (model === "dall-e-2") return "512x512";
   return "1024x1024";
 }
@@ -109,6 +135,48 @@ async function downloadImage(url: string, outputPath: string): Promise<void> {
   }
   const buffer = Buffer.from(await imageRes.arrayBuffer());
   await fs.writeFile(outputPath, buffer);
+}
+
+async function generateWithModel(
+  client: OpenAI,
+  model: string,
+  prompt: string,
+  outputPath: string,
+): Promise<boolean> {
+  const response = await client.images.generate({
+    model,
+    prompt,
+    size: imageSizeForModel(model),
+    n: 1,
+  });
+
+  const data = response.data ?? [];
+  const imageUrl = data[0]?.url;
+  const b64 = data[0]?.b64_json;
+
+  if (imageUrl) {
+    await downloadImage(imageUrl, outputPath);
+    console.log(`[Thumbnail] 배경 저장 (${model}): ${outputPath}`);
+    return true;
+  }
+
+  if (b64) {
+    await fs.writeFile(outputPath, Buffer.from(b64, "base64"));
+    console.log(`[Thumbnail] 배경 저장 (${model}): ${outputPath}`);
+    return true;
+  }
+
+  console.warn(`[Thumbnail] ${model} 응답에 이미지 없음`);
+  return false;
+}
+
+function isModelUnavailableError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    /does not exist|not found|not available|invalid model|unsupported/i.test(
+      msg,
+    ) || /400/.test(msg)
+  );
 }
 
 /**
@@ -137,53 +205,70 @@ export async function generateSectionBackground(
     return null;
   }
 
+  const tryModels = modelsToTry();
+  if (tryModels.length === 0) {
+    console.warn("[Thumbnail] 사용 가능한 이미지 모델 없음 — 그라데이션 배경 사용");
+    return null;
+  }
+
   const dir = path.join(config.thumbnailsDir, "backgrounds");
   await fs.mkdir(dir, { recursive: true });
 
   const filename = `${slug}_s${sectionIndex}_${Date.now()}.png`;
   const outputPath = path.join(dir, filename);
   const prompt = buildBackgroundPrompt(keywords, slug, sectionTitle, sectionIndex);
-  const scene = sectionTitle
-    ? pickSceneForSection(keywords, slug, sectionTitle, sectionIndex)
-    : SCENE_VARIANTS[pickSceneIndex(keywords, slug) % SCENE_VARIANTS.length];
 
   console.log(
-    `[Thumbnail] 배경 생성 중 — 키워드: ${keywords.join(", ")}, 단락: ${sectionTitle}`,
+    `[Thumbnail] 배경 생성 — 단락: ${sectionTitle.slice(0, 40)}${sectionTitle.length > 40 ? "…" : ""}`,
   );
-  console.log(`[Thumbnail] 장면 유형: ${scene}`);
 
-  for (const model of uniqueModels()) {
+  for (const model of tryModels) {
     try {
-      const response = await client.images.generate({
-        model,
-        prompt,
-        size: imageSizeForModel(model),
-        n: 1,
-      });
-
-      const data = response.data ?? [];
-      const imageUrl = data[0]?.url;
-      const b64 = data[0]?.b64_json;
-
-      if (imageUrl) {
-        await downloadImage(imageUrl, outputPath);
-        console.log(`[Thumbnail] 배경 저장 (${model}): ${outputPath}`);
+      const ok = await generateWithModel(client, model, prompt, outputPath);
+      if (ok) {
+        cachedWorkingModel = model;
         return outputPath;
       }
-
-      if (b64) {
-        await fs.writeFile(outputPath, Buffer.from(b64, "base64"));
-        console.log(`[Thumbnail] 배경 저장 (${model}): ${outputPath}`);
-        return outputPath;
-      }
-
-      console.warn(`[Thumbnail] ${model} 응답에 이미지 없음`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.warn(`[Thumbnail] ${model} 배경 생성 실패 — ${msg}`);
+      if (isModelUnavailableError(error)) {
+        markModelUnavailable(model, msg);
+      } else {
+        console.warn(`[Thumbnail] ${model} 배경 생성 실패 — ${msg}`);
+      }
     }
   }
 
-  console.warn("[Thumbnail] AI 배경 생성 실패 — 그라데이션 배경으로 대체합니다.");
   return null;
+}
+
+/** 여러 단락 배경을 병렬 생성 (동시 요청 수 제한) */
+export async function generateSectionBackgroundsBatch(
+  items: Array<{
+    keywords: string[];
+    sectionTitle: string;
+    slug: string;
+    sectionIndex: number;
+  }>,
+  concurrency = config.subThumbnailBgConcurrency,
+): Promise<Array<string | null>> {
+  const results: Array<string | null> = new Array(items.length).fill(null);
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const i = cursor++;
+      const item = items[i]!;
+      results[i] = await generateSectionBackground(
+        item.keywords,
+        item.sectionTitle,
+        item.slug,
+        item.sectionIndex,
+      );
+    }
+  }
+
+  const workers = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
 }

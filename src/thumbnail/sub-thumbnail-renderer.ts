@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import type { Browser } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
 
@@ -36,6 +37,31 @@ export class SubThumbnailRenderer {
   }
 
   async render(options: SubThumbnailRenderOptions): Promise<string> {
+    const browser = await launchChromium({ headless: true });
+    try {
+      return await this.renderWithBrowser(browser, options);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /** 브라우저 1회 실행으로 여러 서브썸네일 렌더 (속도 개선) */
+  async renderBatch(
+    browser: Browser,
+    items: SubThumbnailRenderOptions[],
+  ): Promise<string[]> {
+    const paths: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      paths.push(await this.renderWithBrowser(browser, items[i]!));
+      console.log(`[SubThumbnail] ${i + 1}/${items.length}: ${items[i]!.outputFilename}`);
+    }
+    return paths;
+  }
+
+  private async renderWithBrowser(
+    browser: Browser,
+    options: SubThumbnailRenderOptions,
+  ): Promise<string> {
     const outputPath = path.join(
       config.thumbnailsDir,
       options.outputFilename,
@@ -50,7 +76,6 @@ export class SubThumbnailRenderer {
       ? pathToFileURL(options.backgroundPath).href
       : null;
 
-    const browser = await launchChromium({ headless: true });
     const context = await browser.newContext({
       viewport: { width: this.size, height: this.size + 50 },
       deviceScaleFactor: 1,
@@ -119,7 +144,6 @@ export class SubThumbnailRenderer {
       return outputPath;
     } finally {
       await context.close();
-      await browser.close();
     }
   }
 }

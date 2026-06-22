@@ -11,6 +11,10 @@ import { humanType, humanPause } from "./utils/human-input.js";
 import { fillBodyWithImages } from "./body-images/body-image-inserter.js";
 import { clickTistoryPublicPublish } from "./utils/tistory-publish.js";
 import { assertEditorAccessible } from "../auth/login-check.js";
+import {
+  navigateToWritePage,
+  normalizeTistoryBlogName,
+} from "../auth/write-page-nav.js";
 import { findContentEditable } from "./utils/editor-paste.js";
 
 /**
@@ -56,11 +60,12 @@ export class TistoryPublisher extends BasePublisher {
     page: Page,
     input: PublishInput,
   ): Promise<string | undefined> {
-    const writeUrl = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
+    const writeUrl = await navigateToWritePage(
+      page,
+      "tistory",
+      normalizeTistoryBlogName(config.tistoryBlogName),
+    );
     console.log(`[티스토리] 글쓰기 페이지 이동: ${writeUrl}`);
-
-    await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(2000);
 
     await assertEditorAccessible(page, "tistory");
 
@@ -100,6 +105,9 @@ export class TistoryPublisher extends BasePublisher {
       editorContext: editorFrame,
       imageButtonSelector: sel.imageButton,
       fileInputSelector: sel.fileInput,
+      preparedImages: input.naverImages
+        ? [input.naverImages.thumbnail, ...input.naverImages.bodyImages]
+        : undefined,
     });
     await humanPause(editorSettleDelay(input.htmlBody.length));
 

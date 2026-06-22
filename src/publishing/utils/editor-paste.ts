@@ -1,6 +1,7 @@
 import type { Frame, Locator, Page } from "playwright";
 import { humanClick, humanPause } from "./human-input.js";
 import { writeHtmlToClipboard } from "./clipboard.js";
+import { focusEditorEnd } from "./editor-cursor.js";
 
 const IS_MAC = process.platform === "darwin";
 const PASTE_MODIFIER = IS_MAC ? "Meta" : "Control";
@@ -60,6 +61,16 @@ export async function pasteHtmlToEditor(
 
   console.log("[EditorPaste] insertHTML 실패 → 클립보드 붙여넣기 시도");
   await pasteHtmlViaClipboard(page, editorLocator, html);
+}
+
+/** 본문 끝에 HTML 이어 붙이기 (순서 유지) */
+export async function appendHtmlToEditor(
+  page: Page,
+  editorLocator: Locator,
+  html: string,
+): Promise<void> {
+  await focusEditorEnd(editorLocator);
+  await pasteHtmlToEditor(page, editorLocator, html);
 }
 
 type PageOrFrame = Page | Frame;

@@ -1,0 +1,292 @@
+{
+  "$comment": "도·광역시 입력 시 블로그에 녹일 시군구 풀. popular=true 는 인구·행정사 블로그 노출이 많은 지역",
+  "defaultRegionId": "jeonbuk",
+  "regions": [
+    {
+      "id": "seoul",
+      "name": "서울특별시",
+      "aliases": ["서울", "서울시"],
+      "type": "metro",
+      "localities": [
+        { "name": "강남구", "short": "강남", "popular": true },
+        { "name": "강서구", "short": "강서", "popular": true },
+        { "name": "송파구", "short": "송파", "popular": true },
+        { "name": "마포구", "short": "마포", "popular": true },
+        { "name": "영등포구", "short": "영등포", "popular": true },
+        { "name": "노원구", "short": "노원", "popular": true },
+        { "name": "관악구", "short": "관악", "popular": true },
+        { "name": "서초구", "short": "서초", "popular": true },
+        { "name": "구로구", "short": "구로", "popular": true },
+        { "name": "은평구", "short": "은평", "popular": true },
+        { "name": "양천구", "short": "양천", "popular": false },
+        { "name": "동대문구", "short": "동대문", "popular": false }
+      ]
+    },
+    {
+      "id": "busan",
+      "name": "부산광역시",
+      "aliases": ["부산", "부산시"],
+      "type": "metro",
+      "localities": [
+        { "name": "해운대구", "short": "해운대", "popular": true },
+        { "name": "사하구", "short": "사하", "popular": true },
+        { "name": "북구", "short": "부산북구", "popular": true },
+        { "name": "남구", "short": "부산남구", "popular": true },
+        { "name": "동래구", "short": "동래", "popular": true },
+        { "name": "사상구", "short": "사상", "popular": true },
+        { "name": "연제구", "short": "연제", "popular": true },
+        { "name": "수영구", "short": "수영", "popular": true },
+        { "name": "금정구", "short": "금정", "popular": false },
+        { "name": "기장군", "short": "기장", "popular": true }
+      ]
+    },
+    {
+      "id": "daegu",
+      "name": "대구광역시",
+      "aliases": ["대구", "대구시"],
+      "type": "metro",
+      "localities": [
+        { "name": "수성구", "short": "수성", "popular": true },
+        { "name": "달서구", "short": "달서", "popular": true },
+        { "name": "북구", "short": "대구북구", "popular": true },
+        { "name": "중구", "short": "대구중구", "popular": true },
+        { "name": "동구", "short": "대구동구", "popular": true },
+        { "name": "서구", "short": "대구서구", "popular": true },
+        { "name": "남구", "short": "대구남구", "popular": true },
+        { "name": "달성군", "short": "달성", "popular": true }
+      ]
+    },
+    {
+      "id": "incheon",
+      "name": "인천광역시",
+      "aliases": ["인천", "인천시"],
+      "type": "metro",
+      "localities": [
+        { "name": "부평구", "short": "부평", "popular": true },
+        { "name": "남동구", "short": "남동", "popular": true },
+        { "name": "연수구", "short": "연수", "popular": true },
+        { "name": "서구", "short": "인천서구", "popular": true },
+        { "name": "계양구", "short": "계양", "popular": true },
+        { "name": "미추홀구", "short": "미추홀", "popular": true },
+        { "name": "중구", "short": "인천중구", "popular": true },
+        { "name": "동구", "short": "인천동구", "popular": false },
+        { "name": "강화군", "short": "강화", "popular": false }
+      ]
+    },
+    {
+      "id": "gwangju",
+      "name": "광주광역시",
+      "aliases": ["광주", "광주시"],
+      "type": "metro",
+      "localities": [
+        { "name": "북구", "short": "광주북구", "popular": true },
+        { "name": "서구", "short": "광주서구", "popular": true },
+        { "name": "남구", "short": "광주남구", "popular": true },
+        { "name": "동구", "short": "광주동구", "popular": true },
+        { "name": "광산구", "short": "광산", "popular": true }
+      ]
+    },
+    {
+      "id": "daejeon",
+      "name": "대전광역시",
+      "aliases": ["대전", "대전시"],
+      "type": "metro",
+      "localities": [
+        { "name": "서구", "short": "대전서구", "popular": true },
+        { "name": "유성구", "short": "유성", "popular": true },
+        { "name": "대덕구", "short": "대덕", "popular": true },
+        { "name": "중구", "short": "대전중구", "popular": true },
+        { "name": "동구", "short": "대전동구", "popular": true }
+      ]
+    },
+    {
+      "id": "ulsan",
+      "name": "울산광역시",
+      "aliases": ["울산", "울산시"],
+      "type": "metro",
+      "localities": [
+        { "name": "남구", "short": "울산남구", "popular": true },
+        { "name": "중구", "short": "울산중구", "popular": true },
+        { "name": "북구", "short": "울산북구", "popular": true },
+        { "name": "동구", "short": "울산동구", "popular": true },
+        { "name": "울주군", "short": "울주", "popular": true }
+      ]
+    },
+    {
+      "id": "sejong",
+      "name": "세종특별자치시",
+      "aliases": ["세종", "세종시"],
+      "type": "special",
+      "localities": [
+        { "name": "세종시", "short": "세종", "popular": true },
+        { "name": "조치원읍", "short": "조치원", "popular": true },
+        { "name": "나성동", "short": "나성동", "popular": true },
+        { "name": "한솔동", "short": "한솔동", "popular": true },
+        { "name": "보람동", "short": "보람동", "popular": false }
+      ]
+    },
+    {
+      "id": "gyeonggi",
+      "name": "경기도",
+      "aliases": ["경기", "경기도"],
+      "type": "province",
+      "localities": [
+        { "name": "수원시", "short": "수원", "popular": true },
+        { "name": "성남시", "short": "성남", "popular": true },
+        { "name": "고양시", "short": "고양", "popular": true },
+        { "name": "용인시", "short": "용인", "popular": true },
+        { "name": "부천시", "short": "부천", "popular": true },
+        { "name": "안산시", "short": "안산", "popular": true },
+        { "name": "안양시", "short": "안양", "popular": true },
+        { "name": "남양주시", "short": "남양주", "popular": true },
+        { "name": "화성시", "short": "화성", "popular": true },
+        { "name": "평택시", "short": "평택", "popular": true },
+        { "name": "시흥시", "short": "시흥", "popular": true },
+        { "name": "파주시", "short": "파주", "popular": true },
+        { "name": "김포시", "short": "김포", "popular": true },
+        { "name": "광주시", "short": "경기광주", "popular": true },
+        { "name": "광명시", "short": "광명", "popular": true },
+        { "name": "군포시", "short": "군포", "popular": true },
+        { "name": "이천시", "short": "이천", "popular": true },
+        { "name": "오산시", "short": "오산", "popular": true },
+        { "name": "하남시", "short": "하남", "popular": true },
+        { "name": "의정부시", "short": "의정부", "popular": true },
+        { "name": "양주시", "short": "양주", "popular": false },
+        { "name": "구리시", "short": "구리", "popular": false }
+      ]
+    },
+    {
+      "id": "gangwon",
+      "name": "강원특별자치도",
+      "aliases": ["강원", "강원도", "강원특별자치도"],
+      "type": "province",
+      "localities": [
+        { "name": "춘천시", "short": "춘천", "popular": true },
+        { "name": "원주시", "short": "원주", "popular": true },
+        { "name": "강릉시", "short": "강릉", "popular": true },
+        { "name": "동해시", "short": "동해", "popular": true },
+        { "name": "속초시", "short": "속초", "popular": true },
+        { "name": "태백시", "short": "태백", "popular": false },
+        { "name": "삼척시", "short": "삼척", "popular": false },
+        { "name": "홍천군", "short": "홍천", "popular": true },
+        { "name": "횡성군", "short": "횡성", "popular": false }
+      ]
+    },
+    {
+      "id": "chungbuk",
+      "name": "충청북도",
+      "aliases": ["충북", "충청북도"],
+      "type": "province",
+      "localities": [
+        { "name": "청주시", "short": "청주", "popular": true },
+        { "name": "충주시", "short": "충주", "popular": true },
+        { "name": "제천시", "short": "제천", "popular": true },
+        { "name": "음성군", "short": "음성", "popular": true },
+        { "name": "진천군", "short": "진천", "popular": true },
+        { "name": "옥천군", "short": "옥천", "popular": false },
+        { "name": "증평군", "short": "증평", "popular": false }
+      ]
+    },
+    {
+      "id": "chungnam",
+      "name": "충청남도",
+      "aliases": ["충남", "충청남도"],
+      "type": "province",
+      "localities": [
+        { "name": "천안시", "short": "천안", "popular": true },
+        { "name": "아산시", "short": "아산", "popular": true },
+        { "name": "공주시", "short": "공주", "popular": true },
+        { "name": "보령시", "short": "보령", "popular": true },
+        { "name": "서산시", "short": "서산", "popular": true },
+        { "name": "논산시", "short": "논산", "popular": true },
+        { "name": "계룡시", "short": "계룡", "popular": false },
+        { "name": "당진시", "short": "당진", "popular": true },
+        { "name": "홍성군", "short": "홍성", "popular": true }
+      ]
+    },
+    {
+      "id": "jeonbuk",
+      "name": "전라북도",
+      "aliases": ["전북", "전라북", "전북특별자치도", "전라북도"],
+      "type": "province",
+      "localities": [
+        { "name": "전주시", "short": "전주", "popular": true },
+        { "name": "군산시", "short": "군산", "popular": true },
+        { "name": "익산시", "short": "익산", "popular": true },
+        { "name": "완주군", "short": "완주", "popular": true },
+        { "name": "김제시", "short": "김제", "popular": true },
+        { "name": "정읍시", "short": "정읍", "popular": true },
+        { "name": "남원시", "short": "남원", "popular": true },
+        { "name": "서천군", "short": "서천", "popular": true },
+        { "name": "부안군", "short": "부안", "popular": false },
+        { "name": "고창군", "short": "고창", "popular": false },
+        { "name": "임실군", "short": "임실", "popular": false },
+        { "name": "순창군", "short": "순창", "popular": false }
+      ]
+    },
+    {
+      "id": "jeonnam",
+      "name": "전라남도",
+      "aliases": ["전남", "전라남도"],
+      "type": "province",
+      "localities": [
+        { "name": "여수시", "short": "여수", "popular": true },
+        { "name": "순천시", "short": "순천", "popular": true },
+        { "name": "목포시", "short": "목포", "popular": true },
+        { "name": "나주시", "short": "나주", "popular": true },
+        { "name": "광양시", "short": "광양", "popular": true },
+        { "name": "무안군", "short": "무안", "popular": true },
+        { "name": "해남군", "short": "해남", "popular": false },
+        { "name": "강진군", "short": "강진", "popular": false },
+        { "name": "장흥군", "short": "장흥", "popular": false }
+      ]
+    },
+    {
+      "id": "gyeongbuk",
+      "name": "경상북도",
+      "aliases": ["경북", "경상북도"],
+      "type": "province",
+      "localities": [
+        { "name": "포항시", "short": "포항", "popular": true },
+        { "name": "경주시", "short": "경주", "popular": true },
+        { "name": "구미시", "short": "구미", "popular": true },
+        { "name": "김천시", "short": "김천", "popular": true },
+        { "name": "안동시", "short": "안동", "popular": true },
+        { "name": "영주시", "short": "영주", "popular": false },
+        { "name": "상주시", "short": "상주", "popular": false },
+        { "name": "경산시", "short": "경산", "popular": true },
+        { "name": "문경시", "short": "문경", "popular": false }
+      ]
+    },
+    {
+      "id": "gyeongnam",
+      "name": "경상남도",
+      "aliases": ["경남", "경상남도"],
+      "type": "province",
+      "localities": [
+        { "name": "창원시", "short": "창원", "popular": true },
+        { "name": "김해시", "short": "김해", "popular": true },
+        { "name": "진주시", "short": "진주", "popular": true },
+        { "name": "양산시", "short": "양산", "popular": true },
+        { "name": "거제시", "short": "거제", "popular": true },
+        { "name": "통영시", "short": "통영", "popular": true },
+        { "name": "사천시", "short": "사천", "popular": false },
+        { "name": "밀양시", "short": "밀양", "popular": false },
+        { "name": "함안군", "short": "함안", "popular": true }
+      ]
+    },
+    {
+      "id": "jeju",
+      "name": "제주특별자치도",
+      "aliases": ["제주", "제주도"],
+      "type": "special",
+      "localities": [
+        { "name": "제주시", "short": "제주", "popular": true },
+        { "name": "서귀포시", "short": "서귀포", "popular": true },
+        { "name": "애월읍", "short": "애월", "popular": true },
+        { "name": "한림읍", "short": "한림", "popular": false },
+        { "name": "성산읍", "short": "성산", "popular": true }
+      ]
+    }
+  ]
+}

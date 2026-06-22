@@ -16,6 +16,11 @@ import {
 } from "./utils/naver-editor.js";
 import { assertEditorAccessible } from "../auth/login-check.js";
 import {
+  navigateToWritePage,
+  normalizeNaverBlogId,
+  normalizeTistoryBlogName,
+} from "../auth/write-page-nav.js";
+import {
   dismissNaverDraftDialog,
   waitForNaverEditorReady,
 } from "./utils/naver-draft-handler.js";
@@ -63,11 +68,12 @@ export class NaverPublisher extends BasePublisher {
     page: Page,
     input: PublishInput,
   ): Promise<string | undefined> {
-    const writeUrl = PLATFORMS.naver.postWriteUrl(config.naverBlogId);
+    const writeUrl = await navigateToWritePage(
+      page,
+      "naver",
+      normalizeNaverBlogId(config.naverBlogId),
+    );
     console.log(`[네이버] 글쓰기 페이지 이동: ${writeUrl}`);
-
-    await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(2000);
 
     await assertEditorAccessible(page, "naver");
     await waitForNaverEditorReady(page);

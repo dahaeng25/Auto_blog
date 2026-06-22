@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../../../config/index.js";
 
+import type { RegionPickResult } from "../regions/pick-regions.js";
+
 /**
  * prompts/gems-system.prompt.md 에서 Gems 시스템 프롬프트를 로드합니다.
- * `---` 구분선 사이의 내용만 추출합니다.
+ * `---` 구분선 사이의 내용만 추출하고 {{REGION}} 등을 치환합니다.
  */
-export function loadGemsSystemPrompt(): string {
+export function loadGemsSystemPrompt(region?: RegionPickResult): string {
   const promptPath = path.resolve(config.gemsPromptPath);
 
   if (!fs.existsSync(promptPath)) {
@@ -29,5 +31,17 @@ export function loadGemsSystemPrompt(): string {
     );
   }
 
-  return gemsPrompt;
+  return applyRegionPlaceholders(gemsPrompt, region);
+}
+
+function applyRegionPlaceholders(
+  prompt: string,
+  region?: RegionPickResult,
+): string {
+  const regionName = region?.parentName ?? "해당 지역";
+  const localities = region?.pickedShort.join("·") ?? "지정된 시·군·구";
+
+  return prompt
+    .replace(/\{\{REGION\}\}/g, regionName)
+    .replace(/\{\{LOCALITIES\}\}/g, localities);
 }

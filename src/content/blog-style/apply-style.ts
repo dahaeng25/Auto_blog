@@ -4,7 +4,11 @@ function stripInlineStyle(tagHtml: string): string {
   return tagHtml.replace(/\s*style="[^"]*"/gi, "");
 }
 
-function pStyle(align: string, margin: string, typo: ReturnType<typeof loadBlogStyle>["typography"]): string {
+function pStyle(
+  align: string,
+  margin: string,
+  typo: ReturnType<typeof loadBlogStyle>["typography"],
+): string {
   return `font-family:${typo.fontFamily};font-size:${typo.bodyFontSize};line-height:${typo.bodyLineHeight};color:${typo.bodyColor};text-align:${align};margin:${margin};`;
 }
 
@@ -29,9 +33,24 @@ function restyleParagraphs(block: string, align: string, margin: string): string
   const typo = loadBlogStyle().typography;
   const style = pStyle(align, margin, typo);
 
-  return block.replace(/<p(\s[^>]*)?>/gi, (full, attrs = "") => {
+  return block.replace(/<p(\s[^>]*)?>/gi, (_full, attrs = "") => {
     const clean = stripInlineStyle(`<p${attrs}>`);
     return clean.replace(/<p/, `<p style="${style}"`);
+  });
+}
+
+function restyleBlockquotes(block: string): string {
+  const style = loadBlogStyle();
+  const bq = style.blockquote ?? { borderColor: "#1a3a5c", background: "#f7f9fc" };
+  const typo = style.typography;
+  const bqStyle =
+    `font-family:${typo.fontFamily};font-size:15px;line-height:${typo.bodyLineHeight};` +
+    `color:#444444;border-left:4px solid ${bq.borderColor};background:${bq.background};` +
+    `padding:14px 18px;margin:20px 0;`;
+
+  return block.replace(/<blockquote(\s[^>]*)?>/gi, (_full, attrs = "") => {
+    const clean = stripInlineStyle(`<blockquote${attrs}>`);
+    return clean.replace(/<blockquote/, `<blockquote style="${bqStyle}"`);
   });
 }
 
@@ -39,7 +58,7 @@ function restyleH3(section: string): string {
   const { typography: typo } = loadBlogStyle();
   const style =
     `font-family:${typo.fontFamily};font-size:${typo.h3FontSize};font-weight:${typo.h3FontWeight};` +
-    `color:${typo.h3Color};text-align:${typo.h3Align};margin:${typo.h3Margin};line-height:1.4;`;
+    `color:${typo.h3Color};text-align:${typo.h3Align};margin:${typo.h3Margin};line-height:1.5;`;
 
   return section.replace(/<h3(\s[^>]*)?>/gi, (_full, attrs = "") => {
     const clean = stripInlineStyle(`<h3${attrs}>`);
@@ -51,11 +70,11 @@ function restyleH2(section: string): string {
   const { typography: typo } = loadBlogStyle();
   const style =
     `font-family:${typo.fontFamily};font-size:${typo.h2FontSize};font-weight:${typo.h2FontWeight};` +
-    `color:${typo.h2Color};text-align:${typo.h2Align};margin:${typo.h2Margin};line-height:1.4;`;
+    `color:${typo.h2Color};text-align:${typo.h2Align};margin:${typo.h2Margin};line-height:1.45;`;
 
   let result = restyleH3(section);
 
-  result = result.replace(/<h2(\s[^>]*)?>/gi, (full, attrs = "") => {
+  result = result.replace(/<h2(\s[^>]*)?>/gi, (_full, attrs = "") => {
     const clean = stripInlineStyle(`<h2${attrs}>`);
     return clean.replace(/<h2/, `<h2 style="${style}"`);
   });
@@ -66,15 +85,22 @@ function restyleH2(section: string): string {
     loadBlogStyle().spacing.paragraphMargin,
   );
 
+  result = restyleBlockquotes(result);
+
   result = result.replace(/<ul(\s[^>]*)?>/gi, () => {
     const typo = loadBlogStyle().typography;
-    return `<ul style="font-family:${typo.fontFamily};font-size:${typo.listFontSize};line-height:${typo.bodyLineHeight};color:${typo.bodyColor};margin:12px 0 16px 20px;padding:0;">`;
+    return `<ul style="font-family:${typo.fontFamily};font-size:${typo.listFontSize};line-height:${typo.bodyLineHeight};color:${typo.bodyColor};margin:14px 0 18px 22px;padding:0;">`;
+  });
+
+  result = result.replace(/<li(\s[^>]*)?>/gi, () => {
+    const typo = loadBlogStyle().typography;
+    return `<li style="font-family:${typo.fontFamily};font-size:${typo.listFontSize};line-height:${typo.bodyLineHeight};color:${typo.bodyColor};margin:0 0 10px 0;">`;
   });
 
   result = result.replace(/<table(\s[^>]*)?>/gi, () => {
     const typo = loadBlogStyle().typography;
     return (
-      `<table style="width:100%;border-collapse:collapse;margin:16px 0;font-family:${typo.fontFamily};` +
+      `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-family:${typo.fontFamily};` +
       `font-size:${typo.tableFontSize};color:${typo.bodyColor};">`
     );
   });
@@ -103,8 +129,20 @@ function restyleTableCells(html: string): string {
   return result;
 }
 
+function getBrandBandHtml(): string {
+  const style = loadBlogStyle();
+  if (style.brandBand?.html) return style.brandBand.html;
+
+  const tagline = style.brandTagline ?? "강운준 행정사";
+  const typo = style.typography;
+  return (
+    `<p style="text-align:center;font-family:${typo.fontFamily};font-size:15px;` +
+    `line-height:${typo.bodyLineHeight};color:#555555;margin:20px 0;">${tagline}</p>`
+  );
+}
+
 /**
- * AI 생성 HTML에 샘플 블로그(blue_directors)와 동일한 폰트·크기·구성 스타일 적용
+ * AI 생성 HTML에 kanghaeng1345 샘플과 동일한 폰트·구분선·브랜드밴드·인용구 스타일 적용
  */
 export function applyBlogStyle(html: string): string {
   const style = loadBlogStyle();
@@ -116,8 +154,13 @@ export function applyBlogStyle(html: string): string {
     style.spacing.introParagraphMargin,
   );
 
+  if (sections.length > 0) {
+    output += getBrandBandHtml();
+  }
+
   for (const section of sections) {
     output += style.divider.html;
+    output += getBrandBandHtml();
     output += restyleH2(section);
   }
 

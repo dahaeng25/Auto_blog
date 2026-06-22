@@ -17,6 +17,7 @@ import { PublishPipeline } from "../publishing/publish-pipeline.js";
 import { ThumbnailRenderer } from "../thumbnail/thumbnail-renderer.js";
 import { generateSubThumbnails } from "../thumbnail/generate-sub-thumbnails.js";
 import { normalizeTopicInput } from "./resolve-blog-topic.js";
+import { resolveBlogRegionInput } from "../content/regions/pick-regions.js";
 import {
   exportDraftWorkspace,
   getWorkspaceDir,
@@ -48,6 +49,8 @@ export interface WorkflowRunOptions {
   step: WorkflowStep;
   /** 배치파일 상단 등에서 직접 전달한 키워드 */
   blogTopic?: string;
+  /** 도·광역시명 (시군구 자동 랜덤 선택) */
+  blogRegion?: string;
   keywordsFile?: string;
   skipEditPrompt?: boolean;
 }
@@ -133,12 +136,22 @@ export async function runContentStep(
   const keywords = await resolveKeywords(options);
   console.log(`\n[키워드] ${keywords}`);
 
+  const regionInput = await resolveBlogRegionInput(options.blogRegion);
+  console.log(`[지역 입력] ${regionInput}`);
+
   const pipeline = new ContentPipeline();
   try {
     const draft = await pipeline.run({
       blogTopic: keywords,
+      blogRegion: regionInput,
       forceRegenerate: true,
     });
+
+    if (draft.pickedLocalities?.length) {
+      console.log(
+        `[지역 적용] ${draft.blogRegion} → ${draft.pickedLocalities.join("·")}`,
+      );
+    }
 
     const thumbnailTexts = await ensureThumbnailTextsSynced(
       keywords,
@@ -153,7 +166,16 @@ export async function runContentStep(
       thumbnailText: thumbnailTexts.mainText,
     };
 
-    const workspace = await exportDraftWorkspace(draftWithThumbnail, keywords);
+    const workspace = await exportDraftWorkspace(
+      draftWithThumbnail,
+      keywords,
+      draft.blogRegion && draft.pickedLocalities
+        ? {
+            parentName: draft.blogRegion,
+            pickedShort: draft.pickedLocalities,
+          }
+        : undefined,
+    );
 
     console.log("\n─── 글 작성 완료 ───");
     console.log(`제목: ${draftWithThumbnail.title}`);
@@ -259,11 +281,12 @@ export async function runPublishStep(): Promise<void> {
 
   const keywordList = extractMainKeywords(keywords, draft.title);
   const keywordSlug = buildKeywordSlug(keywordList);
-  const useNaverSample =
-    config.naverUseSampleStyle && getEnabledPlatforms().includes("naver");
+  const enabledPlatforms = getEnabledPlatforms();
+  const needsPreparedImages =
+    enabledPlatforms.includes("naver") || enabledPlatforms.includes("tistory");
 
   let naverImages;
-  if (useNaverSample) {
+  if (needsPreparedImages) {
     const h2Titles = extractH2Titles(draft.htmlBody);
     const subThumbnails = (subThumbnailPaths ?? []).map((p, i) => ({
       path: p,

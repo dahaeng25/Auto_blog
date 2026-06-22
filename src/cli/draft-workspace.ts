@@ -25,6 +25,8 @@ export interface DraftWorkspaceMeta {
   topicId: number;
   createdAt: string;
   keywords?: string;
+  blogRegion?: string;
+  pickedLocalities?: string[];
   thumbnailPath?: string;
   subThumbnailPaths?: string[];
 }
@@ -82,6 +84,7 @@ export async function workspaceExists(): Promise<boolean> {
 export async function exportDraftWorkspace(
   draft: ArticleDraft,
   keywords: string,
+  regionMeta?: { parentName: string; pickedShort: string[] },
 ): Promise<string> {
   await fs.mkdir(CURRENT_WORKSPACE, { recursive: true });
 
@@ -89,6 +92,12 @@ export async function exportDraftWorkspace(
     topicId: draft.topicId,
     createdAt: draft.createdAt,
     keywords,
+    ...(regionMeta
+      ? {
+          blogRegion: regionMeta.parentName,
+          pickedLocalities: regionMeta.pickedShort,
+        }
+      : {}),
   };
 
   await Promise.all([

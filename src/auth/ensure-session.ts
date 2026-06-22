@@ -14,6 +14,12 @@ import {
   saveSession,
 } from "./session-manager.js";
 import { humanPause } from "../publishing/utils/human-input.js";
+import {
+  isWriteEditorVisible,
+  navigateToWritePage,
+  normalizeNaverBlogId,
+  normalizeTistoryBlogName,
+} from "./write-page-nav.js";
 
 function hasCredentials(platform: Platform): boolean {
   if (platform === "naver") {
@@ -34,39 +40,30 @@ async function isWritePageAccessible(
 ): Promise<boolean> {
   if (platform === "naver") {
     if (!config.naverBlogId) return false;
-    const url = PLATFORMS.naver.postWriteUrl(config.naverBlogId);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(2500);
-
-    if (/nidlogin|nid\.naver\.com\/nidlogin/i.test(page.url())) return false;
-
-    const iframe = page.locator("iframe#mainFrame").first();
-    if ((await iframe.count()) === 0) return false;
-
-    const handle = await iframe.elementHandle();
-    const frame = handle ? await handle.contentFrame() : null;
-    if (!frame) return false;
-
-    const title = frame.locator(".se-documentTitle").first();
-    return (await title.count()) > 0;
+    try {
+      await navigateToWritePage(
+        page,
+        "naver",
+        normalizeNaverBlogId(config.naverBlogId),
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   if (platform === "tistory") {
     if (!config.tistoryBlogName) return false;
-    const url = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(2500);
-
-    if (
-      /accounts\.kakao\.com|tistory\.com\/auth\/login|kauth\.kakao\.com/i.test(
-        page.url(),
-      )
-    ) {
+    try {
+      await navigateToWritePage(
+        page,
+        "tistory",
+        normalizeTistoryBlogName(config.tistoryBlogName),
+      );
+      return true;
+    } catch {
       return false;
     }
-
-    const title = page.locator("#post-title-inp, input[name='title']").first();
-    return (await title.count()) > 0 && (await title.isVisible());
   }
 
   if (platform === "google") {
@@ -157,18 +154,20 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
     if (platform === "naver") {
       await autoLoginNaver(page);
       if (config.naverBlogId) {
-        const writeUrl = PLATFORMS.naver.postWriteUrl(config.naverBlogId);
-        await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
-        await humanPause(3000);
+        await navigateToWritePage(
+          page,
+          "naver",
+          normalizeNaverBlogId(config.naverBlogId),
+        );
       }
     } else if (platform === "tistory") {
       await autoLoginTistory(page);
       if (config.tistoryBlogName) {
-        const writeUrl = PLATFORMS.tistory.postWriteUrl(
-          config.tistoryBlogName,
+        await navigateToWritePage(
+          page,
+          "tistory",
+          normalizeTistoryBlogName(config.tistoryBlogName),
         );
-        await page.goto(writeUrl, { waitUntil: "domcontentloaded" });
-        await humanPause(3000);
       }
     } else {
       throw new Error(

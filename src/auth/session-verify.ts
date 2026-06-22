@@ -9,6 +9,11 @@ import {
 } from "./login-check.js";
 import { getStateFilePath, requireSession } from "./session-manager.js";
 import { humanPause } from "../publishing/utils/human-input.js";
+import {
+  navigateToWritePage,
+  normalizeNaverBlogId,
+  normalizeTistoryBlogName,
+} from "./write-page-nav.js";
 
 export interface SessionVerifyResult {
   platform: Platform;
@@ -20,9 +25,13 @@ async function verifyNaverEditor(page: Page): Promise<string | null> {
   const blogId = config.naverBlogId;
   if (!blogId) return "NAVER_BLOG_ID 미설정";
 
-  const writeUrl = PLATFORMS.naver.postWriteUrl(blogId);
-  await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await humanPause(3000);
+  const writeUrl = await navigateToWritePage(
+    page,
+    "naver",
+    normalizeNaverBlogId(blogId),
+  );
+  console.log(`[검증] 네이버 글쓰기: ${writeUrl}`);
+  await humanPause(1000);
 
   await assertEditorAccessible(page, "naver");
 
@@ -50,9 +59,13 @@ async function verifyTistoryEditor(page: Page): Promise<string | null> {
   const blogName = config.tistoryBlogName;
   if (!blogName) return "TISTORY_BLOG_NAME 미설정";
 
-  const writeUrl = PLATFORMS.tistory.postWriteUrl(blogName);
-  await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await humanPause(3000);
+  const writeUrl = await navigateToWritePage(
+    page,
+    "tistory",
+    normalizeTistoryBlogName(blogName),
+  );
+  console.log(`[검증] 티스토리 글쓰기: ${writeUrl}`);
+  await humanPause(1000);
 
   await assertEditorAccessible(page, "tistory");
 

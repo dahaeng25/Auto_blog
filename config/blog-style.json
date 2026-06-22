@@ -1,44 +1,53 @@
 {
-  "$comment": "blue_directors 샘플 블로그(청사 디렉터스) 레이아웃·폰트 기준 — 네이버 전용",
-  "referenceBlog": "https://blog.naver.com/blue_directors",
+  "$comment": "강운준 행정사 kanghaeng1345 블로그 레이아웃 기준",
+  "referenceBlog": "https://blog.naver.com/kanghaeng1345",
   "referenceUrls": [
-    "https://blog.naver.com/blue_directors",
-    "https://blog.naver.com/blue_directors/224309169724",
-    "https://blog.naver.com/blue_directors/224297648088",
-    "https://blog.naver.com/blue_directors/224286122286"
+    "https://blog.naver.com/kanghaeng1345",
+    "https://blog.naver.com/kanghaeng1345/224291170877"
   ],
+  "brandTagline": "강운준 행정사 공장등록 나라장터 인허가 출입국비자",
   "typography": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
     "bodyFontSize": "16px",
-    "bodyLineHeight": "1.85",
+    "bodyLineHeight": "1.9",
     "bodyColor": "#333333",
     "introAlign": "center",
     "bodyAlign": "left",
-    "h2FontSize": "22px",
+    "h2FontSize": "20px",
     "h2FontWeight": "700",
-    "h2Color": "#1a3a5c",
-    "h2Align": "center",
-    "h2Margin": "32px 0 14px 0",
-    "h3FontSize": "18px",
+    "h2Color": "#222222",
+    "h2Align": "left",
+    "h2Margin": "36px 0 16px 0",
+    "h3FontSize": "17px",
     "h3FontWeight": "700",
     "h3Color": "#2a4a6c",
     "h3Align": "left",
-    "h3Margin": "20px 0 10px 0",
+    "h3Margin": "22px 0 12px 0",
     "tableFontSize": "15px",
     "listFontSize": "16px"
   },
   "divider": {
-    "html": "<p style=\"text-align:center;margin:28px 0;\"><span style=\"display:inline-block;width:72%;max-width:520px;border-top:1px solid #c8c8c8;\"></span></p>"
+    "html": "<hr style=\"border:none;border-top:1px solid #bbbbbb;margin:36px 0;width:100%;\">"
+  },
+  "brandBand": {
+    "html": "<p style=\"text-align:center;font-family:'Nanum Gothic','Malgun Gothic',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:20px 0;\">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>"
+  },
+  "blockquote": {
+    "borderColor": "#1a3a5c",
+    "background": "#f7f9fc"
   },
   "spacing": {
-    "paragraphMargin": "0 0 14px 0",
-    "introParagraphMargin": "0 0 12px 0"
+    "paragraphMargin": "0 0 18px 0",
+    "introParagraphMargin": "0 0 16px 0"
   },
   "structure": {
     "introParagraphCount": 4,
-    "minH2Sections": 6,
+    "minH2Sections": 4,
     "requireTable": true,
     "requireList": true,
-    "requireDisclaimer": true
+    "requireDisclaimer": true,
+    "requireQna": true,
+    "requireCaseStudy": true,
+    "minPlainTextChars": 3500
   }
 }

@@ -46,6 +46,7 @@ export const config = {
   ),
   thumbnailBrandPath: path.join(projectRoot, "assets", "thumbnail", "brand.json"),
   blogStylePath: path.join(projectRoot, "config", "blog-style.json"),
+  koreaRegionsPath: path.join(projectRoot, "config", "korea-regions.json"),
   imageManifestPath: path.join(projectRoot, "config", "image-manifest.json"),
   imagesDir: path.join(projectRoot, "assets", "images"),
   /** true이면 썸네일에 블로그 제목 부제목도 표시 */
@@ -53,7 +54,11 @@ export const config = {
   /** 키워드별 AI 배경 생성 (OpenAI DALL-E) */
   thumbnailDynamicBackground: process.env.THUMBNAIL_DYNAMIC_BG === "true",
   thumbnailBackgroundModel:
-    process.env.THUMBNAIL_BG_MODEL ?? "dall-e-2",
+    process.env.THUMBNAIL_BG_MODEL ?? "gpt-image-1",
+  /** 서브썸네일 AI 배경 동시 생성 수 (기본 3) */
+  subThumbnailBgConcurrency: Number(
+    process.env.SUB_THUMBNAIL_BG_CONCURRENCY ?? "3",
+  ),
 
   /** 단락별 서브썸네일 생성 (700×700) */
   subThumbnailEnabled: process.env.SUB_THUMBNAIL_ENABLED !== "false",
@@ -97,6 +102,8 @@ export const config = {
   authAutoLogin: process.env.AUTH_AUTO_LOGIN !== "false",
   /** 자동 로그인 시 브라우저 표시 (봇 차단 완화, 기본 false=창 보임) */
   authLoginHeadless: process.env.AUTH_LOGIN_HEADLESS === "true",
+  /** 2단계 인증 수동 완료 대기(ms). 0이면 대기 안 함. headless=false 일 때만 */
+  auth2faWaitMs: Number(process.env.AUTH_2FA_WAIT_MS ?? "180000"),
   naverId: process.env.NAVER_ID ?? "",
   naverPassword: process.env.NAVER_PASSWORD ?? "",
   kakaoId: process.env.KAKAO_ID ?? "",
@@ -109,6 +116,8 @@ export const config = {
   contentMode: (process.env.CONTENT_MODE ?? "gems") as "rss" | "gems",
   /** CONTENT_MODE=gems 일 때 작성할 블로그 주제 */
   blogTopic: process.env.BLOG_TOPIC ?? "",
+  /** gems 모드 지역(도·광역시). blog-region.txt 보다 CLI --region 우선 */
+  blogRegion: process.env.BLOG_REGION ?? "",
   /** true이면 같은 주제도 AI로 새로 생성 (기존 DB 레코드 삭제) */
   forceRegenerate: process.env.FORCE_REGENERATE === "true",
   /** true이면 published 주제도 기존 원고 재사용 후 퍼블리싱만 재시도 */

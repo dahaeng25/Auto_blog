@@ -1,8 +1,16 @@
 import type { Frame, Locator, Page } from "playwright";
 import { EDITOR_SELECTORS } from "../../../config/editor-selectors.js";
 import { config } from "../../../config/index.js";
-import { appendNaverBody, focusNaverBodyEnd } from "../utils/naver-editor.js";
-import { pasteHtmlToEditor } from "../utils/editor-paste.js";
+import {
+  appendNaverBody,
+  focusNaverBodyEnd,
+} from "../utils/naver-editor.js";
+import {
+  focusBeforeH2InEditor,
+  focusEditorEnd,
+  focusNaverBeforeH2,
+} from "../utils/editor-cursor.js";
+import { appendHtmlToEditor } from "../utils/editor-paste.js";
 import { splitSelectors } from "../utils/dom-utils.js";
 import { humanClick, humanPause } from "../utils/human-input.js";
 import { applyLinkInDialog } from "../utils/naver-link-dialog.js";
@@ -26,7 +34,7 @@ export interface FillBodyWithImagesOptions {
   editorContext: Frame | Page;
   imageButtonSelector: string;
   fileInputSelector: string;
-  /** 네이버 — 키워드 파일명·메타가 적용된 이미지 */
+  /** 키워드 파일명·메타가 적용된 이미지 (네이버·티스토리 공통) */
   preparedImages?: PreparedImageAsset[];
 }
 
@@ -86,7 +94,6 @@ async function uploadEditorImage(
   }
 }
 
-/** 네이버: 마지막 업로드 이미지에 링크 연결 */
 async function attachLinkToLastNaverImage(
   page: Page,
   frame: Frame,
@@ -94,7 +101,6 @@ async function attachLinkToLastNaverImage(
   platformName: string,
 ): Promise<void> {
   const contexts = [page, frame, ...page.frames()];
-
   await dismissNaverRightPanelIfVisible(page);
 
   const images = frame.locator(".se-component.se-image");
@@ -127,28 +133,6 @@ async function attachLinkToLastNaverImage(
   }
 
   await applyLinkInDialog(contexts, url, page, platformName);
-}
-
-/** 티스토리: HTML 링크 블록으로 대체 */
-async function attachLinkToLastTistoryImage(
-  page: Page,
-  editorLocator: Locator,
-  url: string,
-  platformName: string,
-): Promise<void> {
-  const linkHtml = `<p><a href="${url}" target="_blank" rel="noopener">자세히 보기</a></p>`;
-  await pasteHtmlToEditor(page, editorLocator, linkHtml);
-  console.log(`[${platformName}] 이미지 하단 링크 문단 삽입: ${url}`);
-}
-
-async function insertNaverSection(
-  frame: Frame,
-  bodyLocator: Locator,
-  html: string,
-): Promise<void> {
-  await focusNaverBodyEnd(frame);
-  await appendNaverBody(frame, bodyLocator, html);
-  await humanPause(400);
 }
 
 function resolveBodyImageForSection(
@@ -184,37 +168,21 @@ function resolveBodyImageForSection(
   };
 }
 
-async function fillNaverBodyWithImages(
+/** 1단계: 본문 텍스트만 순서대로 삽입 */
+async function insertAllTextNaver(
   options: FillBodyWithImagesOptions,
   intro: string | null,
   sections: ReturnType<typeof splitHtmlForPublishing>["sections"],
-  staticImages: ResolvedBodyImage[],
 ): Promise<void> {
   const frame = options.editorContext as Frame;
-  const prepared = options.preparedImages;
-  const thumbMeta = prepared?.find((p) => p.sequence === 1);
 
   await humanClick(options.bodyLocator);
   await focusNaverBodyEnd(frame);
 
-  if (!config.publishSkipThumbnail) {
-    await dismissNaverRightPanelIfVisible(options.page);
-    const beforeThumb = await countNaverImages(frame);
-    const thumbPath = thumbMeta?.absolutePath ?? options.thumbnailPath;
-    await uploadEditorImage(
-      options,
-      thumbPath,
-      `메인 썸네일${thumbMeta ? ` (${thumbMeta.filename})` : ""}`,
-      thumbMeta?.altText,
-    );
-    await waitForNaverImageIncrease(frame, beforeThumb);
-    await dismissNaverRightPanelIfVisible(options.page);
-  }
-
   if (intro) {
     console.log(`[${options.platformName}] 도입부 입력`);
     await dismissNaverRightPanelIfVisible(options.page);
-    await insertNaverSection(frame, options.bodyLocator, intro);
+    await appendNaverBody(frame, options.bodyLocator, intro);
   }
 
   for (let i = 0; i < sections.length; i++) {
@@ -222,30 +190,76 @@ async function fillNaverBodyWithImages(
     console.log(
       `[${options.platformName}] 단락 ${i + 1}/${sections.length}${section.h2Title ? `: ${section.h2Title}` : ""}`,
     );
+    await dismissNaverRightPanelIfVisible(options.page);
+    await appendNaverBody(frame, options.bodyLocator, section.html);
+  }
+}
 
+async function insertAllTextTistory(
+  options: FillBodyWithImagesOptions,
+  intro: string | null,
+  sections: ReturnType<typeof splitHtmlForPublishing>["sections"],
+): Promise<void> {
+  await humanClick(options.bodyLocator);
+  await humanPause(500);
+
+  if (intro) {
+    console.log(`[${options.platformName}] 도입부 입력`);
+    await appendHtmlToEditor(options.page, options.bodyLocator, intro);
+    await humanPause(400);
+  }
+
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i]!;
+    console.log(
+      `[${options.platformName}] 단락 ${i + 1}/${sections.length}${section.h2Title ? `: ${section.h2Title}` : ""}`,
+    );
+    await appendHtmlToEditor(options.page, options.bodyLocator, section.html);
+    await humanPause(400);
+  }
+}
+
+/** 2단계: 텍스트 삽입 후 이미지를 단락 사이에 삽입 (아래→위 순으로 커서 밀림 방지) */
+async function insertImagesNaver(
+  options: FillBodyWithImagesOptions,
+  sections: ReturnType<typeof splitHtmlForPublishing>["sections"],
+  staticImages: ResolvedBodyImage[],
+): Promise<void> {
+  if (config.publishSkipThumbnail) return;
+
+  const frame = options.editorContext as Frame;
+  const prepared = options.preparedImages;
+  const thumbMeta = prepared?.find((p) => p.sequence === 1);
+  const thumbPath = thumbMeta?.absolutePath ?? options.thumbnailPath;
+
+  for (let i = sections.length - 1; i >= 0; i--) {
+    const section = sections[i]!;
     const imageInfo = resolveBodyImageForSection(
       section.subThumbnailIndex,
       prepared,
       staticImages,
     );
-
-    if (imageInfo) {
-      await dismissNaverRightPanelIfVisible(options.page);
-      const before = await countNaverImages(frame);
-      await uploadEditorImage(
-        options,
-        imageInfo.path,
-        imageInfo.label,
-        imageInfo.altText,
-      );
-      await waitForNaverImageIncrease(frame, before);
-      await dismissNaverRightPanelIfVisible(options.page);
-    }
+    if (!imageInfo) continue;
 
     await dismissNaverRightPanelIfVisible(options.page);
-    await insertNaverSection(frame, options.bodyLocator, section.html);
 
-    if (imageInfo?.linkUrl) {
+    if (i === sections.length - 1) {
+      await focusNaverBodyEnd(frame);
+    } else {
+      const focused = await focusNaverBeforeH2(frame, i + 1);
+      if (!focused) await focusNaverBodyEnd(frame);
+    }
+
+    const before = await countNaverImages(frame);
+    await uploadEditorImage(
+      options,
+      imageInfo.path,
+      imageInfo.label,
+      imageInfo.altText,
+    );
+    await waitForNaverImageIncrease(frame, before);
+
+    if (imageInfo.linkUrl) {
       await attachLinkToLastNaverImage(
         options.page,
         frame,
@@ -254,56 +268,79 @@ async function fillNaverBodyWithImages(
       );
     }
   }
+
+  if (sections.length > 0) {
+    await dismissNaverRightPanelIfVisible(options.page);
+    const focused = await focusNaverBeforeH2(frame, 0);
+    if (!focused) await focusNaverBodyEnd(frame);
+
+    const beforeMain = await countNaverImages(frame);
+    await uploadEditorImage(
+      options,
+      thumbPath,
+      `메인 썸네일${thumbMeta ? ` (${thumbMeta.filename})` : ""}`,
+      thumbMeta?.altText,
+    );
+    await waitForNaverImageIncrease(frame, beforeMain);
+  } else if (thumbPath) {
+    await dismissNaverRightPanelIfVisible(options.page);
+    await focusNaverBodyEnd(frame);
+    const beforeMain = await countNaverImages(frame);
+    await uploadEditorImage(
+      options,
+      thumbPath,
+      `메인 썸네일${thumbMeta ? ` (${thumbMeta.filename})` : ""}`,
+      thumbMeta?.altText,
+    );
+    await waitForNaverImageIncrease(frame, beforeMain);
+  }
 }
 
-async function fillTistoryBodyWithImages(
+async function insertImagesTistory(
   options: FillBodyWithImagesOptions,
-  intro: string | null,
   sections: ReturnType<typeof splitHtmlForPublishing>["sections"],
   staticImages: ResolvedBodyImage[],
 ): Promise<void> {
-  await humanClick(options.bodyLocator);
-  await humanPause(1000);
+  if (config.publishSkipThumbnail) return;
 
-  if (!config.publishSkipThumbnail) {
-    await uploadEditorImage(options, options.thumbnailPath, "메인 썸네일");
-    await humanPause(1000);
-  }
+  const prepared = options.preparedImages;
+  const thumbMeta = prepared?.find((p) => p.sequence === 1);
+  const thumbPath = thumbMeta?.absolutePath ?? options.thumbnailPath;
 
-  if (intro) {
-    await pasteHtmlToEditor(options.page, options.bodyLocator, intro);
-    await humanPause(500);
-  }
-
-  for (let i = 0; i < sections.length; i++) {
+  for (let i = sections.length - 1; i >= 0; i--) {
     const section = sections[i]!;
     const imageInfo = resolveBodyImageForSection(
       section.subThumbnailIndex,
-      options.preparedImages,
+      prepared,
       staticImages,
     );
+    if (!imageInfo) continue;
 
-    if (imageInfo) {
-      await uploadEditorImage(options, imageInfo.path, imageInfo.label);
-      await humanPause(1500);
+    if (i === sections.length - 1) {
+      await focusEditorEnd(options.bodyLocator);
+    } else {
+      const focused = await focusBeforeH2InEditor(options.bodyLocator, i + 1);
+      if (!focused) await humanPause(300);
     }
 
-    await pasteHtmlToEditor(options.page, options.bodyLocator, section.html);
-    await humanPause(500);
+    await uploadEditorImage(options, imageInfo.path, imageInfo.label);
+    await humanPause(1200);
+  }
 
-    if (imageInfo?.linkUrl) {
-      await attachLinkToLastTistoryImage(
-        options.page,
-        options.bodyLocator,
-        imageInfo.linkUrl,
-        options.platformName,
-      );
-    }
+  if (sections.length > 0) {
+    const focused = await focusBeforeH2InEditor(options.bodyLocator, 0);
+    if (!focused) await humanPause(300);
+    await uploadEditorImage(options, thumbPath, "메인 썸네일");
+    await humanPause(1200);
+  } else if (thumbPath) {
+    await uploadEditorImage(options, thumbPath, "메인 썸네일");
+    await humanPause(1200);
   }
 }
 
 /**
- * 메인 썸네일 + 단락별 서브썸네일(상단 배치) + 본문 HTML 순차 삽입
+ * 본문 텍스트를 먼저 순서대로 삽입한 뒤,
+ * 메인·서브 썸네일을 단락 사이에 삽입합니다.
  */
 export async function fillBodyWithImages(
   options: FillBodyWithImagesOptions,
@@ -312,13 +349,17 @@ export async function fillBodyWithImages(
   const { intro, sections } = splitHtmlForPublishing(options.htmlBody);
 
   console.log(
-    `[${options.platformName}] 도입부 ${intro ? "있음" : "없음"}, h2 단락 ${sections.length}개`,
+    `[${options.platformName}] 1단계: 본문 텍스트 삽입 (도입부 ${intro ? "있음" : "없음"}, h2 ${sections.length}개)`,
   );
 
   if (options.platform === "naver") {
-    await fillNaverBodyWithImages(options, intro, sections, staticImages);
+    await insertAllTextNaver(options, intro, sections);
+    console.log(`[${options.platformName}] 2단계: 썸네일 이미지 단락 사이 삽입`);
+    await insertImagesNaver(options, sections, staticImages);
     return;
   }
 
-  await fillTistoryBodyWithImages(options, intro, sections, staticImages);
+  await insertAllTextTistory(options, intro, sections);
+  console.log(`[${options.platformName}] 2단계: 썸네일 이미지 단락 사이 삽입`);
+  await insertImagesTistory(options, sections, staticImages);
 }

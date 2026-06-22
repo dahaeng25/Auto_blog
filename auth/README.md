@@ -24,15 +24,31 @@ KAKAO_PASSWORD=카카오비밀번호
 
 이후 평소처럼 `npm run run:once`만 실행하면 됩니다.
 
-## 수동 로그인 (캡차/2단계 인증 시)
+## 수동 로그인 (캡차/2단계 인증 시) — **권장**
 
-자동 로그인이 실패하면 (캡차, OTP 등):
+OTP·SMS·캡차는 **완전 자동 입력을 지원하지 않습니다** (보안·정책상 불가).
+대신 아래 방법을 사용하세요.
+
+### 방법 1: 세션 한 번 저장 (가장 안정적)
 
 ```powershell
 npm.cmd run auth:setup
 ```
 
-브라우저에서 직접 로그인 후 Enter를 누르세요.
+브라우저가 열리면 네이버·티스토리에 **직접 로그인**(2단계 인증 포함) 후 Enter.
+`auth/naver_state.json`, `auth/tistory_state.json`이 생성되며 이후 수 주간 재사용됩니다.
+
+### 방법 2: 자동 로그인 + 브라우저에서 2단계 인증
+
+`.env` 설정:
+
+```env
+AUTH_AUTO_LOGIN=true
+AUTH_LOGIN_HEADLESS=false
+AUTH_2FA_WAIT_MS=180000
+```
+
+세션 만료 시 ID/PW 자동 입력 후, 2단계 인증 화면이 나오면 **열린 브라우저에서 직접 완료**하면 됩니다 (최대 3분 대기).
 
 ## 세션 확인
 

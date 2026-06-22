@@ -18,7 +18,7 @@ export const PLATFORMS = {
     verifyUrl: "https://www.naver.com",
     /** 글쓰기 URL — NAVER_BLOG_ID 환경변수 필요 */
     postWriteUrl: (blogId: string) =>
-      `https://blog.naver.com/${blogId}/postwrite`,
+      `https://blog.naver.com/${blogId.replace(/^https?:\/\/blog\.naver\.com\//i, "").replace(/\/.*$/, "")}?Redirect=Write`,
     stateFile: path.join(projectRoot, "auth", "naver_state.json"),
   },
   tistory: {

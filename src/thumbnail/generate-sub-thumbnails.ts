@@ -1,9 +1,11 @@
+import type { Browser } from "playwright-core";
 import { config } from "../../config/index.js";
 import {
   buildSubThumbnailFilename,
   extractH2Titles,
 } from "../publishing/images/keyword-slug.js";
-import { generateSectionBackground } from "./background-generator.js";
+import { launchChromium } from "../browser/launch-chromium.js";
+import { generateSectionBackgroundsBatch } from "./background-generator.js";
 import { SubThumbnailRenderer } from "./sub-thumbnail-renderer.js";
 
 export interface GenerateSubThumbnailsInput {
@@ -40,44 +42,57 @@ export async function generateSubThumbnails(
   }
 
   const renderer = new SubThumbnailRenderer();
-  const results: GeneratedSubThumbnail[] = [];
   const useAiBackground = config.subThumbnailDynamicBackground;
 
   console.log(
     `[SubThumbnail] ${h2Titles.length}개 단락 썸네일 생성 시작` +
-      (useAiBackground ? " (AI 배경)" : " (그라데이션 배경)"),
+      (useAiBackground
+        ? ` (AI 배경, 동시 ${config.subThumbnailBgConcurrency}건)`
+        : " (그라데이션 배경)"),
   );
 
-  for (let i = 0; i < h2Titles.length; i++) {
-    const sectionTitle = h2Titles[i]!;
-    const sequence = i + 2;
-    const filename = buildSubThumbnailFilename(input.title, sequence);
+  let backgroundPaths: Array<string | null> = h2Titles.map(() => null);
 
-    let backgroundPath: string | null = null;
-    if (useAiBackground) {
-      backgroundPath = await generateSectionBackground(
-        input.keywords,
+  if (useAiBackground) {
+    const started = Date.now();
+    backgroundPaths = await generateSectionBackgroundsBatch(
+      h2Titles.map((sectionTitle, i) => ({
+        keywords: input.keywords,
         sectionTitle,
-        input.keywordSlug,
-        i,
+        slug: input.keywordSlug,
+        sectionIndex: i,
+      })),
+    );
+    const aiCount = backgroundPaths.filter(Boolean).length;
+    console.log(
+      `[SubThumbnail] AI 배경 ${aiCount}/${h2Titles.length}건 완료 (${Math.round((Date.now() - started) / 1000)}초)`,
+    );
+    if (aiCount < h2Titles.length) {
+      console.warn(
+        `[SubThumbnail] ${h2Titles.length - aiCount}건은 그라데이션 폴백`,
       );
-      if (!backgroundPath) {
-        console.warn(
-          `[SubThumbnail] AI 배경 실패 — 그라데이션 폴백 (${sectionTitle})`,
-        );
-      }
     }
-
-    const path = await renderer.render({
-      sectionTitle,
-      backgroundPath,
-      outputFilename: filename,
-    });
-
-    results.push({ path, sectionTitle, sequence, filename });
-    console.log(`[SubThumbnail] ${i + 1}/${h2Titles.length}: ${filename}`);
   }
 
-  console.log(`[SubThumbnail] 완료: ${results.length}개`);
-  return results;
+  const renderItems = h2Titles.map((sectionTitle, i) => ({
+    sectionTitle,
+    backgroundPath: backgroundPaths[i] ?? null,
+    outputFilename: buildSubThumbnailFilename(input.title, i + 2),
+  }));
+
+  const browser = await launchChromium({ headless: true });
+  try {
+    const paths = await renderer.renderBatch(browser, renderItems);
+    const results: GeneratedSubThumbnail[] = paths.map((path, i) => ({
+      path,
+      sectionTitle: h2Titles[i]!,
+      sequence: i + 2,
+      filename: renderItems[i]!.outputFilename,
+    }));
+
+    console.log(`[SubThumbnail] 완료: ${results.length}개`);
+    return results;
+  } finally {
+    await browser.close();
+  }
 }

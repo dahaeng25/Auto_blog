@@ -36,16 +36,32 @@ function parseKeywordsFile(argv: string[]): string | undefined {
   return undefined;
 }
 
+function parseRegion(argv: string[]): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--region" || arg === "-r") {
+      const next = argv[i + 1]?.trim();
+      if (next) return next;
+    }
+    if (arg.startsWith("--region=")) {
+      return arg.slice("--region=".length).trim();
+    }
+  }
+  return undefined;
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const step = parseStep(argv);
   const blogTopic = parseTopicFromArgv(argv);
+  const blogRegion = parseRegion(argv);
   const keywordsFile = parseKeywordsFile(argv);
   const skipEdit = argv.includes("--skip-edit");
 
   await runWorkflow({
     step,
     blogTopic,
+    blogRegion,
     keywordsFile,
     skipEditPrompt: skipEdit,
   });

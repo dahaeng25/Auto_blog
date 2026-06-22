@@ -6,30 +6,16 @@ import {
   isNaverLoggedIn,
   isTistoryLoggedIn,
 } from "./login-check.js";
-
-/** 네이버 로그인 폼 — paste 차단 우회 */
-async function fillNaverField(
-  page: Page,
-  selector: string,
-  value: string,
-): Promise<void> {
-  const input = page.locator(selector).first();
-  await input.waitFor({ state: "visible", timeout: 15_000 });
-  await humanClick(input);
-  await humanPause(200);
-
-  await page.evaluate(
-    ({ sel, val }) => {
-      const el = document.querySelector(sel) as HTMLInputElement | null;
-      if (!el) return;
-      el.value = val;
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    },
-    { sel: selector, val: value },
-  );
-  await humanPause(300);
-}
+import {
+  fillFieldByEvaluate,
+  isManualAuthScreen,
+  waitForManualAuth,
+} from "./auth-wait.js";
+import {
+  navigateToWritePage,
+  normalizeNaverBlogId,
+  normalizeTistoryBlogName,
+} from "./write-page-nav.js";
 
 /** 네이버 ID/PW 자동 로그인 */
 export async function autoLoginNaver(page: Page): Promise<void> {
@@ -46,10 +32,9 @@ export async function autoLoginNaver(page: Page): Promise<void> {
   });
   await humanPause(1500);
 
-  await fillNaverField(page, "#id", config.naverId);
-  await fillNaverField(page, "#pw", config.naverPassword);
+  await fillFieldByEvaluate(page, "#id", config.naverId);
+  await fillFieldByEvaluate(page, "#pw", config.naverPassword);
 
-  // 로그인 상태 유지
   const keepLogin = page.locator("#keep").first();
   try {
     if ((await keepLogin.count()) > 0 && !(await keepLogin.isChecked())) {
@@ -65,23 +50,23 @@ export async function autoLoginNaver(page: Page): Promise<void> {
   await humanClick(loginBtn);
   await humanPause(3000);
 
-  // 로그인 완료 대기 (최대 30초)
   for (let i = 0; i < 30; i++) {
-    const url = page.url();
-    if (!/nidlogin|nid\.naver\.com\/nidlogin/i.test(url)) {
-      const loggedIn = await isNaverLoggedIn(page.context());
-      if (loggedIn) {
-        console.log("[자동 로그인] 네이버 로그인 성공");
-        return;
-      }
+    if (await isNaverLoggedIn(page.context())) {
+      console.log("[자동 로그인] 네이버 로그인 성공");
+      return;
     }
 
-    // 캡차/2단계 인증 화면
-    const captcha = page.locator("#captcha, .captcha, #otp, .otp").first();
-    if ((await captcha.count()) > 0 && (await captcha.isVisible())) {
+    if (await isManualAuthScreen(page)) {
+      const completed = await waitForManualAuth(
+        page,
+        () => isNaverLoggedIn(page.context()),
+        "네이버",
+      );
+      if (completed) return;
       throw new Error(
-        "네이버 캡차/2단계 인증이 필요합니다. " +
-          "브라우저에서 직접 완료하려면 npm run auth:setup 을 사용하세요.",
+        "네이버 2단계 인증 시간 초과.\n" +
+          "  • npm run auth:setup 으로 한 번 수동 로그인 후 세션을 저장하세요.\n" +
+          "  • .env 에 AUTH_LOGIN_HEADLESS=false 로 브라우저를 띄운 뒤 재시도하세요.",
       );
     }
 
@@ -91,6 +76,142 @@ export async function autoLoginNaver(page: Page): Promise<void> {
   throw new Error(
     "네이버 자동 로그인 실패 — ID/PW를 확인하거나 npm run auth:setup 으로 수동 로그인하세요.",
   );
+}
+
+async function clickKakaoLoginOnTistory(page: Page): Promise<void> {
+  const selectors = [
+    'a[href*="kakao"]',
+    'button:has-text("카카오")',
+    'a:has-text("카카오")',
+    ".btn_kakao",
+    '[class*="kakao"]',
+    'button:has-text("시작하기")',
+  ];
+
+  for (const sel of selectors) {
+    const btn = page.locator(sel).first();
+    try {
+      if ((await btn.count()) > 0 && (await btn.isVisible())) {
+        await humanClick(btn);
+        await humanPause(3000);
+        return;
+      }
+    } catch {
+      // 다음 셀렉터
+    }
+  }
+}
+
+async function fillKakaoLoginForm(
+  page: Page,
+  kakaoId: string,
+  kakaoPassword: string,
+): Promise<void> {
+  const idSelectors = [
+    'input[name="loginId"]',
+    "#loginId--1",
+    'input[type="email"]',
+    'input[type="text"][autocomplete="username"]',
+  ];
+  const pwSelectors = [
+    'input[name="password"]',
+    "#password--2",
+    'input[type="password"]',
+  ];
+
+  let idFilled = false;
+  for (const sel of idSelectors) {
+    try {
+      const input = page.locator(sel).first();
+      if ((await input.count()) > 0 && (await input.isVisible())) {
+        await fillFieldByEvaluate(page, sel, kakaoId);
+        idFilled = true;
+        break;
+      }
+    } catch {
+      // 다음
+    }
+  }
+  if (!idFilled) {
+    throw new Error("카카오 로그인 ID 입력란을 찾을 수 없습니다.");
+  }
+
+  let pwFilled = false;
+  for (const sel of pwSelectors) {
+    try {
+      const input = page.locator(sel).first();
+      if ((await input.count()) > 0 && (await input.isVisible())) {
+        await fillFieldByEvaluate(page, sel, kakaoPassword);
+        pwFilled = true;
+        break;
+      }
+    } catch {
+      // 다음
+    }
+  }
+  if (!pwFilled) {
+    throw new Error("카카오 로그인 비밀번호 입력란을 찾을 수 없습니다.");
+  }
+
+  const submitSelectors = [
+    'button[type="submit"]',
+    'button:has-text("로그인")',
+    ".btn_confirm",
+    ".submit",
+    'button.btn_g.highlight',
+  ];
+
+  for (const sel of submitSelectors) {
+    const btn = page.locator(sel).first();
+    try {
+      if ((await btn.count()) > 0 && (await btn.isVisible())) {
+        await humanClick(btn);
+        await humanPause(3000);
+        return;
+      }
+    } catch {
+      // 다음
+    }
+  }
+
+  throw new Error("카카오 로그인 버튼을 찾을 수 없습니다.");
+}
+
+/** 카카오 동의·계속하기 화면 처리 */
+async function handleKakaoPostLogin(page: Page): Promise<void> {
+  const continueSelectors = [
+    'button:has-text("동의")',
+    'button:has-text("계속")',
+    'button:has-text("확인")',
+    'button:has-text("Accept")',
+    'a:has-text("계속")',
+  ];
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const url = page.url();
+    if (
+      url.includes("tistory.com") &&
+      !url.includes("auth/login") &&
+      !url.includes("accounts.kakao.com")
+    ) {
+      return;
+    }
+
+    for (const sel of continueSelectors) {
+      const btn = page.locator(sel).first();
+      try {
+        if ((await btn.count()) > 0 && (await btn.isVisible())) {
+          await humanClick(btn);
+          await humanPause(2000);
+          break;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    await humanPause(1500);
+  }
 }
 
 /** 티스토리(카카오) 자동 로그인 */
@@ -111,75 +232,68 @@ export async function autoLoginTistory(page: Page): Promise<void> {
   });
   await humanPause(2000);
 
-  // 카카오 로그인 버튼
-  const kakaoBtn = page
-    .locator(
-      'a[href*="kakao"], button:has-text("카카오"), .btn_kakao, [class*="kakao"]',
-    )
-    .first();
+  await clickKakaoLoginOnTistory(page);
 
-  if ((await kakaoBtn.count()) > 0 && (await kakaoBtn.isVisible())) {
-    await humanClick(kakaoBtn);
-    await humanPause(3000);
+  if (!page.url().includes("accounts.kakao.com")) {
+    await clickKakaoLoginOnTistory(page);
   }
 
-  // 카카오 로그인 폼
-  const idInput = page
-    .locator('input[name="loginId"], input#loginId--1, input[type="text"]')
-    .first();
-  const pwInput = page
-    .locator('input[name="password"], input#password--2, input[type="password"]')
-    .first();
+  if (!page.url().includes("accounts.kakao.com")) {
+    console.log("[자동 로그인] 카카오 로그인 페이지로 직접 이동...");
+    await page.goto(
+      "https://accounts.kakao.com/login/?continue=https%3A%2F%2Fwww.tistory.com%2Fauth%2Fkakao%2Fcallback",
+      { waitUntil: "domcontentloaded", timeout: 60_000 },
+    );
+    await humanPause(2000);
+  }
 
-  await idInput.waitFor({ state: "visible", timeout: 20_000 });
-  await humanClick(idInput);
-  await idInput.fill(kakaoId);
-  await humanPause(300);
-
-  await humanClick(pwInput);
-  await pwInput.fill(kakaoPassword);
-  await humanPause(300);
-
-  const submitBtn = page
-    .locator(
-      'button[type="submit"], button:has-text("로그인"), .btn_confirm, .submit',
-    )
-    .first();
-  await humanClick(submitBtn);
-  await humanPause(4000);
+  await fillKakaoLoginForm(page, kakaoId, kakaoPassword);
+  await handleKakaoPostLogin(page);
 
   for (let i = 0; i < 40; i++) {
-    const url = page.url();
-    if (
-      url.includes("tistory.com") &&
-      !url.includes("auth/login") &&
-      !url.includes("accounts.kakao.com")
-    ) {
-      const loggedIn = await isTistoryLoggedIn(page.context());
-      if (loggedIn) {
-        console.log("[자동 로그인] 티스토리 로그인 성공");
-        return;
-      }
+    if (await isTistoryLoggedIn(page.context())) {
+      console.log("[자동 로그인] 티스토리 로그인 성공");
+      return;
     }
 
+    if (await isManualAuthScreen(page)) {
+      const completed = await waitForManualAuth(
+        page,
+        () => isTistoryLoggedIn(page.context()),
+        "티스토리(카카오)",
+      );
+      if (completed) return;
+      throw new Error(
+        "티스토리/카카오 2단계 인증 시간 초과.\n" +
+          "  • npm run auth:setup 으로 한 번 수동 로그인 후 세션을 저장하세요.",
+      );
+    }
+
+    await handleKakaoPostLogin(page);
     await humanPause(1000);
   }
 
   throw new Error(
-    "티스토리 자동 로그인 실패 — 카카오 계정을 확인하거나 npm run auth:setup 을 사용하세요.",
+    "티스토리 자동 로그인 실패 — 카카오 계정을 확인하거나 npm run auth:setup 을 사용하세요.\n" +
+      "  • KAKAO_ID는 카카오 로그인 이메일/전화번호여야 합니다.\n" +
+      "  • TISTORY_BLOG_NAME이 블로그 주소와 일치하는지 확인하세요. (예: kanghaeng1345)",
   );
 }
 
 /** 글쓰기 페이지 방문으로 세션 쿠키 확보 */
 export async function visitWritePageForSession(page: Page): Promise<void> {
   if (config.naverBlogId) {
-    const url = PLATFORMS.naver.postWriteUrl(config.naverBlogId);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(2000);
+    await navigateToWritePage(
+      page,
+      "naver",
+      normalizeNaverBlogId(config.naverBlogId),
+    );
   }
   if (config.tistoryBlogName) {
-    const url = PLATFORMS.tistory.postWriteUrl(config.tistoryBlogName);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(2000);
+    await navigateToWritePage(
+      page,
+      "tistory",
+      normalizeTistoryBlogName(config.tistoryBlogName),
+    );
   }
 }

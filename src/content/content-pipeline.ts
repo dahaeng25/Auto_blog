@@ -15,6 +15,11 @@ import {
   refreshThumbnailTexts,
   thumbnailMatchesTopic,
 } from "../thumbnail/resolve-thumbnail-texts.js";
+import {
+  pickBlogRegions,
+  resolveBlogRegionInput,
+} from "./regions/pick-regions.js";
+import { refineTitleAndThumbnail } from "./seo/title-seo-refiner.js";
 import { TopicRepository } from "./farming/topic-repository.js";
 import type { ArticleDraft, ContentRunOptions, RawTopic } from "./types.js";
 
@@ -44,9 +49,19 @@ export class ContentPipeline {
   async run(options: ContentRunOptions = {}): Promise<ArticleDraft> {
     console.log("\n═══ Phase 2: 콘텐츠 생성 파이프라인 ═══\n");
     console.log(`[Content] 모드: ${config.contentMode}`);
-
     if (config.contentMode === "gems") {
-      return this.runGemsMode(options.blogTopic, options.forceRegenerate);
+      const model =
+        config.llmProvider === "gemini"
+          ? config.geminiModel
+          : config.openaiModel;
+      console.log(
+        `[Content] LLM: ${config.llmProvider} / ${model} | Gems 프롬프트: ${config.gemsPromptPath}`,
+      );
+      return this.runGemsMode(
+        options.blogTopic,
+        options.forceRegenerate,
+        options.blogRegion,
+      );
     }
     return this.runRssMode();
   }
@@ -68,7 +83,11 @@ export class ContentPipeline {
   }
 
   /** 사용자 지정 주제 + Gems 프롬프트 단일 생성 */
-  private async runGemsMode(blogTopicOverride?: string, forceRegenerate?: boolean): Promise<ArticleDraft> {
+  private async runGemsMode(
+    blogTopicOverride?: string,
+    forceRegenerate?: boolean,
+    blogRegionOverride?: string,
+  ): Promise<ArticleDraft> {
     const blogTopic = blogTopicOverride?.trim() || config.blogTopic;
     if (!blogTopic) {
       throw new Error(
@@ -132,28 +151,45 @@ export class ContentPipeline {
     }
 
     const topicId = await this.repo.insertTopic(topic);
-    const gems = await this.gemsAgent.run(blogTopic);
+
+    const regionInput = await resolveBlogRegionInput(blogRegionOverride);
+    const regionPick = pickBlogRegions(regionInput);
+    console.log(
+      `[Gems] 지역 풀: ${regionPick.parentName} → ${regionPick.pickedShort.join("·")}`,
+    );
+
+    const gems = await this.gemsAgent.run(blogTopic, regionPick);
+
+    const seoRefined = await refineTitleAndThumbnail({
+      topic: blogTopic,
+      title: gems.title,
+      thumbnailText: gems.thumbnailText,
+      thumbnailTopLabel: gems.thumbnailTopLabel,
+      region: regionPick,
+    });
 
     const inputPhrases = extractInputKeywordPhrases(blogTopic);
     let thumbnailTopLabel =
+      seoRefined.thumbnailTopLabel ||
       gems.thumbnailTopLabel ||
       buildTopLabelFromKeywords(
         inputPhrases.length > 0
           ? inputPhrases
           : blogTopic.split(/[,，/|·]+/).map((s) => s.trim()).filter(Boolean),
       );
-    let thumbnailText = gems.thumbnailText;
+    let thumbnailText = seoRefined.thumbnailText;
+    const finalTitle = seoRefined.title;
 
     if (
       !thumbnailMatchesTopic(
         blogTopic,
-        gems.title,
+        finalTitle,
         thumbnailTopLabel,
         thumbnailText,
       )
     ) {
       console.log("[Gems] 썸네일 문구가 키워드와 불일치 — 재생성");
-      const refreshed = await refreshThumbnailTexts(blogTopic, gems.title);
+      const refreshed = await refreshThumbnailTexts(blogTopic, finalTitle);
       thumbnailTopLabel = refreshed.topLabel;
       thumbnailText = refreshed.mainText;
     }
@@ -161,10 +197,12 @@ export class ContentPipeline {
     return this.saveDraft({
       topicId,
       sourceTopic: topic,
-      title: gems.title,
+      title: finalTitle,
       htmlBody: gems.htmlBody,
       thumbnailText,
       thumbnailTopLabel,
+      blogRegion: regionPick.parentName,
+      pickedLocalities: regionPick.pickedShort,
     });
   }
 
