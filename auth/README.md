@@ -4,6 +4,7 @@
 
 - `naver_state.json` — 네이버 로그인 쿠키/스토리지
 - `tistory_state.json` — 티스토리 로그인 쿠키/스토리지
+- `google_state.json` — Google Blogger 로그인 쿠키/스토리지
 
 **주의:** 이 파일들은 `.gitignore`에 포함되어 있으며, 절대 Git에 커밋하지 마세요.
 
