@@ -6,6 +6,8 @@ import { ContentPipeline } from "../content/content-pipeline.js";
 import { TopicRepository } from "../content/farming/topic-repository.js";
 import { ensureWritableDirs } from "../fs/ensure-writable-dirs.js";
 import { logger } from "../monitoring/logger.js";
+import { notifyError, notifySuccess } from "../monitoring/discord-notifier.js";
+import { persistPublishedPosts } from "../content/seo/persist-published-posts.js";
 import { prepareNaverImageSet } from "../publishing/images/prepare-naver-images.js";
 import {
   buildKeywordSlug,
@@ -17,10 +19,11 @@ import { PublishPipeline } from "../publishing/publish-pipeline.js";
 import { ThumbnailRenderer } from "../thumbnail/thumbnail-renderer.js";
 import { generateSubThumbnails } from "../thumbnail/generate-sub-thumbnails.js";
 import { normalizeTopicInput } from "./resolve-blog-topic.js";
-import { resolveBlogRegionInput } from "../content/regions/pick-regions.js";
+import { resolveBlogRegionInput, pickBlogRegions } from "../content/regions/pick-regions.js";
 import {
   exportDraftWorkspace,
   getWorkspaceDir,
+  initImportWorkspace,
   loadDraftFromWorkspace,
   openDraftEditors,
   openPathInViewer,
@@ -29,21 +32,28 @@ import {
   saveThumbnailPath,
   saveSubThumbnailPaths,
   updateWorkspaceThumbnailTexts,
+  validateImportedDraft,
   workspaceExists,
   writePreviewHtml,
 } from "./draft-workspace.js";
 import {
   refreshThumbnailTexts,
   shouldRefreshThumbnailTexts,
+  buildTopLabelFromTitleAndKeywords,
 } from "../thumbnail/resolve-thumbnail-texts.js";
 
 export type WorkflowStep =
   | "content"
+  | "import"
   | "edit"
   | "thumbnail"
   | "thumbnail-preview"
   | "publish"
-  | "full";
+  | "full"
+  | "import-full"
+  | "import-resume";
+
+export type WorkflowMode = "ai" | "import";
 
 export interface WorkflowRunOptions {
   step: WorkflowStep;
@@ -53,6 +63,8 @@ export interface WorkflowRunOptions {
   blogRegion?: string;
   keywordsFile?: string;
   skipEditPrompt?: boolean;
+  /** blog-run.bat — Node readline 대신 배치 pause 사용 */
+  batchMode?: boolean;
 }
 
 const DEFAULT_KEYWORDS_FILE = "blog-keywords.txt";
@@ -76,7 +88,14 @@ async function resolveKeywords(options: WorkflowRunOptions): Promise<string> {
   }
 }
 
-async function promptContinue(message: string): Promise<boolean> {
+async function promptContinue(
+  message: string,
+  batchMode?: boolean,
+): Promise<boolean> {
+  if (batchMode) {
+    console.log(`\n${message} — 배치 메뉴에서 업로드 [7]을 선택하세요.`);
+    return false;
+  }
   const rl = readline.createInterface({ input, output });
   try {
     const answer = await rl.question(`\n${message} (y/N) > `);
@@ -86,7 +105,12 @@ async function promptContinue(message: string): Promise<boolean> {
   }
 }
 
-async function waitForEnter(message: string): Promise<void> {
+async function waitForEnter(message: string, batchMode?: boolean): Promise<void> {
+  if (batchMode) {
+    console.log(`\n${message}`);
+    console.log("(배치 파일에서 아무 키나 누르면 다음 단계로 진행됩니다)");
+    return;
+  }
   const rl = readline.createInterface({ input, output });
   try {
     await rl.question(`\n${message}\nEnter를 누르면 계속합니다...`);
@@ -101,26 +125,31 @@ async function ensureThumbnailTextsSynced(
   title: string,
   topLabel: string,
   mainText: string,
+  htmlBody?: string,
 ): Promise<{ topLabel: string; mainText: string }> {
   const meta = await readWorkspaceMeta();
-  const needsRefresh = shouldRefreshThumbnailTexts(
-    meta?.keywords,
-    keywords,
-    title,
-    topLabel,
-    mainText,
-  );
+  const needsRefresh =
+    shouldRefreshThumbnailTexts(
+      meta?.keywords,
+      keywords,
+      title,
+      topLabel,
+      mainText,
+      htmlBody,
+    ) ||
+    (meta?.savedTitle && meta.savedTitle !== title.trim());
 
   if (!needsRefresh) {
     return { topLabel, mainText };
   }
 
-  console.log("[Thumbnail] 키워드·제목에 맞게 썸네일 문구를 다시 생성합니다...");
-  const refreshed = await refreshThumbnailTexts(keywords, title);
+  console.log("[Thumbnail] 제목·본문에 맞게 썸네일 문구를 생성합니다...");
+  const refreshed = await refreshThumbnailTexts(keywords, title, htmlBody);
   await updateWorkspaceThumbnailTexts(
     refreshed.topLabel,
     refreshed.mainText,
     keywords,
+    title,
   );
   console.log(`[Thumbnail] 상단: ${refreshed.topLabel}`);
   console.log(`[Thumbnail] 가운데: ${refreshed.mainText.replace(/\n/g, " / ")}`);
@@ -158,6 +187,7 @@ export async function runContentStep(
       draft.title,
       draft.thumbnailTopLabel ?? "",
       draft.thumbnailText,
+      draft.htmlBody,
     );
 
     const draftWithThumbnail = {
@@ -190,6 +220,98 @@ export async function runContentStep(
   }
 }
 
+/** 외부 원고: 편집 폴더 준비 + 붙여넣기 안내 (Gems·Notebook LM) */
+export async function runImportStep(
+  options: WorkflowRunOptions,
+): Promise<void> {
+  await ensureWritableDirs();
+
+  const keywords = await resolveKeywords(options);
+  console.log(`\n[키워드] ${keywords} (썸네일·SEO용)`);
+
+  const regionInput = await resolveBlogRegionInput(options.blogRegion);
+  const regionPick = regionInput ? pickBlogRegions(regionInput) : undefined;
+  if (regionPick) {
+    console.log(
+      `[지역] ${regionPick.parentName} → ${regionPick.pickedShort.join("·")}`,
+    );
+  }
+
+  const topLabel = buildTopLabelFromTitleAndKeywords("", keywords);
+
+  const workspace = await initImportWorkspace(
+    keywords,
+    regionPick
+      ? { parentName: regionPick.parentName, pickedShort: regionPick.pickedShort }
+      : undefined,
+    { topLabel, mainText: "" },
+  );
+
+  await openDraftEditors();
+
+  console.log("\n═══ 외부 원고 붙여넣기 ═══");
+  console.log(`편집 폴더: ${workspace}`);
+  console.log("\n다음 파일에 Gems·Notebook LM 원고를 붙여넣고 저장하세요:");
+  console.log("  • title.txt      — 제목");
+  console.log("  • body.html      — HTML 본문");
+  console.log("\n저장 후:");
+  console.log("  • [2] 전체(외부 원고) 또는 [5] 썸네일 생성");
+  console.log("  • 썸네일 문구는 제목·본문 저장 후 자동 생성됩니다.");
+}
+
+/** 붙여넣기 완료 후 — 검증 + 썸네일 문구 동기화 + 썸네일 생성 */
+export async function runImportResumeStep(): Promise<void> {
+  await writePreviewHtml();
+
+  const { keywords, draft } = await loadDraftFromWorkspace();
+  validateImportedDraft(draft.title, draft.htmlBody);
+
+  await ensureThumbnailTextsSynced(
+    keywords,
+    draft.title,
+    draft.thumbnailTopLabel ?? "",
+    draft.thumbnailText,
+    draft.htmlBody,
+  );
+
+  await runThumbnailStep();
+}
+
+/** 외부 원고 전체: 붙여넣기 → 썸네일 → 업로드 (대화형 터미널 전용) */
+export async function runImportFullWorkflow(
+  options: WorkflowRunOptions,
+): Promise<void> {
+  if (options.batchMode) {
+    await runImportStep(options);
+    return;
+  }
+
+  console.log(
+    "\n═══ 외부 원고 모드 (붙여넣기 → 썸네일 → 업로드) ═══\n",
+  );
+
+  await runImportStep(options);
+
+  await waitForEnter(
+    "메모장에서 제목·본문을 붙여넣고 저장한 뒤,",
+    options.batchMode,
+  );
+
+  await runImportResumeStep();
+
+  const proceed = await promptContinue(
+    "썸네일까지 완료했습니다. 업로드를 진행할까요?",
+    options.batchMode,
+  );
+  if (!proceed) {
+    console.log("\n업로드를 건너뜁니다. 나중에 [7] 업로드만 실행하세요.");
+    return;
+  }
+
+  await runPublishStep();
+  console.log("\n✅ 외부 원고 모드 전체 실행 완료");
+}
+
 /** 편집 파일 열기 */
 export async function runEditStep(): Promise<void> {
   if (!(await workspaceExists())) {
@@ -199,7 +321,8 @@ export async function runEditStep(): Promise<void> {
   await openDraftEditors();
   console.log("\n─── 원고 편집 ───");
   console.log(`폴더: ${getWorkspaceDir()}`);
-  console.log("메모장에서 수정 후 저장하세요. preview.html 로 본문 미리보기가 가능합니다.");
+  console.log("메모장에서 수정 후 저장하세요.");
+  console.log("미리보기: output/drafts/current/preview.html (필요 시 직접 열기)");
 }
 
 /** Phase 3: 썸네일 생성 */
@@ -212,6 +335,7 @@ export async function runThumbnailStep(): Promise<string> {
     draft.title,
     draft.thumbnailTopLabel ?? "",
     draft.thumbnailText,
+    draft.htmlBody,
   );
 
   const keywordList = extractMainKeywords(keywords, draft.title);
@@ -327,9 +451,20 @@ export async function runPublishStep(): Promise<void> {
     const repo = new TopicRepository();
     try {
       const allPublished = results.every((r) => r.postUrl);
-      if (allPublished) {
+      if (allPublished && draft.topicId > 0) {
         await repo.updateStatus(draft.topicId, "published");
         logger.info(`주제 상태 업데이트: published (id=${draft.topicId})`);
+      }
+
+      if (allPublished) {
+        await persistPublishedPosts({
+          topicId: draft.topicId > 0 ? draft.topicId : undefined,
+          title: draft.title,
+          keywords,
+          results,
+        });
+
+        await notifySuccess(draft.title, results);
       }
     } finally {
       repo.close();
@@ -337,55 +472,95 @@ export async function runPublishStep(): Promise<void> {
   }
 }
 
-/** 전체: 글작성 → 편집 → 썸네일 → 업로드 */
+/** 전체: AI 글작성 → 편집 → 썸네일 → 업로드 */
 export async function runFullWorkflow(
   options: WorkflowRunOptions,
 ): Promise<void> {
-  console.log("\n═══ 전체 실행 (글작성 → 검토 → 썸네일 → 업로드) ═══\n");
+  console.log(
+    "\n═══ AI 자동 모드 (글작성 → 검토 → 썸네일 → 업로드) ═══\n",
+  );
 
   await runContentStep(options);
 
   if (!options.skipEditPrompt) {
+    if (options.batchMode) {
+      console.log("\n[배치] 원고 검토는 메뉴 [4]에서 진행한 뒤 [5] 썸네일을 실행하세요.");
+      return;
+    }
     await runEditStep();
     await waitForEnter(
       "메모장에서 원고를 수정·저장한 뒤,",
+      options.batchMode,
     );
     await writePreviewHtml();
   }
 
   await runThumbnailStep();
 
-  const proceed = await promptContinue("썸네일까지 완료했습니다. 업로드를 진행할까요?");
+  const proceed = await promptContinue(
+    "썸네일까지 완료했습니다. 업로드를 진행할까요?",
+    options.batchMode,
+  );
   if (!proceed) {
     console.log("\n업로드를 건너뜁니다. 나중에 [7] 업로드만 실행하세요.");
     return;
   }
 
   await runPublishStep();
-  console.log("\n✅ 전체 실행 완료");
+  console.log("\n✅ AI 자동 모드 전체 실행 완료");
 }
 
 export async function runWorkflow(options: WorkflowRunOptions): Promise<void> {
-  switch (options.step) {
-    case "content":
-      await runContentStep(options);
-      break;
-    case "edit":
-      await runEditStep();
-      break;
-    case "thumbnail":
-      await runThumbnailStep();
-      break;
-    case "thumbnail-preview":
-      await runThumbnailPreviewStep();
-      break;
-    case "publish":
-      await runPublishStep();
-      break;
-    case "full":
-      await runFullWorkflow(options);
-      break;
-    default:
-      throw new Error(`알 수 없는 단계: ${options.step}`);
+  const stage = options.step;
+
+  try {
+    switch (options.step) {
+      case "content":
+        await runContentStep(options);
+        break;
+      case "import":
+        await runImportStep(options);
+        break;
+      case "edit":
+        await runEditStep();
+        break;
+      case "thumbnail":
+        await runThumbnailStep();
+        break;
+      case "thumbnail-preview":
+        await runThumbnailPreviewStep();
+        break;
+      case "publish":
+        await runPublishStep();
+        break;
+      case "full":
+        await runFullWorkflow(options);
+        break;
+      case "import-full":
+        await runImportFullWorkflow(options);
+        break;
+      case "import-resume":
+        await runImportResumeStep();
+        break;
+      default:
+        throw new Error(`알 수 없는 단계: ${options.step}`);
+    }
+  } catch (error) {
+    logger.error(
+      `[Workflow:${stage}] ${error instanceof Error ? error.message : String(error)}`,
+    );
+    if (error instanceof Error && error.stack) {
+      logger.error(error.stack);
+    }
+
+    try {
+      await notifyError(error, { stage: `workflow:${stage}` });
+    } catch (notifyErr) {
+      logger.error(
+        `Discord 알림 전송 실패: ${notifyErr instanceof Error ? notifyErr.message : notifyErr}`,
+      );
+    }
+
+    throw error;
   }
 }

@@ -5,6 +5,8 @@
  */
 import { parseTopicFromArgv, resolveBlogTopic } from "../src/cli/resolve-blog-topic.js";
 import { logger } from "../src/monitoring/logger.js";
+import { notifyError } from "../src/monitoring/discord-notifier.js";
+import { gracefulExit } from "../src/monitoring/graceful-shutdown.js";
 import { runOrchestration } from "../src/pipeline.js";
 
 async function main(): Promise<void> {
@@ -22,6 +24,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(() => {
-  process.exit(1);
+main().catch(async () => {
+  try {
+    await notifyError(new Error("run:once 파이프라인 실패"), {
+      stage: "run-once",
+    });
+  } catch {
+    /* Discord 미설정 */
+  }
+  gracefulExit(1);
 });

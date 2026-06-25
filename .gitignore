@@ -4,4 +4,5 @@ dist/
 auth/*.json
 data/*.db
 output/
+knowledge/.cache/
 *.log

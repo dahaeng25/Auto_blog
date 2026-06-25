@@ -1,6 +1,8 @@
 import type { Frame, Locator } from "playwright";
-import { humanClick, humanPause, randomTypingDelay } from "./human-input.js";
+import { humanClick, humanPause } from "./human-input.js";
 import { writeHtmlToClipboard } from "./clipboard.js";
+import { fillPlainTextToEditor } from "./editor-paste.js";
+import { sanitizeBlogTitle } from "../../content/sanitize-title.js";
 
 const IS_MAC = process.platform === "darwin";
 const PASTE_MODIFIER = IS_MAC ? "Meta" : "Control";
@@ -152,23 +154,13 @@ export async function fillNaverTitle(
   titleLocator: Locator,
   title: string,
 ): Promise<void> {
-  const plainTitle = title.replace(/<[^>]*>/g, "").trim().slice(0, NAVER_TITLE_MAX);
+  const plainTitle = sanitizeBlogTitle(title).slice(0, NAVER_TITLE_MAX);
 
   console.log(`[네이버] 제목 입력 (${plainTitle.length}자)`);
 
-  await humanClick(titleLocator);
-  await humanPause(200);
+  const page = titleLocator.page();
+  await fillPlainTextToEditor(page, titleLocator, plainTitle);
 
-  await titleLocator.press(`${PASTE_MODIFIER}+a`);
-  await humanPause(100);
-  await titleLocator.press("Backspace");
-  await humanPause(100);
-
-  await titleLocator.pressSequentially(plainTitle, {
-    delay: randomTypingDelay(),
-  });
-
-  // Tab으로 본문 영역으로 포커스 이동 시도
   await titleLocator.press("Tab");
   await humanPause(500);
 
@@ -198,22 +190,25 @@ export async function focusNaverBodyEnd(frame: Frame): Promise<void> {
   await humanPause(200);
 }
 
-/** 본문 끝에 HTML 추가 삽입 (구간별 입력용) */
+/** 본문 끝에 HTML 추가 삽입 (스마트에디터 전체 컨테이너 기준) */
 export async function appendNaverBody(
   frame: Frame,
-  bodyLocator: Locator,
+  _bodyLocator: Locator,
   html: string,
 ): Promise<void> {
-  await humanClick(bodyLocator);
   await focusNaverBodyEnd(frame);
 
-  const inserted = await bodyLocator.evaluate((el, htmlContent) => {
-    if (!(el instanceof HTMLElement)) return false;
-    el.focus();
+  const inserted = await frame.evaluate((htmlContent) => {
+    const container =
+      document.querySelector(".se-main-container") ??
+      document.querySelector(".se-canvas") ??
+      document.querySelector(".se-contents");
+
+    if (!container) return false;
 
     const selection = window.getSelection();
     const range = document.createRange();
-    range.selectNodeContents(el);
+    range.selectNodeContents(container);
     range.collapse(false);
     selection?.removeAllRanges();
     selection?.addRange(range);
@@ -225,10 +220,8 @@ export async function appendNaverBody(
 
   const page = frame.page();
   await writeHtmlToClipboard(page, html);
-  await humanClick(bodyLocator);
-  await bodyLocator.focus();
-  await humanPause(200);
-  await bodyLocator.press(`${PASTE_MODIFIER}+v`);
+  await focusNaverBodyEnd(frame);
+  await page.keyboard.press(`${PASTE_MODIFIER}+v`);
   await humanPause(500);
 }
 

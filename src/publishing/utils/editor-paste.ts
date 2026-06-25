@@ -6,6 +6,14 @@ import { focusEditorEnd } from "./editor-cursor.js";
 const IS_MAC = process.platform === "darwin";
 const PASTE_MODIFIER = IS_MAC ? "Meta" : "Control";
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /**
  * contenteditable 영역에 execCommand('insertHTML')로 HTML을 삽입합니다.
  * locator.evaluate는 소속 iframe 컨텍스트에서 실행됩니다.
@@ -96,4 +104,32 @@ export async function findContentEditable(
   }
 
   throw new Error(`contenteditable을 찾을 수 없습니다: ${selector}`);
+}
+
+/**
+ * 제목 등 짧은 평문 — insertHTML 우선, 실패 시 클립보드 붙여넣기
+ * (.fill() / .type() / pressSequentially 사용 금지)
+ */
+export async function fillPlainTextToEditor(
+  page: Page,
+  editorLocator: Locator,
+  text: string,
+): Promise<void> {
+  const safe = escapeHtml(text);
+
+  await humanClick(editorLocator);
+  await humanPause(150);
+  await editorLocator.press(`${PASTE_MODIFIER}+a`);
+  await humanPause(80);
+  await editorLocator.press("Backspace");
+  await humanPause(80);
+
+  const viaExec = await insertHtmlViaExecCommand(editorLocator, safe);
+  if (viaExec) {
+    console.log("[EditorPaste] 제목 insertHTML 성공");
+    return;
+  }
+
+  console.log("[EditorPaste] 제목 insertHTML 실패 → 클립보드 붙여넣기");
+  await pasteHtmlViaClipboard(page, editorLocator, safe);
 }

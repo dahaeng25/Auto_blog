@@ -36,31 +36,76 @@ if defined BLOG_REGION (
 echo.
 echo   [1] 키워드+지역 입력/수정
 echo   [9] 지역 입력/수정 ^(도·광역시^)
-echo   [2] 전체 실행  ^(글작성 -^> 검토 -^> 썸네일 -^> 업로드^)
-echo   [3] 글 작성만  ^(AI 원고 생성^)
-echo   [4] 글 검토/수정 ^(메모장 + 미리보기^)
+echo.
+echo   --- A. 외부 원고 ^(Gems·Notebook LM^) ---
+echo   [2] 전체 실행  ^(붙여넣기 -^> 썸네일 -^> 업로드^)
+echo   [3] 붙여넣기 준비 ^(편집 파일 열기^)
+echo   [4] 글 검토/수정
 echo   [5] 썸네일 생성
-echo   [6] 썸네일 미리보기 ^(생성 후 이미지 열기^)
+echo   [6] 썸네일 미리보기
 echo   [7] 업로드만
-echo   [8] 편집 폴더 열기
-echo   [0] 종료
+echo.
+echo   --- B. AI 자동 ^(키워드+지역^) ---
+echo   [8] 전체 실행  ^(AI글작성 -^> 검토 -^> 썸네일 -^> 업로드^)
+echo  [10] AI 글 작성만
+echo.
+echo   [0] 편집 폴더 열기
+echo   [Q] 종료
 echo.
 set "CHOICE="
 set /p "CHOICE=번호를 선택하세요 > "
 
+if /i "%CHOICE%"=="Q" exit /b 0
 if "%CHOICE%"=="1" goto edit_keywords
 if "%CHOICE%"=="9" goto edit_region
-if "%CHOICE%"=="2" goto run_full
-if "%CHOICE%"=="3" goto run_content
+if "%CHOICE%"=="2" goto run_import_full
+if "%CHOICE%"=="3" goto run_import
 if "%CHOICE%"=="4" goto run_edit
 if "%CHOICE%"=="5" goto run_thumbnail
 if "%CHOICE%"=="6" goto run_thumbnail_preview
 if "%CHOICE%"=="7" goto run_publish
-if "%CHOICE%"=="8" goto open_folder
-if "%CHOICE%"=="0" exit /b 0
+if "%CHOICE%"=="8" goto run_full
+if "%CHOICE%"=="10" goto run_content
+if "%CHOICE%"=="0" goto open_folder
 echo 잘못된 선택입니다.
 timeout /t 2 >nul
 goto menu
+
+:run_import_full
+call :ensure_keywords
+if errorlevel 1 goto menu
+call :ensure_region
+if errorlevel 1 goto menu
+echo.
+echo [1/3] 외부 원고 붙여넣기 폴더를 준비합니다...
+call npm.cmd run blog:workflow -- --step import --batch --topic "!BLOG_KEYWORDS!" --region "!BLOG_REGION!"
+if errorlevel 1 goto done
+echo.
+echo ========================================
+echo  메모장에서 제목·본문 저장 후
+echo  이 창으로 돌아와 아무 키나 누르세요.
+echo ========================================
+pause >nul
+echo.
+echo [2/3] 썸네일 생성 중...
+call npm.cmd run blog:workflow -- --step import-resume --batch
+if errorlevel 1 goto done
+echo.
+set "DO_PUB="
+set /p "DO_PUB=업로드를 진행할까요? (y/N) > "
+if /i "!DO_PUB!"=="y" (
+  echo [3/3] 업로드 중...
+  call npm.cmd run blog:workflow -- --step publish --batch
+)
+goto done
+
+:run_import
+call :ensure_keywords
+if errorlevel 1 goto menu
+echo.
+echo 외부 원고 붙여넣기 폴더를 준비합니다...
+call npm.cmd run blog:workflow -- --step import --batch --topic "!BLOG_KEYWORDS!" --region "!BLOG_REGION!"
+goto done
 
 :run_full
 call :ensure_keywords
@@ -68,8 +113,29 @@ if errorlevel 1 goto menu
 call :ensure_region
 if errorlevel 1 goto menu
 echo.
-echo 전체 실행을 시작합니다...
-call npm.cmd run blog:workflow -- --step full --topic "!BLOG_KEYWORDS!" --region "!BLOG_REGION!"
+echo [1/4] AI 글 작성 중...
+call npm.cmd run blog:workflow -- --step content --batch --topic "!BLOG_KEYWORDS!" --region "!BLOG_REGION!"
+if errorlevel 1 goto done
+echo.
+echo [2/4] 원고 편집 파일을 엽니다...
+call npm.cmd run blog:workflow -- --step edit --batch
+echo.
+echo ========================================
+echo  메모장에서 원고 수정·저장 후
+echo  이 창으로 돌아와 아무 키나 누르세요.
+echo ========================================
+pause >nul
+echo.
+echo [3/4] 썸네일 생성 중...
+call npm.cmd run blog:workflow -- --step thumbnail --batch
+if errorlevel 1 goto done
+echo.
+set "DO_PUB="
+set /p "DO_PUB=업로드를 진행할까요? (y/N) > "
+if /i "!DO_PUB!"=="y" (
+  echo [4/4] 업로드 중...
+  call npm.cmd run blog:workflow -- --step publish --batch
+)
 goto done
 
 :run_content
@@ -78,38 +144,38 @@ if errorlevel 1 goto menu
 call :ensure_region
 if errorlevel 1 goto menu
 echo.
-echo 글 작성을 시작합니다...
-call npm.cmd run blog:workflow -- --step content --topic "!BLOG_KEYWORDS!" --region "!BLOG_REGION!"
+echo AI 글 작성을 시작합니다...
+call npm.cmd run blog:workflow -- --step content --batch --topic "!BLOG_KEYWORDS!" --region "!BLOG_REGION!"
 goto done
 
 :run_edit
 echo.
 echo 원고 편집 파일을 엽니다...
-call npm.cmd run blog:workflow -- --step edit
+call npm.cmd run blog:workflow -- --step edit --batch
 goto done
 
 :run_thumbnail
 echo.
 echo 썸네일을 생성합니다...
-call npm.cmd run blog:workflow -- --step thumbnail
+call npm.cmd run blog:workflow -- --step thumbnail --batch
 goto done
 
 :run_thumbnail_preview
 echo.
 echo 썸네일을 생성하고 미리보기를 엽니다...
-call npm.cmd run blog:workflow -- --step thumbnail-preview
+call npm.cmd run blog:workflow -- --step thumbnail-preview --batch
 goto done
 
 :run_publish
 echo.
 echo 업로드를 시작합니다...
-call npm.cmd run blog:workflow -- --step publish
+call npm.cmd run blog:workflow -- --step publish --batch
 goto done
 
 :open_folder
 if not exist "output\drafts\current" (
     echo.
-    echo 아직 편집 폴더가 없습니다. 먼저 [3] 글 작성을 실행하세요.
+    echo 아직 편집 폴더가 없습니다. [3] 붙여넣기 준비 또는 [8] AI 글 작성을 실행하세요.
     pause
     goto menu
 )

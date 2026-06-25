@@ -21,6 +21,21 @@ CREATE TABLE IF NOT EXISTS articles (
 
 CREATE INDEX IF NOT EXISTS idx_topics_status ON topics(status);
 
+-- 발행 완료 포스트 (SEO 내부 링크용)
+CREATE TABLE IF NOT EXISTS published_posts (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic_id     INTEGER,
+  platform     TEXT    NOT NULL,
+  title        TEXT    NOT NULL,
+  keywords     TEXT    NOT NULL,
+  post_url     TEXT    NOT NULL UNIQUE,
+  published_at TEXT    NOT NULL,
+  FOREIGN KEY (topic_id) REFERENCES topics(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_published_posts_keywords ON published_posts(keywords);
+CREATE INDEX IF NOT EXISTS idx_published_posts_published_at ON published_posts(published_at);
+
 -- 파이프라인 실행 상태 (단일 행)
 CREATE TABLE IF NOT EXISTS job_state (
   id                  INTEGER PRIMARY KEY CHECK (id = 1),

@@ -133,6 +133,21 @@ export const config = {
     ? path.resolve(projectRoot, process.env.GEMINI_GEMS_PROMPT_PATH)
     : path.join(projectRoot, "prompts", "gems-system.prompt.md"),
 
+  /** PDF 지식 베이스 (Gems 모드 RAG) */
+  ...(() => {
+    const knowledgeDirEnv = process.env.KNOWLEDGE_DIR ?? "knowledge";
+    const knowledgeDir = path.isAbsolute(knowledgeDirEnv)
+      ? path.normalize(knowledgeDirEnv)
+      : path.resolve(projectRoot, knowledgeDirEnv);
+    /** 외부 폴더(Google Drive 등)일 때 캐시는 프로젝트 data/에 보관 */
+    const knowledgeCacheDir = path.isAbsolute(knowledgeDirEnv)
+      ? path.join(projectRoot, "data", "knowledge-cache")
+      : path.join(knowledgeDir, ".cache");
+    return { knowledgeDir, knowledgeCacheDir };
+  })(),
+  knowledgeEnabled: process.env.KNOWLEDGE_ENABLED !== "false",
+  knowledgeMaxChunks: Number(process.env.KNOWLEDGE_MAX_CHUNKS ?? "5"),
+
   discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL ?? "",
 
   /** true이면 발행 버튼 클릭 없이 에디터 입력까지만 수행 */

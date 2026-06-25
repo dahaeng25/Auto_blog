@@ -60,7 +60,14 @@ export async function notifySuccess(
 }
 
 /** 발행 실패 알림 */
-export async function notifyError(error: unknown): Promise<void> {
+export async function notifyError(
+  error: unknown,
+  options?: { stage?: string },
+): Promise<void> {
+  const stageLine = options?.stage
+    ? `**실패 단계:** ${options.stage}\n\n`
+    : "";
+
   const stack =
     error instanceof Error
       ? `${error.message}\n\n\`\`\`\n${error.stack ?? ""}\n\`\`\``
@@ -68,7 +75,7 @@ export async function notifyError(error: unknown): Promise<void> {
 
   await sendWebhook({
     title: "❌ 블로그 발행 실패",
-    description: truncate(stack),
+    description: truncate(stageLine + stack),
     color: 0xed4245,
   });
 

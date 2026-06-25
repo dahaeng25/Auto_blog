@@ -11,8 +11,26 @@ function useServerlessChromium(): boolean {
   return Boolean(process.env.VERCEL) || process.env.USE_SERVERLESS_CHROMIUM === "true";
 }
 
+let localChromiumPromise: ReturnType<typeof importPlaywrightExtra> | null = null;
+
+async function importPlaywrightExtra() {
+  const { chromium } = await import("playwright-extra");
+  const StealthPlugin = (await import("puppeteer-extra-plugin-stealth"))
+    .default;
+  chromium.use(StealthPlugin());
+  return chromium;
+}
+
+/** 로컬 환경에서 playwright-extra + stealth 플러그인 적용 */
+async function getLocalChromium() {
+  if (!localChromiumPromise) {
+    localChromiumPromise = importPlaywrightExtra();
+  }
+  return localChromiumPromise;
+}
+
 /**
- * 로컬: playwright 풀 패키지 / Vercel: playwright-core + @sparticuz/chromium
+ * 로컬: playwright-extra + stealth / Vercel: playwright-core + @sparticuz/chromium
  */
 export async function launchChromium(
   options: LaunchOptions = {},
@@ -29,7 +47,7 @@ export async function launchChromium(
     });
   }
 
-  const { chromium } = await import("playwright");
+  const chromium = await getLocalChromium();
   return chromium.launch({
     headless: options.headless ?? true,
     args: SERVERLESS_ARGS,

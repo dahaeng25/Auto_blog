@@ -7,6 +7,8 @@ import {
   runWorkflow,
   type WorkflowStep,
 } from "../src/cli/blog-workflow-runner.js";
+import { notifyError } from "../src/monitoring/discord-notifier.js";
+import { gracefulExit } from "../src/monitoring/graceful-shutdown.js";
 
 function parseStep(argv: string[]): WorkflowStep {
   for (let i = 0; i < argv.length; i++) {
@@ -57,6 +59,7 @@ async function main(): Promise<void> {
   const blogRegion = parseRegion(argv);
   const keywordsFile = parseKeywordsFile(argv);
   const skipEdit = argv.includes("--skip-edit");
+  const batchMode = argv.includes("--batch");
 
   await runWorkflow({
     step,
@@ -64,11 +67,23 @@ async function main(): Promise<void> {
     blogRegion,
     keywordsFile,
     skipEditPrompt: skipEdit,
+    batchMode,
   });
+
+  if (batchMode) {
+    process.exit(0);
+  }
 }
 
-main().catch((error: unknown) => {
+main().catch(async (error: unknown) => {
   console.error("\n❌ 실행 실패:");
   console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+
+  try {
+    await notifyError(error, { stage: "workflow-cli" });
+  } catch {
+    /* Discord 미설정 등 */
+  }
+
+  gracefulExit(1);
 });

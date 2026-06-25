@@ -25,11 +25,22 @@ export interface DraftWorkspaceMeta {
   topicId: number;
   createdAt: string;
   keywords?: string;
+  /** 마지막 썸네일 동기화 시점의 제목 */
+  savedTitle?: string;
   blogRegion?: string;
   pickedLocalities?: string[];
   thumbnailPath?: string;
   subThumbnailPaths?: string[];
+  /** Gems·Notebook LM 등 외부에서 붙여넣은 원고 */
+  sourceMode?: "ai" | "import";
 }
+
+/** 외부 원고 붙여넣기 안내 (이 문자열이 남아 있으면 미작성으로 간주) */
+export const IMPORT_TITLE_PLACEHOLDER =
+  "(Gems 등에서 제목을 복사해 붙여넣으세요)";
+
+export const IMPORT_BODY_PLACEHOLDER = `<!-- Gems·Notebook LM 등에서 작성한 HTML 본문을 아래에 붙여넣으세요 -->
+<p>여기에 본문을 붙여넣으세요.</p>`;
 
 export interface LoadedWorkspace {
   keywords: string;
@@ -92,6 +103,7 @@ export async function exportDraftWorkspace(
     topicId: draft.topicId,
     createdAt: draft.createdAt,
     keywords,
+    sourceMode: "ai",
     ...(regionMeta
       ? {
           blogRegion: regionMeta.parentName,
@@ -138,6 +150,102 @@ export async function exportDraftWorkspace(
   return CURRENT_WORKSPACE;
 }
 
+/**
+ * 외부 원고(Gems·Notebook LM 등) 붙여넣기용 편집 폴더를 초기화합니다.
+ * AI 생성 없이 title.txt / body.html 에 직접 붙여넣습니다.
+ */
+export async function initImportWorkspace(
+  keywords: string,
+  regionMeta?: { parentName: string; pickedShort: string[] },
+  thumbnailTexts?: { topLabel: string; mainText: string },
+): Promise<string> {
+  await fs.mkdir(CURRENT_WORKSPACE, { recursive: true });
+
+  const meta: DraftWorkspaceMeta = {
+    topicId: 0,
+    createdAt: new Date().toISOString(),
+    keywords,
+    sourceMode: "import",
+    ...(regionMeta
+      ? {
+          blogRegion: regionMeta.parentName,
+          pickedLocalities: regionMeta.pickedShort,
+        }
+      : {}),
+  };
+
+  const topLabel = thumbnailTexts?.topLabel ?? "";
+  const mainText = thumbnailTexts?.mainText ?? keywords;
+
+  await Promise.all([
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.keywords),
+      `${keywords}\n`,
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.title),
+      IMPORT_TITLE_PLACEHOLDER,
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.body),
+      IMPORT_BODY_PLACEHOLDER,
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.thumbnailTop),
+      topLabel,
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.thumbnailMain),
+      mainText,
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(CURRENT_WORKSPACE, FILES.meta),
+      JSON.stringify(meta, null, 2),
+      "utf-8",
+    ),
+    fs.rm(path.join(CURRENT_WORKSPACE, FILES.thumbnailPath), { force: true }),
+    fs.rm(path.join(CURRENT_WORKSPACE, FILES.subThumbnailPaths), {
+      force: true,
+    }),
+  ]);
+
+  await writePreviewHtml();
+  return CURRENT_WORKSPACE;
+}
+
+/** 외부 원고가 실제로 채워졌는지 검사 */
+export function validateImportedDraft(title: string, htmlBody: string): void {
+  const t = title.trim();
+  const b = htmlBody.trim();
+
+  if (!t || t === IMPORT_TITLE_PLACEHOLDER) {
+    throw new Error(
+      "제목이 비어 있습니다. title.txt 에 Gems 등에서 작성한 제목을 붙여넣고 저장하세요.",
+    );
+  }
+
+  if (
+    !b ||
+    b === IMPORT_BODY_PLACEHOLDER.trim() ||
+    b.includes("여기에 본문을 붙여넣으세요")
+  ) {
+    throw new Error(
+      "본문이 비어 있습니다. body.html 에 HTML 본문을 붙여넣고 저장하세요.",
+    );
+  }
+
+  if (b.length < 80) {
+    throw new Error(
+      "본문이 너무 짧습니다. body.html 내용을 확인하세요.",
+    );
+  }
+}
+
 /** 편집 폴더에서 원고 읽기 */
 export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
   const metaPath = path.join(CURRENT_WORKSPACE, FILES.meta);
@@ -145,7 +253,7 @@ export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
     await fs.access(metaPath);
   } catch {
     throw new Error(
-      "편집용 원고가 없습니다. 먼저 [2] 글 작성을 실행하세요.",
+      "편집용 원고가 없습니다. AI 글 작성 또는 [외부 원고] 붙여넣기를 먼저 실행하세요.",
     );
   }
 
@@ -287,21 +395,45 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Windows: 메모장으로 편집 파일 열기 */
+/** Windows: 메모장으로 편집 파일 열기 (브라우저 미리보기는 열지 않음) */
 export async function openDraftEditors(): Promise<void> {
-  const targets = [
+  await writePreviewHtml();
+
+  const notepadTargets = [
     path.join(CURRENT_WORKSPACE, FILES.title),
     path.join(CURRENT_WORKSPACE, FILES.body),
     path.join(CURRENT_WORKSPACE, FILES.thumbnailTop),
     path.join(CURRENT_WORKSPACE, FILES.thumbnailMain),
   ];
 
-  for (const filePath of targets) {
-    await openFile(filePath);
+  for (const filePath of notepadTargets) {
+    await fs.access(filePath);
+    await openInEditor(filePath);
   }
+}
 
-  const preview = await writePreviewHtml();
-  await openFile(preview);
+/** 편집용 — Windows에서는 cmd start + notepad (경로·html 확장자 안정 처리) */
+function openInEditor(filePath: string): Promise<void> {
+  if (platform() === "win32") {
+    return openInNotepad(filePath);
+  }
+  return openFile(filePath);
+}
+
+function openInNotepad(filePath: string): Promise<void> {
+  const winPath = path.normalize(filePath);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("cmd.exe", ["/c", "start", "", "notepad.exe", winPath], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+
+    child.on("error", reject);
+    child.unref();
+    setTimeout(resolve, 500);
+  });
 }
 
 /** 기본 앱으로 파일 열기 (썸네일 미리보기 등) */
@@ -341,6 +473,7 @@ export async function updateWorkspaceThumbnailTexts(
   topLabel: string,
   mainText: string,
   keywords?: string,
+  title?: string,
 ): Promise<void> {
   await fs.mkdir(CURRENT_WORKSPACE, { recursive: true });
   await Promise.all([
@@ -356,17 +489,16 @@ export async function updateWorkspaceThumbnailTexts(
     ),
   ]);
 
-  if (keywords) {
-    const metaPath = path.join(CURRENT_WORKSPACE, FILES.meta);
-    try {
-      const meta = JSON.parse(
-        await fs.readFile(metaPath, "utf-8"),
-      ) as DraftWorkspaceMeta;
-      meta.keywords = keywords;
-      await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
-    } catch {
-      // meta 없으면 썸네일 텍스트 파일만 갱신
-    }
+  const metaPath = path.join(CURRENT_WORKSPACE, FILES.meta);
+  try {
+    const meta = JSON.parse(
+      await fs.readFile(metaPath, "utf-8"),
+    ) as DraftWorkspaceMeta;
+    if (keywords) meta.keywords = keywords;
+    if (title) meta.savedTitle = title;
+    await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+  } catch {
+    // meta 없으면 썸네일 텍스트 파일만 갱신
   }
 }
 

@@ -6,6 +6,7 @@ import type { ArticleDraft } from "./content/types.js";
 import { ensureWritableDirs } from "./fs/ensure-writable-dirs.js";
 import { notifyError, notifySuccess } from "./monitoring/discord-notifier.js";
 import { logger } from "./monitoring/logger.js";
+import { persistPublishedPosts } from "./content/seo/persist-published-posts.js";
 import { assertOrchestrationReady } from "./pipeline/preflight.js";
 import { prepareNaverImageSet } from "./publishing/images/prepare-naver-images.js";
 import {
@@ -149,6 +150,13 @@ export async function runOrchestration(
       if (allPublished) {
         await repo.updateStatus(draft.topicId, "published");
         logger.info(`주제 상태 업데이트: published (id=${draft.topicId})`);
+
+        await persistPublishedPosts({
+          topicId: draft.topicId,
+          title: draft.title,
+          keywords: activeTopic,
+          results: publishResults,
+        });
       } else {
         logger.warn("일부 플랫폼 발행 URL 없음 — 상태는 drafted 유지");
       }
@@ -163,6 +171,11 @@ export async function runOrchestration(
 
     return { draft, thumbnailPath, publishResults };
   } catch (error) {
+    const stage =
+      error instanceof Error && "pipelineStage" in error
+        ? String((error as Error & { pipelineStage?: string }).pipelineStage)
+        : "orchestration";
+
     logger.error(
       error instanceof Error ? error.message : String(error),
     );
@@ -171,7 +184,7 @@ export async function runOrchestration(
     }
 
     try {
-      await notifyError(error);
+      await notifyError(error, { stage });
     } catch (notifyErr) {
       logger.error(
         `Discord 알림 전송 실패: ${notifyErr instanceof Error ? notifyErr.message : notifyErr}`,

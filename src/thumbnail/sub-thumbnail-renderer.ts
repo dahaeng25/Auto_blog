@@ -4,9 +4,10 @@ import { pathToFileURL } from "node:url";
 import type { Browser } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
+import { mutateImageHashBuffer } from "./image-hash-mutator.js";
 
 export interface SubThumbnailRenderOptions {
-  /** 단락(h2) 소제목 — 우측하단 업무명 */
+  /** 단락(h2) 소제목 — 중앙 표시 */
   sectionTitle: string;
   /** 배경 이미지 절대 경로 (없으면 그라데이션) */
   backgroundPath?: string | null;
@@ -15,14 +16,13 @@ export interface SubThumbnailRenderOptions {
   phone?: string;
 }
 
-function buildAttribution(sectionTitle: string): string {
-  const title = sectionTitle.trim().slice(0, 28);
-  return `${title} 강운준행정사`;
+function buildCenterLabel(sectionTitle: string): string {
+  return sectionTitle.trim().slice(0, 32);
 }
 
 /**
  * 단락별 서브썸네일 (700×700) 렌더링.
- * 배경 60~70% 투명도, 중앙 연락처, 우하단 업무명+행정사.
+ * 중앙 단락명칭, 우하단 전화번호.
  */
 export class SubThumbnailRenderer {
   private readonly templatePath: string;
@@ -69,7 +69,7 @@ export class SubThumbnailRenderer {
     await fs.mkdir(config.thumbnailsDir, { recursive: true });
 
     const phone = options.phone ?? config.contactPhone;
-    const attribution = buildAttribution(options.sectionTitle);
+    const centerLabel = buildCenterLabel(options.sectionTitle);
     const bgOpacity = config.subThumbnailBackgroundOpacity;
     const textBgOpacity = config.subThumbnailTextBackgroundOpacity;
     const bgUrl = options.backgroundPath
@@ -90,26 +90,27 @@ export class SubThumbnailRenderer {
       await page.waitForTimeout(200);
 
       await page.evaluate(
-        ({ size, phone, attribution, bgUrl, bgOpacity, textBgOpacity }) => {
+        ({ size, phone, centerLabel, bgUrl, bgOpacity, textBgOpacity }) => {
           const canvas = document.getElementById("sub-canvas");
           const bgImg = document.getElementById("sub-bg") as HTMLImageElement | null;
           const bgFallback = document.getElementById("bg-fallback");
+          const centerBox = document.getElementById("center-box");
+          const centerEl = document.getElementById("center-text");
           const phoneBox = document.getElementById("phone-box");
           const phoneEl = document.getElementById("phone-text");
-          const attrEl = document.getElementById("attribution");
 
           if (canvas) {
             canvas.style.width = `${size}px`;
             canvas.style.height = `${size}px`;
           }
+          if (centerEl) centerEl.textContent = centerLabel;
           if (phoneEl) phoneEl.textContent = phone;
-          if (attrEl) attrEl.textContent = attribution;
 
+          if (centerBox) {
+            centerBox.style.background = `rgba(0, 0, 0, ${textBgOpacity})`;
+          }
           if (phoneBox) {
             phoneBox.style.background = `rgba(0, 0, 0, ${textBgOpacity})`;
-          }
-          if (attrEl) {
-            attrEl.style.background = `rgba(0, 0, 0, ${textBgOpacity})`;
           }
 
           if (bgUrl && bgImg) {
@@ -121,7 +122,7 @@ export class SubThumbnailRenderer {
             bgFallback.style.display = "block";
           }
         },
-        { size: this.size, phone, attribution, bgUrl, bgOpacity, textBgOpacity },
+        { size: this.size, phone, centerLabel, bgUrl, bgOpacity, textBgOpacity },
       );
 
       if (bgUrl) {
@@ -135,10 +136,11 @@ export class SubThumbnailRenderer {
         );
       }
 
-      await page.locator("#sub-canvas").screenshot({
-        path: outputPath,
+      const screenshot = await page.locator("#sub-canvas").screenshot({
         type: "png",
       });
+      const mutated = await mutateImageHashBuffer(screenshot);
+      await fs.writeFile(outputPath, mutated);
 
       console.log(`[SubThumbnail] 저장: ${outputPath}`);
       return outputPath;

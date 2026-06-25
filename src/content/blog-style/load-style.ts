@@ -140,7 +140,7 @@ htmlBody 구성 (위 샘플 글과 동일한 흐름·밀도):
    • 세부 항목은 <ul><li> 또는 <h3> 소주제 + <p> 조합
 3) ${style.structure.requireTable ? "<table> 1회 이상 — 요건·비교·절차 정리" : ""}
 4) ${style.structure.requireList ? "<ul><li> 체크포인트 리스트 1회 이상" : ""}
-5) ${style.structure.requireCaseStudy ? "실제 수임 사례(익명) 1개 — h2 또는 h3 아래 상세 서술" : ""}
+5) ${style.structure.requireCaseStudy ? "실제 수임 사례(익명) 1개 — 인물은 '의뢰인'으로만 지칭, 실명·가명 금지" : ""}
 6) ${style.structure.requireQna ? "Q&A 3세트 — <h3>질문</h3><p>답변</p> 형식" : ""}
 7) 마무리 CTA: 가운데 정렬 문의 유도 + "강운준 행정사였습니다."
 8) 사무소 정보 <p> (가운데): 행정사사무소 다행, 주소, 전국대표번호 1844-1346

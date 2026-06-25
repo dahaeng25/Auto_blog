@@ -20,7 +20,10 @@ import {
   resolveBlogRegionInput,
 } from "./regions/pick-regions.js";
 import { refineTitleAndThumbnail } from "./seo/title-seo-refiner.js";
+import { PublishedPostRepository } from "./seo/published-post-repository.js";
+import { sanitizeClientReferences } from "./sanitize-client.js";
 import { TopicRepository } from "./farming/topic-repository.js";
+import { retrieveKnowledgeContext } from "./knowledge/search-knowledge.js";
 import type { ArticleDraft, ContentRunOptions, RawTopic } from "./types.js";
 
 /**
@@ -158,7 +161,26 @@ export class ContentPipeline {
       `[Gems] 지역 풀: ${regionPick.parentName} → ${regionPick.pickedShort.join("·")}`,
     );
 
-    const gems = await this.gemsAgent.run(blogTopic, regionPick);
+    const publishedRepo = new PublishedPostRepository();
+    let relatedPosts;
+    try {
+      relatedPosts = await publishedRepo.findRelated(blogTopic, 3);
+      if (relatedPosts.length > 0) {
+        console.log(
+          `[Gems] SEO 내부 링크 후보 ${relatedPosts.length}건 조회`,
+        );
+      }
+    } finally {
+      publishedRepo.close();
+    }
+
+    const knowledgeContext = await retrieveKnowledgeContext(blogTopic);
+    const gems = await this.gemsAgent.run(
+      blogTopic,
+      regionPick,
+      relatedPosts,
+      knowledgeContext ?? undefined,
+    );
 
     const seoRefined = await refineTitleAndThumbnail({
       topic: blogTopic,
@@ -189,7 +211,11 @@ export class ContentPipeline {
       )
     ) {
       console.log("[Gems] 썸네일 문구가 키워드와 불일치 — 재생성");
-      const refreshed = await refreshThumbnailTexts(blogTopic, finalTitle);
+      const refreshed = await refreshThumbnailTexts(
+        blogTopic,
+        finalTitle,
+        gems.htmlBody,
+      );
       thumbnailTopLabel = refreshed.topLabel;
       thumbnailText = refreshed.mainText;
     }
@@ -198,7 +224,7 @@ export class ContentPipeline {
       topicId,
       sourceTopic: topic,
       title: finalTitle,
-      htmlBody: gems.htmlBody,
+      htmlBody: sanitizeClientReferences(gems.htmlBody),
       thumbnailText,
       thumbnailTopLabel,
       blogRegion: regionPick.parentName,

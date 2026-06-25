@@ -11,6 +11,8 @@ import { normalizeThumbnailLineBreaks } from "./normalize-thumbnail-line-breaks.
 const STALE_THUMBNAIL_PHRASES = [
   "비자 전쟁에서",
   "살아남는 법",
+  "성공의 길로",
+  "첫걸음",
 ];
 
 /** 키워드 일치만으로 통과시키면 안 되는 일반 단어 */
@@ -168,26 +170,61 @@ export function thumbnailMatchesTopic(
   return mainTextMatchesKeywords(keywords, main);
 }
 
-/** 키워드·제목 기준으로 썸네일 상·하단 문구 생성 */
+/** 제목·키워드에서 썸네일 상단 라벨 (비자코드 우선) */
+export function buildTopLabelFromTitleAndKeywords(
+  title: string,
+  keywords: string,
+): string {
+  const code = extractVisaCode(title) ?? extractVisaCode(keywords);
+  if (code) return code.toUpperCase();
+
+  const inputPhrases = extractInputKeywordPhrases(keywords);
+  const keywordList = extractMainKeywords(keywords, title);
+  const fromKw = buildTopLabelFromKeywords(
+    inputPhrases.length > 0 ? inputPhrases : keywordList,
+  );
+  if (fromKw && fromKw !== "블로그") return fromKw;
+
+  const titleCore = title
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .trim()
+    .slice(0, 12);
+  return titleCore || fromKw;
+}
+
+function thumbnailMatchesTitle(title: string, mainText: string): boolean {
+  const words = title
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 2 && !THUMBNAIL_GENERIC_WORDS.has(w));
+
+  if (words.length === 0) return mainText.trim().length > 0;
+  return words.some((word) => phraseMatchesHaystack(mainText, word));
+}
+
+/** 키워드·제목·본문 기준으로 썸네일 상·하단 문구 생성 */
 export async function refreshThumbnailTexts(
   keywords: string,
   title: string,
+  htmlBody?: string,
 ): Promise<ThumbnailTexts> {
   const inputPhrases = extractInputKeywordPhrases(keywords);
   const keywordList = extractMainKeywords(keywords, title);
-  const topLabel = buildTopLabelFromKeywords(
-    inputPhrases.length > 0 ? inputPhrases : keywordList,
-  );
+  const topLabel = buildTopLabelFromTitleAndKeywords(title, keywords);
 
   const agent = new ThumbnailTextAgent();
   const maxAttempts = 3;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const mainText = normalizeThumbnailLineBreaks(
-      await agent.run(title, keywords),
+      await agent.run(title, keywords, htmlBody),
     );
 
-    if (thumbnailMatchesTopic(keywords, title, topLabel, mainText)) {
+    if (
+      thumbnailMatchesTopic(keywords, title, topLabel, mainText) &&
+      thumbnailMatchesTitle(title, mainText)
+    ) {
       return { topLabel, mainText };
     }
 
@@ -207,6 +244,7 @@ export function shouldRefreshThumbnailTexts(
   title: string,
   topLabel: string,
   mainText: string,
+  htmlBody?: string,
 ): boolean {
   if (
     savedKeywords &&
@@ -214,5 +252,14 @@ export function shouldRefreshThumbnailTexts(
   ) {
     return true;
   }
-  return !thumbnailMatchesTopic(currentKeywords, title, topLabel, mainText);
+  if (!thumbnailMatchesTopic(currentKeywords, title, topLabel, mainText)) {
+    return true;
+  }
+  if (!thumbnailMatchesTitle(title, mainText)) {
+    return true;
+  }
+  if (htmlBody && htmlBody.length > 100 && mainText.length < 4) {
+    return true;
+  }
+  return false;
 }

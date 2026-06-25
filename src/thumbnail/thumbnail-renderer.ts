@@ -11,6 +11,7 @@ import {
   type ThumbnailBrandConfig,
 } from "./brand-config.js";
 import { normalizeThumbnailLineBreaks } from "./normalize-thumbnail-line-breaks.js";
+import { mutateImageHashBuffer } from "./image-hash-mutator.js";
 
 export interface ThumbnailRenderOptions {
   /** 가운데 메인 제목 (2줄, \\n 구분) */
@@ -324,7 +325,9 @@ export class ThumbnailRenderer {
       await injectTemplateText(page, options, brand);
 
       const canvas = page.locator("#thumbnail-canvas");
-      await canvas.screenshot({ path: outputPath, type: "png" });
+      const screenshot = await canvas.screenshot({ type: "png" });
+      const mutated = await mutateImageHashBuffer(screenshot);
+      await fs.writeFile(outputPath, mutated);
 
       console.log(`[Thumbnail] 저장 완료: ${outputPath}`);
       return outputPath;

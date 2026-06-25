@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../../../config/index.js";
 import { loadBodyImages } from "../body-images/image-manifest.js";
+import { mutateImageHashFile } from "../../thumbnail/image-hash-mutator.js";
 import {
   buildKeywordSlug,
   extractH2Titles,
@@ -50,7 +51,7 @@ async function copyRenamed(
 ): Promise<string> {
   await fs.mkdir(destDir, { recursive: true });
   const destPath = path.join(destDir, filename);
-  await fs.copyFile(sourcePath, destPath);
+  await mutateImageHashFile(sourcePath, destPath);
   return destPath;
 }
 

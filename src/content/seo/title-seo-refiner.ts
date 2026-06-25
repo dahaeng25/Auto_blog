@@ -3,6 +3,7 @@ import { config } from "../../../config/index.js";
 import type { RegionPickResult } from "../regions/pick-regions.js";
 import { searchNaverBlogTitles } from "./naver-blog-search.js";
 import { normalizeThumbnailLineBreaks } from "../../thumbnail/normalize-thumbnail-line-breaks.js";
+import { sanitizeBlogTitle } from "../sanitize-title.js";
 
 export interface TitleSeoInput {
   topic: string;
@@ -27,7 +28,7 @@ function parseRefineResponse(raw: string): TitleSeoOutput | null {
     if (!parsed.title || !parsed.thumbnailText) return null;
 
     return {
-      title: parsed.title.trim(),
+      title: sanitizeBlogTitle(parsed.title),
       thumbnailText: normalizeThumbnailLineBreaks(parsed.thumbnailText.trim()),
       thumbnailTopLabel: (parsed.thumbnailTopLabel ?? "").trim(),
     };
@@ -51,8 +52,8 @@ export async function refineTitleAndThumbnail(
     };
   }
 
-  const regionNote = input.region
-    ? `지역: ${input.region.pickedShort.join("·")}·강운준 행정사`
+  const regionHint = input.region
+    ? `지역명: ${input.region.pickedShort.join("·")}·강운준 행정사`
     : "강운준 행정사";
 
   const refList = referenceTitles
@@ -66,10 +67,11 @@ export async function refineTitleAndThumbnail(
 - 키워드를 억지로 나열하지 말고, 독자 검색 의도에 맞는 자연스러운 문장형 제목
 - 메인 키워드는 제목 앞부분에 1회 포함
 - 낚시성 단어(꿀팁, 총정리) 금지, '상담' 금지
-- 제목 뒤 ${regionNote} 포함
+- 제목 뒤 ${regionHint}를 공백으로 이어 붙이세요 (+ 기호 사용 금지)
 - 썸네일 상단 라벨: 입력 키워드(비자코드 등) 그대로 5~10자
 - 썸네일 메인 문구: 제목 핵심을 2~3줄(\\n 줄바꿈), 시선을 끄는 문장
 - 참고 제목을 그대로 복사하지 말고 패턴만 학습
+- 제목에 + 기호를 절대 사용하지 마세요
 - JSON만 출력: { "title", "thumbnailText", "thumbnailTopLabel" }`;
 
   const user = `타겟 키워드: ${input.topic}
