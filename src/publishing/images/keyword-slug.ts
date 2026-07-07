@@ -110,6 +110,19 @@ export function buildSubThumbnailFilename(
   return `${buildTitleSlug(title)}-${sequence}.png`;
 }
 
+/** h2 제목에서 번호·본문 분리 ("1) …", "2. …") */
+export function parseH2SectionTitle(h2Text: string): {
+  number: string;
+  title: string;
+} {
+  const trimmed = h2Text.trim();
+  const match = trimmed.match(/^(\d+)[).]\s*(.+)$/s);
+  if (match) {
+    return { number: match[1]!, title: match[2]!.trim() };
+  }
+  return { number: "", title: trimmed };
+}
+
 /** HTML 본문 h2 소제목 추출 (이미지 메타 문맥용) */
 export function extractH2Titles(html: string): string[] {
   const titles: string[] = [];
