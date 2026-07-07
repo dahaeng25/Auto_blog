@@ -114,9 +114,14 @@ function restyleH3(section: string): string {
 
 function restyleH2(section: string): string {
   const { typography: typo } = loadBlogStyle();
+  const borderBottom = typo.h2BorderBottom ?? "2px solid #1a3a5c";
+  const paddingBottom = typo.h2PaddingBottom ?? "10px";
+  const letterSpacing = typo.h2LetterSpacing ?? "-0.3px";
   const style =
     `font-family:${typo.fontFamily};font-size:${typo.h2FontSize};font-weight:${typo.h2FontWeight};` +
-    `color:${typo.h2Color};text-align:${typo.h2Align};margin:${typo.h2Margin};line-height:1.45;`;
+    `color:${typo.h2Color};text-align:${typo.h2Align};margin:${typo.h2Margin};` +
+    `padding:0 0 ${paddingBottom} 0;border-bottom:${borderBottom};` +
+    `line-height:1.45;letter-spacing:${letterSpacing};`;
 
   let result = restyleH3(section);
 
