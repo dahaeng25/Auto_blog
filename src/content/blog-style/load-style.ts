@@ -33,7 +33,7 @@ export interface BlogStyleConfig {
   brandTagline?: string;
   typography: BlogTypography;
   divider: { html: string };
-  brandBand?: { html: string; repeatPerSection?: boolean };
+  brandBand?: { html?: string; repeatPerSection?: boolean };
   blockquote?: { borderColor: string; background: string };
   spacing: {
     paragraphMargin: string;
@@ -53,7 +53,7 @@ export interface BlogStyleConfig {
 
 const DEFAULT_STYLE: BlogStyleConfig = {
   referenceUrls: [],
-  brandTagline: "강운준 행정사 공장등록 나라장터 인허가 출입국비자",
+  brandTagline: "강운준 행정사",
   typography: {
     fontFamily: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
     bodyFontSize: "16px",
@@ -82,7 +82,6 @@ const DEFAULT_STYLE: BlogStyleConfig = {
     html: '<hr style="border:none;border-top:1px solid #bbbbbb;margin:36px 0;width:100%;">',
   },
   brandBand: {
-    html: '<p style="text-align:left;font-family:\'Nanum Gothic\',\'Malgun Gothic\',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:16px 0;">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>',
     repeatPerSection: false,
   },
   blockquote: {
@@ -118,7 +117,7 @@ export function loadBlogStyle(): BlogStyleConfig {
       html: raw.divider?.html ?? DEFAULT_STYLE.divider.html,
     },
     brandBand: {
-      html: raw.brandBand?.html ?? DEFAULT_STYLE.brandBand!.html,
+      html: raw.brandBand?.html,
       repeatPerSection: raw.brandBand?.repeatPerSection ?? false,
     },
     blockquote: {
@@ -147,7 +146,7 @@ htmlBody 구성 (위 샘플과 동일한 흐름):
 1) 도입부: 왼쪽 정렬 <p> ${style.structure.introParagraphCount}개 — 1인칭 실무 르포, 「며칠 전…」「전화를 받고…」 장면으로 시작
 2) 본문 h2 ${style.structure.minH2Sections}개 — **번호 형식 필수** ("1) …", "2) …", "6. 마치며")
    • 각 섹션은 <h2>로 시작 → 아래 <p>만 연결 (h2 단위로 한 덩어리, 중간에 h2 끼워넣기 금지)
-   • 실무 반려 사유·서류 누락·심사 포인트 **구체적** 서술 (일반론·뻔한 설명 금지)
+   • h2 소제목은 키워드 나열 금지 — 사건·문제·해결 포인트가 드러나는 문장형 ("1) 친속관계 공증, 이 항목이 빠지면 반려")
    • 핵심 문장: <blockquote><p>...</p></blockquote> (섹션당 0~1)
 3) ${style.structure.requireTable ? "<table> 1회 — 요건·절차 정리" : ""}
 4) ${style.structure.requireList ? "<ul><li> 체크리스트 5개+" : ""}

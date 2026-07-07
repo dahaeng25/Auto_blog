@@ -223,10 +223,14 @@ export async function initImportWorkspace(
 export function validateImportedDraft(title: string, htmlBody: string): void {
   const t = title.trim();
   const b = htmlBody.trim();
+  const titlePath = path.join(CURRENT_WORKSPACE, FILES.title);
+  const bodyPath = path.join(CURRENT_WORKSPACE, FILES.body);
 
   if (!t || t === IMPORT_TITLE_PLACEHOLDER) {
     throw new Error(
-      "제목이 비어 있습니다. title.txt 에 Gems 등에서 작성한 제목을 붙여넣고 저장하세요.",
+      `제목이 비어 있습니다.\n` +
+        `  파일: ${titlePath}\n` +
+        `  메모장에서 Gems 등에서 작성한 제목을 붙여넣고 저장(Ctrl+S)한 뒤 다시 실행하세요.`,
     );
   }
 
@@ -236,7 +240,9 @@ export function validateImportedDraft(title: string, htmlBody: string): void {
     b.includes("여기에 본문을 붙여넣으세요")
   ) {
     throw new Error(
-      "본문이 비어 있습니다. body.html 에 HTML 본문을 붙여넣고 저장하세요.",
+      `본문이 비어 있습니다.\n` +
+        `  파일: ${bodyPath}\n` +
+        `  메모장에서 HTML 본문을 붙여넣고 저장(Ctrl+S)한 뒤 다시 실행하세요.`,
     );
   }
 
@@ -244,6 +250,37 @@ export function validateImportedDraft(title: string, htmlBody: string): void {
     throw new Error(
       "본문이 너무 짧습니다. body.html 내용을 확인하세요.",
     );
+  }
+}
+
+/** 외부 원고 붙여넣기가 완료됐는지 (배치·CLI 사전 검사용) */
+export async function isImportWorkspaceReady(): Promise<{
+  ready: boolean;
+  reason?: string;
+}> {
+  try {
+    const title = (
+      await fs.readFile(path.join(CURRENT_WORKSPACE, FILES.title), "utf-8")
+    ).trim();
+    const body = (
+      await fs.readFile(path.join(CURRENT_WORKSPACE, FILES.body), "utf-8")
+    ).trim();
+
+    try {
+      validateImportedDraft(title, body);
+      return { ready: true };
+    } catch (error) {
+      return {
+        ready: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  } catch {
+    return {
+      ready: false,
+      reason:
+        "편집 폴더가 없습니다. [3] 붙여넣기 준비를 먼저 실행하세요.",
+    };
   }
 }
 
@@ -521,17 +558,26 @@ export async function readWorkspaceMeta(): Promise<DraftWorkspaceMeta | null> {
  */
 export async function applyStyledBodyToWorkspace(): Promise<string> {
   const bodyPath = path.join(CURRENT_WORKSPACE, FILES.body);
-  const raw = (await fs.readFile(bodyPath, "utf-8")).trim();
+  const [raw, title, keywords] = await Promise.all([
+    fs.readFile(bodyPath, "utf-8"),
+    fs.readFile(path.join(CURRENT_WORKSPACE, FILES.title), "utf-8").catch(() => ""),
+    fs.readFile(path.join(CURRENT_WORKSPACE, FILES.keywords), "utf-8").catch(() => ""),
+  ]);
+
+  const trimmed = raw.trim();
 
   if (
-    !raw ||
-    raw === IMPORT_BODY_PLACEHOLDER.trim() ||
-    raw.includes("여기에 본문을 붙여넣으세요")
+    !trimmed ||
+    trimmed === IMPORT_BODY_PLACEHOLDER.trim() ||
+    trimmed.includes("여기에 본문을 붙여넣으세요")
   ) {
-    return raw;
+    return trimmed;
   }
 
-  const styled = applyBlogStyle(raw);
+  const styled = applyBlogStyle(trimmed, {
+    title: title.trim(),
+    keywords: keywords.trim(),
+  });
   await fs.writeFile(bodyPath, styled, "utf-8");
   await writePreviewHtml();
   return styled;

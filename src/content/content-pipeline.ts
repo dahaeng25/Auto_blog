@@ -237,7 +237,10 @@ export class ContentPipeline {
   ): Promise<ArticleDraft> {
     const fullDraft: ArticleDraft = {
       ...draft,
-      htmlBody: applyBlogStyle(draft.htmlBody),
+      htmlBody: applyBlogStyle(draft.htmlBody, {
+        title: draft.title,
+        keywords: draft.sourceTopic.title,
+      }),
       createdAt: new Date().toISOString(),
     };
 

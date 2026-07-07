@@ -1,4 +1,10 @@
 import { loadBlogStyle } from "./load-style.js";
+import { buildBrandTagline } from "./build-brand-tagline.js";
+
+export interface ApplyBlogStyleOptions {
+  title?: string;
+  keywords?: string;
+}
 
 function stripInlineStyle(tagHtml: string): string {
   return tagHtml.replace(/\s*style="[^"]*"/gi, "");
@@ -14,7 +20,6 @@ function pStyle(
 
 /** 시스템이 삽입한 구분선·브랜드 문구 제거 — 재적용 시 중복 방지 */
 function stripSystemDecorations(html: string): string {
-  const style = loadBlogStyle();
   let result = html;
 
   result = result.replace(
@@ -22,10 +27,8 @@ function stripSystemDecorations(html: string): string {
     "",
   );
 
-  const tagline = style.brandTagline ?? "강운준 행정사";
-  const escaped = tagline.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   result = result.replace(
-    new RegExp(`<p[^>]*>\\s*${escaped}[^<]*</p>`, "gi"),
+    /<p[^>]*>\s*강운준 행정사[^<]*<\/p>/gi,
     "",
   );
 
@@ -181,12 +184,8 @@ function restyleTableCells(html: string): string {
   return result;
 }
 
-function getBrandBandHtml(): string {
-  const style = loadBlogStyle();
-  if (style.brandBand?.html) return style.brandBand.html;
-
-  const tagline = style.brandTagline ?? "강운준 행정사";
-  const typo = style.typography;
+function getBrandBandHtml(tagline: string): string {
+  const typo = loadBlogStyle().typography;
   return (
     `<p style="text-align:${typo.bodyAlign};font-family:${typo.fontFamily};font-size:15px;` +
     `line-height:${typo.bodyLineHeight};color:#555555;margin:16px 0;">${tagline}</p>`
@@ -196,10 +195,14 @@ function getBrandBandHtml(): string {
 /**
  * AI·외부 원고 HTML에 dahaeng25 샘플 기준 폰트·구분선·정렬 적용
  */
-export function applyBlogStyle(html: string): string {
+export function applyBlogStyle(
+  html: string,
+  options?: ApplyBlogStyleOptions,
+): string {
   const style = loadBlogStyle();
   const cleaned = normalizeHtmlBeforeStyle(stripSystemDecorations(html));
   const { intro, sections } = splitIntroAndSections(cleaned);
+  const tagline = buildBrandTagline(options?.title ?? "", options?.keywords ?? "");
 
   let output = restyleParagraphs(
     intro,
@@ -209,7 +212,7 @@ export function applyBlogStyle(html: string): string {
 
   const showBrandOnce = sections.length > 0;
   if (showBrandOnce) {
-    output += getBrandBandHtml();
+    output += getBrandBandHtml(tagline);
   }
 
   const repeatBrand = style.brandBand?.repeatPerSection === true;
@@ -217,7 +220,7 @@ export function applyBlogStyle(html: string): string {
   for (const section of sections) {
     output += style.divider.html;
     if (repeatBrand) {
-      output += getBrandBandHtml();
+      output += getBrandBandHtml(tagline);
     }
     output += restyleH2(section);
   }

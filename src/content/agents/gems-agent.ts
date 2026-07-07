@@ -64,6 +64,20 @@ function buildKnowledgeInstruction(knowledgeContext?: string): string {
   return knowledgeContext;
 }
 
+function buildTopicPlanningInstruction(topic: string): string {
+  return `
+[주제 기획 — JSON 출력 전 내부적으로 수행, 결과만 JSON에 반영]
+
+입력: ${topic}
+
+1) 위 키워드만 보고 독자의 검색 의도·막힌 지점을 추론하십시오.
+2) 키워드를 나열하지 말고, **하나의 수임 사례 주제**로 좁혀 어떤 글을 쓸지 결정하십시오.
+3) 문장형 제목 후보를 머릿속으로 3개 구상한 뒤, 검색 의도·클릭률 기준으로 **최적 1개**만 title에 사용하십시오.
+4) 본문·h2·썸네일 문구도 그 주제에 맞춰 작성하십시오. 키워드 줄줄이 나열 금지.
+
+금지: "${topic}"를 제목·도입부에 쉼표로 그대로 나열하는 것`;
+}
+
 function buildUserPrompt(
   topic: string,
   region?: RegionPickResult,
@@ -78,16 +92,18 @@ function buildUserPrompt(
 
   if (keywordMode) {
     return `타겟 키워드: ${topic}${regionLine}
+${buildTopicPlanningInstruction(topic)}
 
-위 키워드로 '어제 막 해결한 실제 수임 사건' 르포 형식의 A형 블로그 글을 작성하세요.
+위 키워드를 **재료**로 삼아, 먼저 글 주제와 최적 제목을 유추·선정한 뒤 '어제 막 해결한 실제 수임 사건' 르포를 작성하세요.
 
 필수:
-- 가상의 구체적 의뢰인(연령·직업·국적·상황)을 설정 — 실명·가명·대표님·사장님 금지, 반드시 '의뢰인' 호칭
-- 키워드 띄어쓰기 그대로 유지, 메인 키워드 본문 3~5회
-- 최소 ${MIN_CHARS}자 이상, 6개 h2 섹션 구조 준수
+- 키워드 나열형 제목·도입부·h2 금지 — 하나의 사건 스토리로 통합
+- 가상의 구체적 의뢰인(연령·직업·국적·상황) — '의뢰인' 호칭만 사용
+- 키워드 표기는 원문 그대로, 본문 문장 속에 3~5회 자연 삽입
+- 최소 ${MIN_CHARS}자, 6개 h2 섹션 구조
 - JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText)
-- thumbnailTopLabel: 입력 키워드(비자코드·핵심어) 반영 5~10자
-- thumbnailText: 제목 핵심 2~3줄 (\\n 줄바꿈)${buildInternalLinkInstruction(relatedPosts ?? [])}`;
+- thumbnailTopLabel: 핵심 키워드 1개 압축 5~10자 (나열 금지)
+- thumbnailText: 선정한 제목을 2~3줄 문장으로 압축 (\\n 줄바꿈)${buildInternalLinkInstruction(relatedPosts ?? [])}`;
   }
 
   return `블로그 주제: ${topic}${regionLine}

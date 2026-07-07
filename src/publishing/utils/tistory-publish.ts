@@ -4,6 +4,7 @@ import { EDITOR_SELECTORS } from "../../../config/editor-selectors.js";
 import { findFirstVisible, splitSelectors, type PageOrFrame } from "./dom-utils.js";
 import { humanClick, humanPause } from "./human-input.js";
 import { waitForPublishedUrl } from "./publish-verify.js";
+import { selectTistoryCategory } from "./tistory-category-select.js";
 
 const PLATFORM_NAME = "티스토리";
 
@@ -38,13 +39,12 @@ async function selectPublicVisibility(page: Page): Promise<void> {
 
   const publicOption = await findFirstVisible(contexts, publicSelectors);
   if (publicOption) {
-    console.log(`[${PLATFORM_NAME}] ② 공개 옵션 선택`);
+    console.log(`[${PLATFORM_NAME}] ③ 공개 옵션 선택`);
     await humanClick(publicOption.locator);
     await humanPause(500);
     return;
   }
 
-  // JS fallback — checkbox-text '공개' 또는 visibility=20
   const selected = await page.evaluate(() => {
     const spans = document.querySelectorAll("span.checkbox-text");
     for (const span of Array.from(spans)) {
@@ -74,12 +74,64 @@ async function selectPublicVisibility(page: Page): Promise<void> {
   });
 
   if (selected) {
-    console.log(`[${PLATFORM_NAME}] ② 공개 옵션 선택 (JS: ${selected})`);
+    console.log(`[${PLATFORM_NAME}] ③ 공개 옵션 선택 (JS: ${selected})`);
     await humanPause(500);
     return;
   }
 
   console.log(`[${PLATFORM_NAME}] 공개 옵션 UI 미발견 — 기본값으로 진행`);
+}
+
+/** JS로 공개 발행 버튼 탐색·클릭 */
+async function clickPublishViaJs(page: Page): Promise<boolean> {
+  const clicked = await page.evaluate(() => {
+    const isVisible = (el: Element) => {
+      const style = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+
+    const prefer = ["#publish-btn", "#publish-btn-public", "button#publish-btn"];
+    for (const sel of prefer) {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (el && isVisible(el) && !el.hasAttribute("disabled")) {
+        el.click();
+        return sel;
+      }
+    }
+
+    const buttons = Array.from(
+      document.querySelectorAll("button, a[role='button'], input[type='submit']"),
+    ) as HTMLElement[];
+
+    const priority = ["공개 발행", "발행하기", "발행"];
+    for (const label of priority) {
+      for (const btn of buttons) {
+        const text = btn.textContent?.trim() ?? btn.getAttribute("value") ?? "";
+        if (!isVisible(btn) || btn.hasAttribute("disabled")) continue;
+        if (text === label || (label === "발행" && text.endsWith("발행"))) {
+          if (text.includes("예약")) continue;
+          btn.click();
+          return text;
+        }
+      }
+    }
+
+    return null;
+  });
+
+  if (clicked) {
+    console.log(`[${PLATFORM_NAME}] ④ 공개 발행 버튼 클릭 (JS: ${clicked})`);
+    await humanPause(2000);
+    return true;
+  }
+
+  return false;
 }
 
 /** 최종 공개 발행 버튼 클릭 */
@@ -90,36 +142,51 @@ async function clickPublicPublishButton(
   const selectors = splitSelectors(EDITOR_SELECTORS.tistory.publishConfirm);
   const searchContexts = getSearchContexts(page, contexts);
 
-  for (let attempt = 0; attempt < 20; attempt++) {
+  for (let attempt = 0; attempt < 15; attempt++) {
     const confirmBtn = await findFirstVisible(searchContexts, selectors);
     if (confirmBtn) {
-      console.log(`[${PLATFORM_NAME}] ③ 공개 발행 버튼 클릭`);
+      console.log(`[${PLATFORM_NAME}] ④ 공개 발행 버튼 클릭`);
       await humanClick(confirmBtn.locator);
       await humanPause(2000);
       return;
     }
+
+    if (await clickPublishViaJs(page)) {
+      return;
+    }
+
     await humanPause(500);
   }
 
   throw new Error(
     `[${PLATFORM_NAME}] 공개 발행 버튼을 찾을 수 없습니다. ` +
-      `PUBLISH_HEADLESS=false 로 발행 패널을 확인하세요.`,
+      `카테고리 미선택 또는 PUBLISH_HEADLESS=false 로 발행 패널을 확인하세요.`,
   );
 }
 
+export interface TistoryPublishOptions {
+  title?: string;
+  keywords?: string;
+}
+
 /**
- * 티스토리 공개 발행 — 패널 열기 → 공개 선택 → 발행
+ * 티스토리 공개 발행 — 패널 열기 → 카테고리 → 공개 → 발행
  */
 export async function clickTistoryPublicPublish(
   page: Page,
   contexts: PageOrFrame[],
+  options?: TistoryPublishOptions,
 ): Promise<string | undefined> {
   if (config.publishDryRun) {
     console.log(`[${PLATFORM_NAME}] DRY-RUN: 발행 버튼 클릭 생략`);
     return undefined;
   }
 
+  const title = options?.title ?? "";
+  const keywords = options?.keywords ?? "";
+
   await openPublishPanel(page, contexts);
+  await selectTistoryCategory(page, contexts, title, keywords);
   await selectPublicVisibility(page);
   await clickPublicPublishButton(page, contexts);
 

@@ -111,12 +111,15 @@ export class TistoryPublisher extends BasePublisher {
       imageButtonSelector: sel.imageButton,
       fileInputSelector: sel.fileInput,
       preparedImages: input.naverImages
-        ? [input.naverImages.thumbnail, ...input.naverImages.bodyImages]
+        ? [input.naverImages.thumbnail]
         : undefined,
     });
     await humanPause(editorSettleDelay(input.htmlBody.length));
 
-    return clickTistoryPublicPublish(page, [page, editorFrame]);
+    return clickTistoryPublicPublish(page, [page, editorFrame], {
+      title: input.title,
+      keywords: input.blogTopic ?? "",
+    });
   }
 
   /** 티스토리 에디터 iframe 탐색 */

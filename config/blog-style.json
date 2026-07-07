@@ -6,7 +6,7 @@
     "https://blog.naver.com/dahaeng25/223771680192",
     "https://blog.naver.com/dahaeng25/224212935937"
   ],
-  "brandTagline": "강운준 행정사 공장등록 나라장터 인허가 출입국비자",
+  "brandTagline": "강운준 행정사",
   "typography": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
     "bodyFontSize": "16px",
@@ -35,7 +35,6 @@
     "html": "<hr style=\"border:none;border-top:1px solid #bbbbbb;margin:28px 0;width:100%;\">"
   },
   "brandBand": {
-    "html": "<p style=\"text-align:left;font-family:'Nanum Gothic','Malgun Gothic',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:16px 0;\">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>",
     "repeatPerSection": false
   },
   "blockquote": {

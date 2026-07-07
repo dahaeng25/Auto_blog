@@ -82,10 +82,14 @@ call npm.cmd run blog:workflow -- --step import --batch --topic "!BLOG_KEYWORDS!
 if errorlevel 1 goto done
 echo.
 echo ========================================
-echo  메모장에서 제목·본문 저장 후
-echo  이 창으로 돌아와 아무 키나 누르세요.
+echo  메모장에서 제목, 본문을 붙여넣고
+echo  Ctrl+S 로 저장한 뒤
+echo  이 창에서 Enter 키를 누르세요.
 echo ========================================
 pause >nul
+echo.
+call :check_import_ready
+if errorlevel 1 goto done
 echo.
 echo [2/3] 썸네일 생성 중...
 call npm.cmd run blog:workflow -- --step import-resume --batch
@@ -121,8 +125,9 @@ echo [2/4] 원고 편집 파일을 엽니다...
 call npm.cmd run blog:workflow -- --step edit --batch
 echo.
 echo ========================================
-echo  메모장에서 원고 수정·저장 후
-echo  이 창으로 돌아와 아무 키나 누르세요.
+echo  메모장에서 원고를 수정하고
+echo  Ctrl+S 로 저장한 뒤
+echo  이 창에서 Enter 키를 누르세요.
 echo ========================================
 pause >nul
 echo.
@@ -336,6 +341,16 @@ if errorlevel 1 (
     >"%~dp0blog-region.txt" echo !BLOG_REGION!
 )
 exit /b 0
+
+:check_import_ready
+call npm.cmd run blog:workflow -- --step check-import --batch
+if errorlevel 1 (
+  echo.
+  echo [안내] 제목 또는 본문이 아직 저장되지 않았습니다.
+  echo   폴더: %~dp0output\drafts\current
+  echo   title.txt, body.html 을 메모장에서 저장^(Ctrl+S^) 후 다시 [2] 또는 [5]를 실행하세요.
+)
+exit /b %ERRORLEVEL%
 
 :done
 set EXIT_CODE=%ERRORLEVEL%

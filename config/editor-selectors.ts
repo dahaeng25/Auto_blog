@@ -85,7 +85,12 @@ export const EDITOR_SELECTORS = {
       'span.checkbox-text:has-text("공개"), label:has-text("공개"), #open20, input[value="20"][name="open"], input[value="20"]',
     /** ② 발행 패널 내 최종 '공개 발행' */
     publishConfirm:
-      '#publish-btn, .layer_publish button:has-text("공개 발행"), .box_popup button:has-text("공개 발행"), button.btn_ok:has-text("공개 발행"), button.btn_confirm:has-text("공개 발행")',
+      '#publish-btn, #publish-btn-public, button#publish-btn, .btn_publish, .layer_publish button:has-text("공개 발행"), .box_popup button:has-text("공개 발행"), button.btn_ok:has-text("공개 발행"), button.btn_confirm:has-text("공개 발행"), button:has-text("공개 발행"), button:has-text("발행하기"), .wrap_btn button[type="submit"]',
+    /** 카테고리 선택 버튼·드롭다운 */
+    categoryButton:
+      '#category-btn, button.btn_category, .btn_category, button:has-text("카테고리"), [class*="category"] button, #category-layer-btn, .box_category button',
+    categoryList:
+      '#category-list li, .category_list li, .list_category li, select#category option, select[name="category"] option',
   },
   google: {
     title:

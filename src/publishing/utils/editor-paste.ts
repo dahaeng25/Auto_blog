@@ -71,6 +71,45 @@ export async function pasteHtmlToEditor(
   await pasteHtmlViaClipboard(page, editorLocator, html);
 }
 
+/** 티스토리 TinyMCE — 본문 끝에 HTML 이어 붙이기 (역순 삽입 방지) */
+export async function appendHtmlToTistoryEditor(
+  page: Page,
+  editorLocator: Locator,
+  html: string,
+): Promise<void> {
+  await humanClick(editorLocator);
+  await humanPause(200);
+
+  const viaExec = await editorLocator.evaluate((el, htmlContent) => {
+    const root =
+      el instanceof HTMLElement && el.isContentEditable
+        ? el
+        : (el.closest("[contenteditable='true']") as HTMLElement | null);
+
+    if (!root) return false;
+
+    root.focus();
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    return document.execCommand("insertHTML", false, htmlContent);
+  }, html);
+
+  if (viaExec) {
+    console.log("[EditorPaste] 티스토리 insertHTML(끝) 성공");
+    return;
+  }
+
+  console.log("[EditorPaste] 티스토리 insertHTML 실패 → 클립보드 붙여넣기");
+  await focusEditorEnd(editorLocator);
+  await pasteHtmlViaClipboard(page, editorLocator, html);
+}
+
 /** 본문 끝에 HTML 이어 붙이기 (순서 유지) */
 export async function appendHtmlToEditor(
   page: Page,

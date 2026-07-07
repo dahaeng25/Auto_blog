@@ -5,7 +5,7 @@ import {
   focusNaverBodyEnd,
 } from "../utils/naver-editor.js";
 import { focusEditorEnd } from "../utils/editor-cursor.js";
-import { appendHtmlToEditor } from "../utils/editor-paste.js";
+import { appendHtmlToTistoryEditor } from "../utils/editor-paste.js";
 import { splitSelectors } from "../utils/dom-utils.js";
 import { humanClick, humanPause } from "../utils/human-input.js";
 import { applyLinkInDialog } from "../utils/naver-link-dialog.js";
@@ -263,19 +263,32 @@ async function runTistoryBlocks(
   await humanClick(options.bodyLocator);
   await humanPause(400);
 
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]!;
-    console.log(`[${options.platformName}] ${i + 1}/${blocks.length} — ${block.label}`);
+  const prepared = options.preparedImages;
+  const thumbMeta = prepared?.find((p) => p.sequence === 1);
+  const thumbPath = thumbMeta?.absolutePath ?? options.thumbnailPath;
 
-    if (block.kind === "html") {
-      await appendHtmlToEditor(options.page, options.bodyLocator, block.html);
-      await humanPause(500);
-      continue;
-    }
-
-    await focusEditorEnd(options.bodyLocator);
-    await uploadEditorImage(options, block.path, block.label);
+  // 1) 메인 썸네일 1장만 (서브썸네일·단락별 이미지 없음)
+  if (!config.publishSkipThumbnail && thumbPath) {
+    console.log(`[${options.platformName}] 메인 썸네일 삽입`);
+    await uploadEditorImage(
+      options,
+      thumbPath,
+      `메인 썸네일${thumbMeta ? ` (${thumbMeta.filename})` : ""}`,
+    );
     await humanPause(1200);
+    await focusEditorEnd(options.bodyLocator);
+  }
+
+  // 2) 스타일 적용된 본문 HTML 전체를 한 번에 삽입 (순서 뒤집힘 방지)
+  const fullHtml = options.htmlBody.trim();
+  if (fullHtml) {
+    const sectionCount = blocks.filter((b) => b.kind === "html").length;
+    console.log(
+      `[${options.platformName}] 본문 HTML 일괄 삽입 (섹션 ${sectionCount}개 분량)`,
+    );
+    await focusEditorEnd(options.bodyLocator);
+    await appendHtmlToTistoryEditor(options.page, options.bodyLocator, fullHtml);
+    await humanPause(800);
   }
 }
 

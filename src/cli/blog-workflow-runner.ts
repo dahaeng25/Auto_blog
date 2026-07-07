@@ -36,6 +36,7 @@ import {
   workspaceExists,
   writePreviewHtml,
   applyStyledBodyToWorkspace,
+  isImportWorkspaceReady,
 } from "./draft-workspace.js";
 import {
   refreshThumbnailTexts,
@@ -52,7 +53,8 @@ export type WorkflowStep =
   | "publish"
   | "full"
   | "import-full"
-  | "import-resume";
+  | "import-resume"
+  | "check-import";
 
 export type WorkflowMode = "ai" | "import";
 
@@ -264,8 +266,18 @@ export async function runImportStep(
   console.log("  • title.txt      — 제목");
   console.log("  • body.html      — HTML 본문");
   console.log("\n저장 후:");
+  console.log("  • 메모장에서 Ctrl+S 로 반드시 저장");
   console.log("  • [2] 전체(외부 원고) 또는 [5] 썸네일 생성");
   console.log("  • 썸네일 문구는 제목·본문 저장 후 자동 생성됩니다.");
+}
+
+/** 외부 원고 저장 여부만 검사 (배치 사전 확인용) */
+export async function runCheckImportStep(): Promise<void> {
+  const status = await isImportWorkspaceReady();
+  if (!status.ready) {
+    throw new Error(status.reason ?? "외부 원고가 준비되지 않았습니다.");
+  }
+  console.log("[Import] 제목·본문이 저장되어 있습니다.");
 }
 
 /** 붙여넣기 완료 후 — 검증 + 썸네일 문구 동기화 + 썸네일 생성 */
@@ -556,6 +568,9 @@ export async function runWorkflow(options: WorkflowRunOptions): Promise<void> {
         break;
       case "import-resume":
         await runImportResumeStep();
+        break;
+      case "check-import":
+        await runCheckImportStep();
         break;
       default:
         throw new Error(`알 수 없는 단계: ${options.step}`);
