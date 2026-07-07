@@ -20,6 +20,10 @@ import {
   resolveBlogRegionInput,
 } from "./regions/pick-regions.js";
 import { refineTitleAndThumbnail } from "./seo/title-seo-refiner.js";
+import {
+  buildBlogReferenceContext,
+  gatherBlogReferences,
+} from "./seo/blog-reference-gatherer.js";
 import { PublishedPostRepository } from "./seo/published-post-repository.js";
 import { sanitizeClientReferences } from "./sanitize-client.js";
 import { TopicRepository } from "./farming/topic-repository.js";
@@ -174,12 +178,16 @@ export class ContentPipeline {
       publishedRepo.close();
     }
 
+    const blogReferenceBundle = await gatherBlogReferences(blogTopic);
+    const blogReferenceContext = buildBlogReferenceContext(blogReferenceBundle);
+
     const knowledgeContext = await retrieveKnowledgeContext(blogTopic);
     const gems = await this.gemsAgent.run(
       blogTopic,
       regionPick,
       relatedPosts,
       knowledgeContext ?? undefined,
+      blogReferenceContext || undefined,
     );
 
     const seoRefined = await refineTitleAndThumbnail({
@@ -188,6 +196,7 @@ export class ContentPipeline {
       thumbnailText: gems.thumbnailText,
       thumbnailTopLabel: gems.thumbnailTopLabel,
       region: regionPick,
+      blogReferences: blogReferenceBundle.naverPosts,
     });
 
     const inputPhrases = extractInputKeywordPhrases(blogTopic);

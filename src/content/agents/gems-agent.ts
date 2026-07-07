@@ -28,7 +28,8 @@ function buildTechnicalInstruction(region?: RegionPickResult): string {
 ${regionBlock}
 ${buildSampleStructureInstruction()}
 - htmlBody 순수 텍스트 최소 ${MIN_CHARS}자 미만이면 실패로 간주하고 반드시 보강하십시오.
-- 르포 형식 수임 사례 1건을 반드시 전편에 걸쳐 전개하십시오 (빈약한 요약 금지).
+- [참고 유사 글]이 주입된 경우, 그 글들이 다루는 니즈·반려 포인트·서류 요건을 본문에 반영하십시오.
+- 1인칭 수임 사례 1건을 전편에 걸쳐 전개하되, 소설·가상 르포 톤 금지 — 실무에서 흔한 상황에 맞추십시오.
 - 사례 인물은 실명·가명 없이 '의뢰인'으로만 지칭 (대표님·사장님·김○○·A씨 금지).
 - JSON만 출력. 마크다운 코드블록 금지.`;
 }
@@ -70,19 +71,24 @@ function buildTopicPlanningInstruction(topic: string): string {
 
 입력: ${topic}
 
-1) 위 키워드만 보고 독자의 검색 의도·막힌 지점을 추론하십시오.
-2) 키워드를 나열하지 말고, **하나의 수임 사례 주제**로 좁혀 어떤 글을 쓸지 결정하십시오.
-3) 문장형 제목 후보를 머릿속으로 3개 구상한 뒤, 검색 의도·클릭률 기준으로 **최적 1개**만 title에 사용하십시오.
-4) 본문·h2·썸네일 문구도 그 주제에 맞춰 작성하십시오. 키워드 줄줄이 나열 금지.
+1) [참고 유사 글]이 있다면, 상위 글들이 다루는 **검색 의도·고객 니즈·반려·서류 포인트**를 먼저 정리하십시오.
+2) 위 키워드와 참고 글 패턴을 바탕으로 **실무에서 흔한 수임 상황 1건**으로 글 주제를 좁히십시오.
+3) 참고 글 제목 패턴을 분석해 문장형 제목 후보 3개를 구상한 뒤, 검색 의도·클릭률 기준으로 **최적 1개**만 title에 사용하십시오.
+4) 본문·h2·썸네일 문구도 참고 글이 다루는 구조·니즈에 맞춰 작성하십시오. 키워드 줄줄이 나열 금지.
 
-금지: "${topic}"를 제목·도입부에 쉼표로 그대로 나열하는 것`;
+금지: "${topic}"를 제목·도입부에 쉼표로 그대로 나열하는 것, 참고 글과 무관한 가상 소설형 스토리`;
+}
+
+function buildBlogReferenceInstruction(blogReferenceContext?: string): string {
+  if (!blogReferenceContext?.trim()) return "";
+  return blogReferenceContext;
 }
 
 function buildUserPrompt(
   topic: string,
   region?: RegionPickResult,
   relatedPosts?: PublishedPostRecord[],
-  knowledgeContext?: string,
+  _knowledgeContext?: string,
 ): string {
   const regionLine = region
     ? `\n타겟 지역: ${region.parentName} / 시·군·구: ${region.pickedShort.join(", ")}`
@@ -94,11 +100,12 @@ function buildUserPrompt(
     return `타겟 키워드: ${topic}${regionLine}
 ${buildTopicPlanningInstruction(topic)}
 
-위 키워드를 **재료**로 삼아, 먼저 글 주제와 최적 제목을 유추·선정한 뒤 '어제 막 해결한 실제 수임 사건' 르포를 작성하세요.
+위 키워드와 [참고 유사 글]을 바탕으로, 먼저 글 주제와 최적 제목을 선정한 뒤 실무 기반 1인칭 수임 사례 글을 작성하세요.
 
 필수:
-- 키워드 나열형 제목·도입부·h2 금지 — 하나의 사건 스토리로 통합
-- 가상의 구체적 의뢰인(연령·직업·국적·상황) — '의뢰인' 호칭만 사용
+- 참고 유사 글이 다루는 고객 니즈·반려·서류 요건을 본문에 반영 (문장 복사 금지)
+- 키워드 나열형 제목·도입부·h2 금지 — 하나의 실무 사례로 통합
+- 소설·가상 르포 톤 금지. 연령·직업·국적·상황은 실무에서 흔한 범위로 — '의뢰인' 호칭만 사용
 - 키워드 표기는 원문 그대로, 본문 문장 속에 3~5회 자연 삽입
 - 최소 ${MIN_CHARS}자, 6개 h2 섹션 구조
 - JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText)
@@ -108,9 +115,9 @@ ${buildTopicPlanningInstruction(topic)}
 
   return `블로그 주제: ${topic}${regionLine}
 
-위 주제로 강운준 행정사 1인칭 르포 형식 A형 글을 JSON 1건으로 작성하세요.
-최소 ${MIN_CHARS}자, 수임 사례 스토리텔링·반려 포인트·법령 인용·체크리스트·Q&A·면책·해시태그 포함.
-사례 인물은 '의뢰인'으로만 지칭 (실명·가명 금지).${buildInternalLinkInstruction(relatedPosts ?? [])}`;
+위 주제와 [참고 유사 글]을 바탕으로 강운준 행정사 1인칭 실무 수임 사례 A형 글을 JSON 1건으로 작성하세요.
+최소 ${MIN_CHARS}자, 반려 포인트·서류 요건·법령 인용·체크리스트·Q&A·면책·해시태그 포함.
+소설형 가상 스토리 금지. 사례 인물은 '의뢰인'으로만 지칭 (실명·가명 금지).${buildInternalLinkInstruction(relatedPosts ?? [])}`;
 }
 
 /** LLM 응답에서 JSON 추출 */
@@ -146,6 +153,7 @@ export class GemsAgent {
     region?: RegionPickResult,
     relatedPosts?: PublishedPostRecord[],
     knowledgeContext?: string,
+    blogReferenceContext?: string,
   ): Promise<GemsArticleOutput> {
     console.log("[Gems] 사용자 지정 주제로 콘텐츠 생성 중...");
     console.log(`[Gems] 주제: ${topic}`);
@@ -162,10 +170,14 @@ export class GemsAgent {
     if (knowledgeContext?.trim()) {
       console.log("[Gems] PDF 참고 자료 주입");
     }
+    if (blogReferenceContext?.trim()) {
+      console.log("[Gems] 유사 블로그 참고 자료 주입");
+    }
 
     const gemsPrompt = loadGemsSystemPrompt(region);
     const system =
       gemsPrompt +
+      buildBlogReferenceInstruction(blogReferenceContext) +
       buildKnowledgeInstruction(knowledgeContext) +
       buildTechnicalInstruction(region);
 
