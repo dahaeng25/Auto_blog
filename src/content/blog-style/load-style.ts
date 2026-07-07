@@ -14,6 +14,9 @@ export interface BlogTypography {
   h2Color: string;
   h2Align: string;
   h2Margin: string;
+  h2PaddingBottom?: string;
+  h2BorderBottom?: string;
+  h2LetterSpacing?: string;
   h3FontSize: string;
   h3FontWeight: string;
   h3Color: string;
@@ -21,6 +24,8 @@ export interface BlogTypography {
   h3Margin: string;
   tableFontSize: string;
   listFontSize: string;
+  /** 마무리 CTA·사무소 정보·해시태그 정렬 */
+  footerAlign?: string;
 }
 
 export interface BlogStyleConfig {
@@ -28,7 +33,7 @@ export interface BlogStyleConfig {
   brandTagline?: string;
   typography: BlogTypography;
   divider: { html: string };
-  brandBand?: { html: string };
+  brandBand?: { html: string; repeatPerSection?: boolean };
   blockquote?: { borderColor: string; background: string };
   spacing: {
     paragraphMargin: string;
@@ -54,13 +59,16 @@ const DEFAULT_STYLE: BlogStyleConfig = {
     bodyFontSize: "16px",
     bodyLineHeight: "1.9",
     bodyColor: "#333333",
-    introAlign: "center",
+    introAlign: "left",
     bodyAlign: "left",
-    h2FontSize: "20px",
-    h2FontWeight: "700",
-    h2Color: "#222222",
+    h2FontSize: "21px",
+    h2FontWeight: "800",
+    h2Color: "#1a3a5c",
     h2Align: "left",
-    h2Margin: "36px 0 16px 0",
+    h2Margin: "36px 0 0 0",
+    h2PaddingBottom: "10px",
+    h2BorderBottom: "2px solid #1a3a5c",
+    h2LetterSpacing: "-0.3px",
     h3FontSize: "17px",
     h3FontWeight: "700",
     h3Color: "#2a4a6c",
@@ -68,12 +76,14 @@ const DEFAULT_STYLE: BlogStyleConfig = {
     h3Margin: "22px 0 12px 0",
     tableFontSize: "15px",
     listFontSize: "16px",
+    footerAlign: "center",
   },
   divider: {
     html: '<hr style="border:none;border-top:1px solid #bbbbbb;margin:36px 0;width:100%;">',
   },
   brandBand: {
-    html: '<p style="text-align:center;font-family:\'Nanum Gothic\',\'Malgun Gothic\',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:20px 0;">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>',
+    html: '<p style="text-align:left;font-family:\'Nanum Gothic\',\'Malgun Gothic\',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:16px 0;">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>',
+    repeatPerSection: false,
   },
   blockquote: {
     borderColor: "#1a3a5c",
@@ -109,6 +119,7 @@ export function loadBlogStyle(): BlogStyleConfig {
     },
     brandBand: {
       html: raw.brandBand?.html ?? DEFAULT_STYLE.brandBand!.html,
+      repeatPerSection: raw.brandBand?.repeatPerSection ?? false,
     },
     blockquote: {
       borderColor:
@@ -121,35 +132,32 @@ export function loadBlogStyle(): BlogStyleConfig {
   };
 }
 
-/** Gems 프롬프트용 kanghaeng1345 샘플 구성 지시문 */
+/** Gems 프롬프트용 dahaeng25 샘플 구성 지시문 */
 export function buildSampleStructureInstruction(): string {
   const style = loadBlogStyle();
   const refs = style.referenceUrls.join("\n- ");
   const minChars = style.structure.minPlainTextChars ?? 3200;
 
   return `
-[참고 블로그 레이아웃 — kanghaeng1345 / 강운준 행정사]
-참고 URL:
+[참고 블로그 레이아웃 — dahaeng25 / 강운준 행정사 실무 톤]
+참고 URL (톤·밀도·h2 흐름만 학습, 문장 복사 금지):
 - ${refs}
 
-htmlBody 구성 (위 샘플 글과 동일한 흐름·밀도):
-1) 도입부: 가운데 정렬 공감·후킹 <p> ${style.structure.introParagraphCount}개 내외 (1인칭, 실무 톤, 3~4문장씩 짧은 단락)
-2) 본문 h2 소제목 ${style.structure.minH2Sections}개 이상 — 번호 형식 권장 (예: "1) 첫 단추, ...", "2) ...", 마지막은 "N. 마치며")
-   • 각 h2 아래: 리드 <p> 1~2개 → 상세 <p> 3~5개 (단락당 2~4문장, 빈약한 1~2문장 단락 금지)
-   • 핵심 문장은 <blockquote><p>...</p></blockquote> 로 인용구 처리 (섹션당 0~1개)
-   • 세부 항목은 <ul><li> 또는 <h3> 소주제 + <p> 조합
-3) ${style.structure.requireTable ? "<table> 1회 이상 — 요건·비교·절차 정리" : ""}
-4) ${style.structure.requireList ? "<ul><li> 체크포인트 리스트 1회 이상" : ""}
-5) ${style.structure.requireCaseStudy ? "실제 수임 사례(익명) 1개 — 인물은 '의뢰인'으로만 지칭, 실명·가명 금지" : ""}
-6) ${style.structure.requireQna ? "Q&A 3세트 — <h3>질문</h3><p>답변</p> 형식" : ""}
-7) 마무리 CTA: 가운데 정렬 문의 유도 + "강운준 행정사였습니다."
-8) 사무소 정보 <p> (가운데): 행정사사무소 다행, 주소, 전국대표번호 1844-1346
-9) ${style.structure.requireDisclaimer ? "면책: ※ 본 정보는 법령 개정 등에 따라 변경될 수 있으므로..." : ""}
-10) 해시태그 <p> (가운데): #키워드 #지역명 #강운준행정사 형식 10~15개
+htmlBody 구성 (위 샘플과 동일한 흐름):
+1) 도입부: 왼쪽 정렬 <p> ${style.structure.introParagraphCount}개 — 1인칭 실무 르포, 「며칠 전…」「전화를 받고…」 장면으로 시작
+2) 본문 h2 ${style.structure.minH2Sections}개 — **번호 형식 필수** ("1) …", "2) …", "6. 마치며")
+   • 각 섹션은 <h2>로 시작 → 아래 <p>만 연결 (h2 단위로 한 덩어리, 중간에 h2 끼워넣기 금지)
+   • 실무 반려 사유·서류 누락·심사 포인트 **구체적** 서술 (일반론·뻔한 설명 금지)
+   • 핵심 문장: <blockquote><p>...</p></blockquote> (섹션당 0~1)
+3) ${style.structure.requireTable ? "<table> 1회 — 요건·절차 정리" : ""}
+4) ${style.structure.requireList ? "<ul><li> 체크리스트 5개+" : ""}
+5) ${style.structure.requireCaseStudy ? "수임 사례 — '의뢰인'만, 실명·가명 금지" : ""}
+6) ${style.structure.requireQna ? "Q&A 3세트 — <h3>질문</h3><p>답변</p>" : ""}
+7) 마무리·사무소·해시태그만 가운데 정렬 <p> 허용 (그 외 본문은 왼쪽 정렬)
 
-분량: htmlBody 순수 텍스트 최소 ${minChars}자, 권장 3500~5000자 (짧고 빈약한 글 금지)
-구분선·브랜드 문구·폰트는 시스템이 자동 적용 — LLM은 인라인 style 금지
+분량: 순수 텍스트 최소 ${minChars}자
+구분선·폰트는 시스템 자동 적용 — 인라인 style 금지
 
-금지: <strong>, <b>, h1, 마크다운, 인라인 style, "상담" 단어
+금지: <strong>, <b>, h1, 마크다운, div, "상담", "알아보겠습니다", "정리해 드릴게요", "결론적으로"
 `;
 }

@@ -1,9 +1,10 @@
 {
-  "$comment": "강운준 행정사 kanghaeng1345 블로그 레이아웃 기준",
-  "referenceBlog": "https://blog.naver.com/kanghaeng1345",
+  "$comment": "dahaeng25 샘플 레이아웃 기준 — 왼쪽 정렬 본문, h2 구분선, 도입·마무리만 선택적 가운데",
+  "referenceBlog": "https://blog.naver.com/dahaeng25",
   "referenceUrls": [
-    "https://blog.naver.com/kanghaeng1345",
-    "https://blog.naver.com/kanghaeng1345/224291170877"
+    "https://blog.naver.com/dahaeng25/223312750099",
+    "https://blog.naver.com/dahaeng25/223771680192",
+    "https://blog.naver.com/dahaeng25/224212935937"
   ],
   "brandTagline": "강운준 행정사 공장등록 나라장터 인허가 출입국비자",
   "typography": {
@@ -11,26 +12,31 @@
     "bodyFontSize": "16px",
     "bodyLineHeight": "1.9",
     "bodyColor": "#333333",
-    "introAlign": "center",
+    "introAlign": "left",
     "bodyAlign": "left",
-    "h2FontSize": "20px",
-    "h2FontWeight": "700",
-    "h2Color": "#222222",
+    "h2FontSize": "21px",
+    "h2FontWeight": "800",
+    "h2Color": "#1a3a5c",
     "h2Align": "left",
-    "h2Margin": "36px 0 16px 0",
+    "h2Margin": "36px 0 0 0",
+    "h2PaddingBottom": "10px",
+    "h2BorderBottom": "2px solid #1a3a5c",
+    "h2LetterSpacing": "-0.3px",
     "h3FontSize": "17px",
     "h3FontWeight": "700",
     "h3Color": "#2a4a6c",
     "h3Align": "left",
-    "h3Margin": "22px 0 12px 0",
+    "h3Margin": "20px 0 10px 0",
     "tableFontSize": "15px",
-    "listFontSize": "16px"
+    "listFontSize": "16px",
+    "footerAlign": "center"
   },
   "divider": {
-    "html": "<hr style=\"border:none;border-top:1px solid #bbbbbb;margin:36px 0;width:100%;\">"
+    "html": "<hr style=\"border:none;border-top:1px solid #bbbbbb;margin:28px 0;width:100%;\">"
   },
   "brandBand": {
-    "html": "<p style=\"text-align:center;font-family:'Nanum Gothic','Malgun Gothic',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:20px 0;\">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>"
+    "html": "<p style=\"text-align:left;font-family:'Nanum Gothic','Malgun Gothic',sans-serif;font-size:15px;line-height:1.9;color:#555555;margin:16px 0;\">강운준 행정사 공장등록 나라장터 인허가 출입국비자</p>",
+    "repeatPerSection": false
   },
   "blockquote": {
     "borderColor": "#1a3a5c",
@@ -41,8 +47,8 @@
     "introParagraphMargin": "0 0 16px 0"
   },
   "structure": {
-    "introParagraphCount": 4,
-    "minH2Sections": 4,
+    "introParagraphCount": 3,
+    "minH2Sections": 6,
     "requireTable": true,
     "requireList": true,
     "requireDisclaimer": true,

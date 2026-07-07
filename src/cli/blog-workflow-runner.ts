@@ -35,6 +35,7 @@ import {
   validateImportedDraft,
   workspaceExists,
   writePreviewHtml,
+  applyStyledBodyToWorkspace,
 } from "./draft-workspace.js";
 import {
   refreshThumbnailTexts,
@@ -116,6 +117,14 @@ async function waitForEnter(message: string, batchMode?: boolean): Promise<void>
     await rl.question(`\n${message}\nEnter를 누르면 계속합니다...`);
   } finally {
     rl.close();
+  }
+}
+
+/** 썸네일·업로드 전 본문 스타일 자동 적용 */
+async function ensureStyledBody(): Promise<void> {
+  const styled = await applyStyledBodyToWorkspace();
+  if (styled.length > 80) {
+    console.log("[Style] body.html 에 블로그 서식을 적용했습니다.");
   }
 }
 
@@ -266,6 +275,8 @@ export async function runImportResumeStep(): Promise<void> {
   const { keywords, draft } = await loadDraftFromWorkspace();
   validateImportedDraft(draft.title, draft.htmlBody);
 
+  await ensureStyledBody();
+
   await ensureThumbnailTextsSynced(
     keywords,
     draft.title,
@@ -329,6 +340,8 @@ export async function runEditStep(): Promise<void> {
 export async function runThumbnailStep(): Promise<string> {
   await ensureWritableDirs();
 
+  await ensureStyledBody();
+
   const { keywords, draft } = await loadDraftFromWorkspace();
   const thumbnailTexts = await ensureThumbnailTextsSynced(
     keywords,
@@ -387,6 +400,8 @@ export async function runThumbnailPreviewStep(): Promise<string> {
 /** Phase 4: 업로드 */
 export async function runPublishStep(): Promise<void> {
   await ensureWritableDirs();
+
+  await ensureStyledBody();
 
   const { keywords, draft, thumbnailPath: savedPath, subThumbnailPaths } =
     await loadDraftFromWorkspace();

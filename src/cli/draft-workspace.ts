@@ -6,6 +6,7 @@ import { config } from "../../config/index.js";
 import { normalizeTopicInput } from "./resolve-blog-topic.js";
 import type { ArticleDraft } from "../content/types.js";
 import { normalizeThumbnailLineBreaks } from "../thumbnail/normalize-thumbnail-line-breaks.js";
+import { applyBlogStyle } from "../content/blog-style/apply-style.js";
 
 export const CURRENT_WORKSPACE = path.join(config.draftsDir, "current");
 
@@ -512,4 +513,26 @@ export async function readWorkspaceMeta(): Promise<DraftWorkspaceMeta | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * body.html 에 블로그 스타일(폰트·구분선·정렬) 적용 후 저장.
+ * 외부 붙여넣기·편집 후 썸네일·업로드 직전에 호출합니다.
+ */
+export async function applyStyledBodyToWorkspace(): Promise<string> {
+  const bodyPath = path.join(CURRENT_WORKSPACE, FILES.body);
+  const raw = (await fs.readFile(bodyPath, "utf-8")).trim();
+
+  if (
+    !raw ||
+    raw === IMPORT_BODY_PLACEHOLDER.trim() ||
+    raw.includes("여기에 본문을 붙여넣으세요")
+  ) {
+    return raw;
+  }
+
+  const styled = applyBlogStyle(raw);
+  await fs.writeFile(bodyPath, styled, "utf-8");
+  await writePreviewHtml();
+  return styled;
 }

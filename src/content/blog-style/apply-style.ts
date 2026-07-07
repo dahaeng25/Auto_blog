@@ -12,6 +12,37 @@ function pStyle(
   return `font-family:${typo.fontFamily};font-size:${typo.bodyFontSize};line-height:${typo.bodyLineHeight};color:${typo.bodyColor};text-align:${align};margin:${margin};`;
 }
 
+/** 시스템이 삽입한 구분선·브랜드 문구 제거 — 재적용 시 중복 방지 */
+function stripSystemDecorations(html: string): string {
+  const style = loadBlogStyle();
+  let result = html;
+
+  result = result.replace(
+    /<hr[^>]*style="[^"]*border-top:1px solid #bbbbbb[^"]*"[^>]*>/gi,
+    "",
+  );
+
+  const tagline = style.brandTagline ?? "강운준 행정사";
+  const escaped = tagline.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  result = result.replace(
+    new RegExp(`<p[^>]*>\\s*${escaped}[^<]*</p>`, "gi"),
+    "",
+  );
+
+  return result.trim();
+}
+
+/** LLM·Gems HTML 정규화 — 업로드 전 서식 통일 */
+export function normalizeHtmlBeforeStyle(html: string): string {
+  return html
+    .replace(/<\/?(strong|b)\b[^>]*>/gi, "")
+    .replace(/<h1(\s[^>]*)?>/gi, "<h2>")
+    .replace(/<\/h1>/gi, "</h2>")
+    .replace(/\sstyle="[^"]*"/gi, "")
+    .replace(/\salign="[^"]*"/gi, "")
+    .trim();
+}
+
 /** 첫 번째 h2 이전 = 도입부 */
 function splitIntroAndSections(html: string): { intro: string; sections: string[] } {
   const match = html.search(/<h2[\s>]/i);
@@ -36,6 +67,21 @@ function restyleParagraphs(block: string, align: string, margin: string): string
   return block.replace(/<p(\s[^>]*)?>/gi, (_full, attrs = "") => {
     const clean = stripInlineStyle(`<p${attrs}>`);
     return clean.replace(/<p/, `<p style="${style}"`);
+  });
+}
+
+/** 마무리 구간(마치며·면책·해시태그·사무소)만 가운데 정렬 */
+function restyleFooterParagraphs(section: string): string {
+  const style = loadBlogStyle();
+  const footerAlign = style.typography.footerAlign ?? "center";
+  const margin = style.spacing.paragraphMargin;
+  const typo = style.typography;
+  const footerStyle = pStyle(footerAlign, margin, typo);
+  const footerPattern =
+    /<p[^>]*>([^<]*(?:마치며|강운준 행정사였습니다|행정사사무소|1844-1346|※ 본 정보|#\w)[^<]*)<\/p>/gi;
+
+  return section.replace(footerPattern, (_full, content) => {
+    return `<p style="${footerStyle}">${content.trim()}</p>`;
   });
 }
 
@@ -86,6 +132,7 @@ function restyleH2(section: string): string {
   );
 
   result = restyleBlockquotes(result);
+  result = restyleFooterParagraphs(result);
 
   result = result.replace(/<ul(\s[^>]*)?>/gi, () => {
     const typo = loadBlogStyle().typography;
@@ -136,17 +183,18 @@ function getBrandBandHtml(): string {
   const tagline = style.brandTagline ?? "강운준 행정사";
   const typo = style.typography;
   return (
-    `<p style="text-align:center;font-family:${typo.fontFamily};font-size:15px;` +
-    `line-height:${typo.bodyLineHeight};color:#555555;margin:20px 0;">${tagline}</p>`
+    `<p style="text-align:${typo.bodyAlign};font-family:${typo.fontFamily};font-size:15px;` +
+    `line-height:${typo.bodyLineHeight};color:#555555;margin:16px 0;">${tagline}</p>`
   );
 }
 
 /**
- * AI 생성 HTML에 kanghaeng1345 샘플과 동일한 폰트·구분선·브랜드밴드·인용구 스타일 적용
+ * AI·외부 원고 HTML에 dahaeng25 샘플 기준 폰트·구분선·정렬 적용
  */
 export function applyBlogStyle(html: string): string {
   const style = loadBlogStyle();
-  const { intro, sections } = splitIntroAndSections(html.trim());
+  const cleaned = normalizeHtmlBeforeStyle(stripSystemDecorations(html));
+  const { intro, sections } = splitIntroAndSections(cleaned);
 
   let output = restyleParagraphs(
     intro,
@@ -154,13 +202,18 @@ export function applyBlogStyle(html: string): string {
     style.spacing.introParagraphMargin,
   );
 
-  if (sections.length > 0) {
+  const showBrandOnce = sections.length > 0;
+  if (showBrandOnce) {
     output += getBrandBandHtml();
   }
 
+  const repeatBrand = style.brandBand?.repeatPerSection === true;
+
   for (const section of sections) {
     output += style.divider.html;
-    output += getBrandBandHtml();
+    if (repeatBrand) {
+      output += getBrandBandHtml();
+    }
     output += restyleH2(section);
   }
 
