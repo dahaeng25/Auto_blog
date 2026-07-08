@@ -21,7 +21,16 @@ export interface GemsArticleOutput {
 }
 
 const MIN_CHARS = loadBlogStyle().structure.minPlainTextChars ?? 3500;
-const BANNED_EXPRESSIONS = ["꿀팁", "상담", "총정리", "대박"] as const;
+/** 낚시·과장 표현 (부분 문자열 일치) */
+const BANNED_SUBSTRINGS = ["꿀팁", "총정리", "대박"] as const;
+/** 마케팅형 상담 유도 문구만 차단 — '대학 상담'·'국제처 안내' 등 업무 설명은 허용 */
+const BANNED_PHRASE_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /무료\s*상담/, label: "무료상담" },
+  { pattern: /상담\s*(?:신청|문의|예약|접수)/, label: "상담유도(신청·문의)" },
+  { pattern: /상담\s*(?:받|해\s*드|하세요|환영|가능)/, label: "상담유도(받으세요)" },
+  { pattern: /(?:전화|카톡|카카오)\s*상담/, label: "채널상담유도" },
+  { pattern: /1\s*[:：]\s*1\s*상담/, label: "1:1상담" },
+];
 
 interface LlmReviewResult {
   aliasViolation: boolean;
@@ -190,7 +199,14 @@ function sanitizeDraftForReview(draft: GemsArticleOutput): GemsArticleOutput {
 }
 
 function detectBannedExpression(text: string): string[] {
-  return BANNED_EXPRESSIONS.filter((word) => text.includes(word));
+  const hits: string[] = [];
+  for (const word of BANNED_SUBSTRINGS) {
+    if (text.includes(word)) hits.push(word);
+  }
+  for (const { pattern, label } of BANNED_PHRASE_PATTERNS) {
+    if (pattern.test(text)) hits.push(label);
+  }
+  return [...new Set(hits)];
 }
 
 function detectSuspiciousLegalReference(text: string): boolean {
@@ -242,8 +258,8 @@ async function runLlmSelfReview(
    - true: 대표님, 사장님, 고객님, A씨, 김○○, 김모씨 등 실명·가명·개인호칭
    - false: '의뢰인', '50대 의뢰인', '베트남 국적 의뢰인' 등 규정 호칭
    - false: ${brand.brandName}, ${brand.officeName} 등 사무소·행정사 명칭
-2) bannedExpressionViolation: 금지어(꿀팁, 상담, 총정리, 대박)가 **본문 서술**에 있을 때만 true
-   (행정사·비자 업무명에 포함된 일반 단어는 맥락상 허용)
+2) bannedExpressionViolation: 꿀팁/총정리/대박 또는 '무료상담'·'상담 받으세요' 등 **마케팅 유도 문구**일 때만 true
+   ('대학 상담', '국제처 안내', '유학 상담' 등 업무·기관 설명은 false)
 3) fabricatedLegalReferenceSuspicion: 법령명이 부자연스럽거나 허구로 보이는 인용 의심 여부
 
 반드시 JSON:
@@ -299,7 +315,7 @@ function buildExpandChunkPrompt(
 요구:
 - 순수 텍스트 기준 약 ${targetGain}자 분량의 신규 내용
 - h2 1~2개 + 문단/체크리스트/Q&A 보강
-- 사례는 '의뢰인' 호칭만, 금지어(꿀팁·상담·총정리·대박) 금지
+- 사례는 '의뢰인' 호칭만, 금지어(꿀팁·총정리·대박·무료상담 유도) 금지
 - 기존 내용을 반복하지 말 것
 
 참고용 기존 본문 일부:
@@ -442,8 +458,12 @@ export class GemsAgent {
         `[Gems] LLM 호칭 검수 의심(정규식 미검출) — 통과 처리: ${llmReview.reason || "사유 없음"}`,
       );
     }
-    const mergedBannedViolation =
-      bannedDetected.length > 0 || llmReview.bannedExpressionViolation;
+    const mergedBannedViolation = bannedDetected.length > 0;
+    if (llmReview.bannedExpressionViolation && bannedDetected.length === 0) {
+      console.warn(
+        `[Gems] LLM 금지어 검수 의심(정규식 미검출) — 통과 처리: ${llmReview.reason || "사유 없음"}`,
+      );
+    }
     const mergedLegalSuspicion =
       legalSuspicious || llmReview.fabricatedLegalReferenceSuspicion;
 
