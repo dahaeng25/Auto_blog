@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { Browser, LaunchOptions } from "playwright-core";
+import { isServerless } from "./is-serverless.js";
 
 const SERVERLESS_ARGS = [
   "--disable-blink-features=AutomationControlled",
@@ -7,10 +8,6 @@ const SERVERLESS_ARGS = [
   "--disable-dev-shm-usage",
   "--disable-gpu",
 ];
-
-function useServerlessChromium(): boolean {
-  return Boolean(process.env.VERCEL) || process.env.USE_SERVERLESS_CHROMIUM === "true";
-}
 
 let localChromiumPromise: ReturnType<typeof importPlaywrightExtra> | null = null;
 
@@ -41,8 +38,7 @@ function appendLdLibraryPath(...dirs: string[]): void {
 export async function launchChromium(
   options: LaunchOptions = {},
 ): Promise<Browser> {
-  if (useServerlessChromium()) {
-    // Vercel Fluid Compute는 Lambda env가 없어 @sparticuz/chromium이 AL2023 libs를 못 풀 수 있음
+  if (isServerless()) {
     if (process.env.VERCEL && !process.env.AWS_LAMBDA_JS_RUNTIME) {
       process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs22.x";
     }

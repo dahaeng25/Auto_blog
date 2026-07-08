@@ -3,7 +3,9 @@ import {
   buildSubThumbnailFilename,
   extractH2Titles,
 } from "../publishing/images/keyword-slug.js";
+import { isServerless } from "../browser/is-serverless.js";
 import { launchChromium } from "../browser/launch-chromium.js";
+import { launchPuppeteer } from "../browser/launch-puppeteer.js";
 import { SubThumbnailRenderer } from "./sub-thumbnail-renderer.js";
 
 export interface GenerateSubThumbnailsInput {
@@ -51,7 +53,9 @@ export async function generateSubThumbnails(
     outputFilename: buildSubThumbnailFilename(input.title, i + 2),
   }));
 
-  const browser = await launchChromium({ headless: true });
+  const browser = isServerless()
+    ? await launchPuppeteer()
+    : await launchChromium({ headless: true });
   try {
     const paths = await renderer.renderBatch(browser, renderItems);
     const results: GeneratedSubThumbnail[] = paths.map((path, i) => ({

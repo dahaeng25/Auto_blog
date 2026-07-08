@@ -7,7 +7,7 @@
     "api/[[...path]].ts": {
       "maxDuration": 300,
       "memory": 2048,
-      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**}"
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/sessions/[platform].ts": {
       "maxDuration": 30,
@@ -16,7 +16,7 @@
     "api/cron.ts": {
       "maxDuration": 300,
       "memory": 2048,
-      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**}"
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/dashboard.ts": {
       "maxDuration": 10,

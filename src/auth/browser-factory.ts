@@ -6,9 +6,7 @@ import type {
 } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 
-function useServerlessChromium(): boolean {
-  return Boolean(process.env.VERCEL) || process.env.USE_SERVERLESS_CHROMIUM === "true";
-}
+import { isServerless } from "../browser/is-serverless.js";
 
 const DEFAULT_CONTEXT_OPTIONS: BrowserContextOptions = {
   viewport: { width: 1440, height: 900 },
@@ -43,7 +41,7 @@ export async function createBrowserSession(
 
   const browser = await launchChromium({ headless });
 
-  if (useServerlessChromium()) {
+  if (isServerless()) {
     const page = await browser.newPage();
     const context = page.context();
     await context.addInitScript(STEALTH_INIT_SCRIPT);
