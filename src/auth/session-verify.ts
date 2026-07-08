@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 import { config } from "../../config/index.js";
 import { PLATFORMS, type Platform } from "../../config/platforms.js";
-import { createBrowserSession } from "./browser-factory.js";
+import { createBrowserSession, getSessionPage } from "./browser-factory.js";
 import {
   assertEditorAccessible,
   hasLoginCookies,
@@ -101,7 +101,7 @@ export async function verifyPlatformSession(
     storageStatePath: statePath,
   });
 
-  const page = await session.context.newPage();
+  const page = await getSessionPage(session);
 
   try {
     const hasCookies = await hasLoginCookies(session.context, platform);

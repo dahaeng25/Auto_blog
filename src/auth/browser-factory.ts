@@ -3,6 +3,7 @@ import type {
   Browser,
   BrowserContext,
   BrowserContextOptions,
+  Page,
 } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 
@@ -31,7 +32,15 @@ export interface CreateBrowserOptions {
 export interface BrowserSession {
   browser: Browser;
   context: BrowserContext;
+  /** 서버리스: createBrowserSession 시 이미 생성된 첫 페이지. 로컬: null */
+  page: Page | null;
   close: () => Promise<void>;
+}
+
+/** 서버리스에서는 첫 페이지 재사용 — 두 번째 newPage() 시 Chromium 종료 방지 */
+export async function getSessionPage(session: BrowserSession): Promise<Page> {
+  if (session.page) return session.page;
+  return session.context.newPage();
 }
 
 export async function createBrowserSession(
@@ -59,6 +68,7 @@ export async function createBrowserSession(
     return {
       browser,
       context,
+      page,
       close: async () => {
         await page.close().catch(() => {});
         await browser.close();
@@ -76,6 +86,7 @@ export async function createBrowserSession(
   return {
     browser,
     context,
+    page: null,
     close: async () => {
       await context.close();
       await browser.close();

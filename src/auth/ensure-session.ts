@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 import { config } from "../../config/index.js";
 import { PLATFORMS, type Platform } from "../../config/platforms.js";
-import { createBrowserSession } from "./browser-factory.js";
+import { createBrowserSession, getSessionPage } from "./browser-factory.js";
 import {
   autoLoginNaver,
   autoLoginTistory,
@@ -97,7 +97,7 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
       headless,
       storageStatePath: statePath,
     });
-    const page = await session.context.newPage();
+    const page = await getSessionPage(session);
 
     try {
       const hasCookies = await hasLoginCookies(session.context, platform);
@@ -148,7 +148,7 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
   const loginSession = await createBrowserSession({
     headless: config.authLoginHeadless,
   });
-  const page = await loginSession.context.newPage();
+  const page = await getSessionPage(loginSession);
 
   try {
     if (platform === "naver") {

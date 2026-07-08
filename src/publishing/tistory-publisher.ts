@@ -2,7 +2,7 @@ import type { Frame, Page } from "playwright";
 import { config } from "../../config/index.js";
 import { PLATFORMS } from "../../config/platforms.js";
 import { EDITOR_SELECTORS } from "../../config/editor-selectors.js";
-import { createBrowserSession } from "../auth/browser-factory.js";
+import { createBrowserSession, getSessionPage } from "../auth/browser-factory.js";
 import { ensureValidSession } from "../auth/ensure-session.js";
 import { BasePublisher } from "./base-publisher.js";
 import type { PublishInput, PublishResult } from "./types.js";
@@ -47,7 +47,7 @@ export class TistoryPublisher extends BasePublisher {
       storageStatePath: statePath,
     });
 
-    const page = await session.context.newPage();
+    const page = await getSessionPage(session);
     await session.context.grantPermissions(["clipboard-read", "clipboard-write"]);
 
     try {
