@@ -22,7 +22,7 @@ export async function saveSession(
   const state = await context.storageState();
   const json = JSON.stringify(state);
   await saveStoredSession(platform, json);
-  return getStateFilePath(platform);
+  return resolveSessionPath(platform);
 }
 
 export async function requireSession(platform: Platform): Promise<string> {

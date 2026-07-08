@@ -9,8 +9,8 @@ import {
 } from "./auto-login.js";
 import { hasLoginCookies, sessionExpiredMessage } from "./login-check.js";
 import {
-  getStateFilePath,
   hasSession,
+  requireSession,
   saveSession,
 } from "./session-manager.js";
 import { humanPause } from "../publishing/utils/human-input.js";
@@ -88,11 +88,11 @@ async function isWritePageAccessible(
  * @returns storage_state 파일 경로
  */
 export async function ensureValidSession(platform: Platform): Promise<string> {
-  const statePath = getStateFilePath(platform);
   const headless = config.authLoginHeadless;
 
   // 1) 기존 세션으로 검증
   if (await hasSession(platform)) {
+    const statePath = await requireSession(platform);
     const session = await createBrowserSession({
       headless,
       storageStatePath: statePath,

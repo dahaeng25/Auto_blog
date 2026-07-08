@@ -7,7 +7,7 @@ import {
   hasLoginCookies,
   sessionExpiredMessage,
 } from "./login-check.js";
-import { getStateFilePath, requireSession } from "./session-manager.js";
+import { requireSession } from "./session-manager.js";
 import { humanPause } from "../publishing/utils/human-input.js";
 import {
   navigateToWritePage,
@@ -85,8 +85,9 @@ export async function verifyPlatformSession(
   platform: Platform,
   headless = true,
 ): Promise<SessionVerifyResult> {
+  let statePath: string;
   try {
-    await requireSession(platform);
+    statePath = await requireSession(platform);
   } catch (e) {
     return {
       platform,
@@ -95,7 +96,6 @@ export async function verifyPlatformSession(
     };
   }
 
-  const statePath = getStateFilePath(platform);
   const session = await createBrowserSession({
     headless,
     storageStatePath: statePath,
