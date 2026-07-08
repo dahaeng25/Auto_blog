@@ -13,6 +13,14 @@
       "maxDuration": 30,
       "memory": 1024
     },
+    "api/articles/[id].ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "api/articles/[id]/preview.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
     "api/cron.ts": {
       "maxDuration": 300,
       "memory": 2048,
