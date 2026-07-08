@@ -49,6 +49,7 @@ export async function launchChromium(
 
     const { chromium } = await import("playwright-core");
     const chromiumPkg = (await import("@sparticuz/chromium")).default;
+    chromiumPkg.setGraphicsMode = false;
 
     const executablePath = await chromiumPkg.executablePath();
     appendLdLibraryPath(

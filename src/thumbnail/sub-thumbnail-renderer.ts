@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Browser, Page } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
+import { createScreenshotPage } from "../browser/create-screenshot-page.js";
 import { config } from "../../config/index.js";
 import { parseH2SectionTitle } from "../publishing/images/keyword-slug.js";
 import { mutateImageHashBuffer } from "./image-hash-mutator.js";
@@ -114,11 +115,10 @@ export class SubThumbnailRenderer {
     const phone = options.phone ?? config.subThumbnailContactPhone;
     const gradient = pickGradient(options.sectionIndex ?? 0);
 
-    const context = await browser.newContext({
+    const { page, close: closePage } = await createScreenshotPage(browser, {
       viewport: { width: this.size, height: this.size + 50 },
       deviceScaleFactor: 2,
     });
-    const page = await context.newPage();
 
     try {
       await page.goto(pathToFileURL(this.templatePath).href, {
@@ -158,7 +158,7 @@ export class SubThumbnailRenderer {
       console.log(`[SubThumbnail] 저장: ${outputPath}`);
       return outputPath;
     } finally {
-      await context.close();
+      await closePage();
     }
   }
 }

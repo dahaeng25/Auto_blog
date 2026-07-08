@@ -1,9 +1,14 @@
+import fs from "node:fs/promises";
 import type {
   Browser,
   BrowserContext,
   BrowserContextOptions,
 } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
+
+function useServerlessChromium(): boolean {
+  return Boolean(process.env.VERCEL) || process.env.USE_SERVERLESS_CHROMIUM === "true";
+}
 
 const DEFAULT_CONTEXT_OPTIONS: BrowserContextOptions = {
   viewport: { width: 1440, height: 900 },
@@ -37,6 +42,31 @@ export async function createBrowserSession(
   const { headless = true, storageStatePath } = options;
 
   const browser = await launchChromium({ headless });
+
+  if (useServerlessChromium()) {
+    const page = await browser.newPage();
+    const context = page.context();
+    await context.addInitScript(STEALTH_INIT_SCRIPT);
+
+    if (storageStatePath) {
+      const raw = await fs.readFile(storageStatePath, "utf-8");
+      const state = JSON.parse(raw) as {
+        cookies?: Parameters<BrowserContext["addCookies"]>[0];
+      };
+      if (state.cookies?.length) {
+        await context.addCookies(state.cookies);
+      }
+    }
+
+    return {
+      browser,
+      context,
+      close: async () => {
+        await page.close().catch(() => {});
+        await browser.close();
+      },
+    };
+  }
 
   const context = await browser.newContext({
     ...DEFAULT_CONTEXT_OPTIONS,

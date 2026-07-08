@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Page } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
+import { createScreenshotPage } from "../browser/create-screenshot-page.js";
 import { config } from "../../config/index.js";
 import {
   assetExists,
@@ -352,11 +353,13 @@ export class ThumbnailRenderer {
     await fs.mkdir(config.thumbnailsDir, { recursive: true });
 
     const browser = await launchChromium({ headless: true });
-    const context = await browser.newContext({
-      viewport: { width: renderBrand.canvas.width, height: renderBrand.canvas.height + 100 },
+    const { page, close: closePage } = await createScreenshotPage(browser, {
+      viewport: {
+        width: renderBrand.canvas.width,
+        height: renderBrand.canvas.height + 100,
+      },
       deviceScaleFactor: 2,
     });
-    const page = await context.newPage();
 
     try {
       await page.goto(pathToFileURL(this.templatePath).href, {
@@ -376,7 +379,7 @@ export class ThumbnailRenderer {
       console.log(`[Thumbnail] 저장 완료: ${outputPath}`);
       return outputPath;
     } finally {
-      await context.close();
+      await closePage();
       await browser.close();
     }
   }

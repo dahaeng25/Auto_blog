@@ -59,9 +59,11 @@ function inferStageFromText(text = "") {
   if (t.includes("thumbnail") || t.includes("썸네일")) return "썸네일";
   if (
     t.includes("browsertype.launch") ||
+    t.includes("browsercontext.newpage") ||
     t.includes("libnss3") ||
     t.includes("libnspr4") ||
-    t.includes("/tmp/chromium")
+    t.includes("/tmp/chromium") ||
+    t.includes("target page, context or browser has been closed")
   ) {
     return "썸네일";
   }
