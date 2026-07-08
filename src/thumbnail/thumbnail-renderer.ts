@@ -13,6 +13,9 @@ import {
 import { normalizeThumbnailLineBreaks } from "./normalize-thumbnail-line-breaks.js";
 import { mutateImageHashBuffer } from "./image-hash-mutator.js";
 
+const DEFAULT_FALLBACK_GRADIENT =
+  "linear-gradient(145deg, #1a3a5c 0%, #2d6a9f 48%, #1e4d73 100%)";
+
 export interface ThumbnailRenderOptions {
   /** 가운데 메인 제목 (2줄, \\n 구분) */
   text: string;
@@ -247,6 +250,34 @@ function resolveBaseImage(brand: ThumbnailBrandConfig): string | null {
   return null;
 }
 
+function resolveRenderBrand(brand: ThumbnailBrandConfig): {
+  brand: ThumbnailBrandConfig;
+  baseImagePath: string | null;
+} {
+  const baseImagePath = resolveBaseImage(brand);
+  if (baseImagePath) {
+    return { brand, baseImagePath };
+  }
+
+  if (brand.background.type === "image") {
+    console.warn(
+      "[Thumbnail] assets/thumbnail/bg.png 없음 — 기본 그라데이션 배경으로 대체합니다.",
+    );
+    return {
+      brand: {
+        ...brand,
+        background: {
+          type: "gradient",
+          gradient: brand.background.gradient ?? DEFAULT_FALLBACK_GRADIENT,
+        },
+      },
+      baseImagePath: null,
+    };
+  }
+
+  return { brand, baseImagePath: null };
+}
+
 async function applyTemplate(
   page: Page,
   brand: ThumbnailBrandConfig,
@@ -266,10 +297,19 @@ async function applyTemplate(
       if (bg) {
         base.src = bg;
         base.style.display = "block";
+        canvas.style.background = "";
+      } else if (b.background.type === "gradient" && b.background.gradient) {
+        base.style.display = "none";
+        canvas.style.background = b.background.gradient;
+      } else if (b.background.type === "color" && b.background.color) {
+        base.style.display = "none";
+        canvas.style.background = b.background.color;
       }
     },
     { brand, baseUrl },
   );
+
+  if (!baseUrl) return;
 
   await page.waitForFunction(
     () => {
@@ -295,11 +335,15 @@ export class ThumbnailRenderer {
 
   async render(options: ThumbnailRenderOptions): Promise<string> {
     const brand = loadThumbnailBrand();
+    const { brand: renderBrand, baseImagePath } = resolveRenderBrand(brand);
     const filename = options.outputFilename ?? "thumbnail_최종.png";
     const outputPath = path.join(config.thumbnailsDir, filename);
-    const baseImagePath = resolveBaseImage(brand);
 
-    if (!baseImagePath) {
+    if (
+      !baseImagePath &&
+      renderBrand.background.type !== "gradient" &&
+      renderBrand.background.type !== "color"
+    ) {
       throw new Error(
         "썸네일 배경 파일이 없습니다. assets/thumbnail/bg.png 를 확인하세요.",
       );
@@ -309,7 +353,7 @@ export class ThumbnailRenderer {
 
     const browser = await launchChromium({ headless: true });
     const context = await browser.newContext({
-      viewport: { width: brand.canvas.width, height: brand.canvas.height + 100 },
+      viewport: { width: renderBrand.canvas.width, height: renderBrand.canvas.height + 100 },
       deviceScaleFactor: 2,
     });
     const page = await context.newPage();
@@ -321,8 +365,8 @@ export class ThumbnailRenderer {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(300);
 
-      await applyTemplate(page, brand, baseImagePath);
-      await injectTemplateText(page, options, brand);
+      await applyTemplate(page, renderBrand, baseImagePath);
+      await injectTemplateText(page, options, renderBrand);
 
       const canvas = page.locator("#thumbnail-canvas");
       const screenshot = await canvas.screenshot({ type: "png" });
