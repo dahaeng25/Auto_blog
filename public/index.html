@@ -2,12 +2,12 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=10" />
+  <link rel="stylesheet" href="/styles.css?v=11" />
 </head>
 <body>
   <div id="app" class="app">
@@ -121,25 +121,34 @@
       </div>
       <div class="upload-row">
         <div class="upload-item">
-          <label class="upload-label">
-            네이버 세션
-            <input type="file" id="upload-naver" accept=".json" />
-          </label>
-          <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="naver">자동 재로그인 시도</button>
+          <span class="upload-platform-name">네이버 세션</span>
+          <div class="upload-controls">
+            <label class="upload-file-label">
+              <span class="sr-only">네이버 세션 파일</span>
+              <input type="file" id="upload-naver" accept=".json" />
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="naver">자동 재로그인 시도</button>
+          </div>
         </div>
         <div class="upload-item">
-          <label class="upload-label">
-            티스토리 세션
-            <input type="file" id="upload-tistory" accept=".json" />
-          </label>
-          <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="tistory">자동 재로그인 시도</button>
+          <span class="upload-platform-name">티스토리 세션</span>
+          <div class="upload-controls">
+            <label class="upload-file-label">
+              <span class="sr-only">티스토리 세션 파일</span>
+              <input type="file" id="upload-tistory" accept=".json" />
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="tistory">자동 재로그인 시도</button>
+          </div>
         </div>
         <div class="upload-item">
-          <label class="upload-label">
-            Google Blogger 세션
-            <input type="file" id="upload-google" accept=".json" />
-          </label>
-          <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="google">자동 재로그인 시도</button>
+          <span class="upload-platform-name">Google Blogger 세션</span>
+          <div class="upload-controls">
+            <label class="upload-file-label">
+              <span class="sr-only">Google Blogger 세션 파일</span>
+              <input type="file" id="upload-google" accept=".json" />
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="google">자동 재로그인 시도</button>
+          </div>
         </div>
       </div>
       <p id="upload-message" class="upload-message"></p>
@@ -185,6 +194,6 @@
     document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
     purgeLegacyLogin();
   </script>
-  <script src="/dashboard.js?v=13" type="module"></script>
+  <script src="/dashboard.js?v=14" type="module"></script>
 </body>
 </html>
