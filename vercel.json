@@ -13,6 +13,11 @@
       "maxDuration": 30,
       "memory": 1024
     },
+    "api/sessions/[platform]/refresh.ts": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "{node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
+    },
     "api/articles/[id].ts": {
       "maxDuration": 30,
       "memory": 1024

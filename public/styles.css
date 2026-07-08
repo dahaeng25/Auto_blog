@@ -172,6 +172,17 @@ body {
   color: var(--text);
 }
 
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
 .btn-lg {
   padding: 14px 28px;
   font-size: 1rem;
@@ -333,9 +344,15 @@ body {
   flex-wrap: wrap;
 }
 
-.upload-label {
+.upload-item {
   flex: 1;
   min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-label {
   display: flex;
   flex-direction: column;
   gap: 8px;

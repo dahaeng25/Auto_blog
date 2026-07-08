@@ -577,6 +577,56 @@ async function uploadSession(platform, file) {
   }
 }
 
+async function refreshSession(platform) {
+  const btn = document.querySelector(
+    `.session-refresh-btn[data-platform="${platform}"]`,
+  );
+  const msgEl = document.getElementById("upload-message");
+  const originalText = btn?.textContent ?? "자동 재로그인 시도";
+  const label = PLATFORM_LABELS[platform] ?? platform;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "재로그인 시도 중…";
+  }
+  msgEl.style.color = "var(--text-muted)";
+  msgEl.textContent = `${label} 세션 갱신 시도 중...`;
+  clearErrorCard();
+
+  try {
+    await api(`/api/sessions/${platform}/refresh`, { method: "POST" });
+    msgEl.textContent = "✓ 세션 갱신 완료";
+    msgEl.style.color = "var(--success)";
+    await refreshAll();
+  } catch (err) {
+    const error = normalizeError(err);
+    let hint = error.hint;
+    if (/2단계|캡차|CAPTCHA|자동 로그인|미지원/.test(error.message)) {
+      hint =
+        hint ??
+        "2단계 인증 또는 보안문자가 필요할 수 있습니다 — auth:setup으로 세션 파일을 생성한 뒤 업로드하세요.";
+    }
+    if (/404|실패 \(404\)/.test(error.message)) {
+      hint =
+        hint ??
+        "배포가 최신 코드가 아닐 수 있습니다. Vercel Redeploy 후 다시 시도하세요.";
+    }
+    msgEl.textContent = error.message;
+    msgEl.style.color = "var(--error)";
+    showErrorCard(
+      error.message,
+      "세션",
+      hint ??
+        "대시보드에서 세션 JSON을 업로드하거나 Vercel 환경변수(NAVER_ID 등)를 확인하세요.",
+    );
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -647,6 +697,13 @@ async function init() {
   document.getElementById("upload-google")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) uploadSession("google", file);
+  });
+
+  document.querySelectorAll(".session-refresh-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const platform = btn.dataset.platform;
+      if (platform) void refreshSession(platform);
+    });
   });
 
   startPolling();

@@ -356,6 +356,22 @@ export async function createApp(
     return { ok: true, platform };
   });
 
+  app.post("/api/sessions/:platform/refresh", async (request, reply) => {
+    const { platform } = request.params as { platform: string };
+    if (!(platform in PLATFORMS)) {
+      return reply.status(400).send({ error: "지원하지 않는 플랫폼입니다." });
+    }
+    try {
+      const { ensureValidSession } = await import("./auth/ensure-session.js");
+      await ensureValidSession(platform as Platform);
+      return { ok: true, platform };
+    } catch (error) {
+      return reply.status(500).send({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   app.get("/api/thumbnails/:filename", async (request, reply) => {
     const { filename } = request.params as { filename: string };
     const safeName = path.basename(filename);

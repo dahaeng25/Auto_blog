@@ -13,6 +13,7 @@ import {
   requireSession,
   saveSession,
 } from "./session-manager.js";
+import { notifyError } from "../monitoring/discord-notifier.js";
 import { humanPause } from "../publishing/utils/human-input.js";
 import {
   isWriteEditorVisible,
@@ -45,6 +46,16 @@ function canAutoLogin(platform: Platform): boolean {
  */
 function shouldTrustStoredSession(platform: Platform): boolean {
   return config.isVercel || !canAutoLogin(platform);
+}
+
+function autoLoginFailureMessage(platform: Platform): string {
+  return `${PLATFORMS[platform].name} 세션 만료 + 자동 로그인 실패 — 수동 재업로드 필요`;
+}
+
+async function notifyAutoLoginFailure(platform: Platform): Promise<void> {
+  await notifyError(new Error(autoLoginFailureMessage(platform)), {
+    stage: "세션",
+  });
 }
 
 /** 글쓰기 URL 접근으로 세션 유효성 확인 */
@@ -144,11 +155,13 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
   // 2) 자동 로그인
   if (!canAutoLogin(platform)) {
     if (platform === "google") {
+      await notifyAutoLoginFailure(platform);
       throw new Error(
         `[${PLATFORMS[platform].name}] Google은 자동 로그인을 지원하지 않습니다.\n` +
           "  npm run auth:setup 으로 브라우저에서 수동 로그인 후 세션을 저장하세요.",
       );
     }
+    await notifyAutoLoginFailure(platform);
     throw new Error(
       sessionExpiredMessage(platform) +
         (config.isVercel
@@ -182,6 +195,7 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
         );
       }
     } else {
+      await notifyAutoLoginFailure(platform);
       throw new Error(
         `[${PLATFORMS[platform].name}] 자동 로그인 미지원 — npm run auth:setup 사용`,
       );
@@ -189,6 +203,7 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
 
     const ok = await hasLoginCookies(loginSession.context, platform);
     if (!ok) {
+      await notifyAutoLoginFailure(platform);
       throw new Error(
         `[${PLATFORMS[platform].name}] 자동 로그인 후에도 세션 확인 실패`,
       );

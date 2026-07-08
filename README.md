@@ -103,7 +103,7 @@ docker compose up -d --build
 - 파이프라인 상태/로그/통계 조회
 - 키워드 입력 + 히스토리 자동완성
 - 원고 미리보기 + 본문 글자수(최소 기준 대비) 확인
-- 세션 업로드(`auth/*_state.json`)
+- 세션 업로드(`auth/*_state.json`) 및 **자동 재로그인 시도** 버튼
 - 최근 발행 이력(플랫폼 배지 + URL 바로가기)
 - 단계 진행 상태(수집/생성/썸네일/발행) 및 실패 카드 표시
 
@@ -128,6 +128,19 @@ docker compose up -d --build
 - `GET /api/published-posts`: 최근 발행 이력
 - `GET /api/input-history`: 키워드/지역 입력 히스토리
 - `POST /api/sessions/:platform`: 세션 JSON 업로드
+- `POST /api/sessions/:platform/refresh`: 세션 자동 재로그인 시도
+
+---
+
+## 세션 자동 갱신 설정 (수동 업로드 최소화)
+
+Vercel 프로젝트 환경변수에 `NAVER_ID`, `NAVER_PASSWORD`, `KAKAO_ID`, `KAKAO_PASSWORD`, `AUTH_AUTO_LOGIN=true` 를 등록하면, 저장된 세션이 만료돼도 다음 실행 시 자동으로 재로그인해서 세션을 갱신합니다.
+
+최초 1회는 세션 파일이 아예 없으므로 대시보드에서 업로드하거나, `AUTH_AUTO_LOGIN=true` + 계정 정보만 있으면 최초 실행 시에도 자동 로그인을 시도합니다.
+
+네이버가 보안문자/2단계 인증을 요구하면 자동 로그인이 실패하며, 이 경우에만 수동 세션 재업로드가 필요합니다 (플랫폼 보안 정책상 완전 우회 불가).
+
+대시보드 **세션 업로드** 섹션의 **자동 재로그인 시도** 버튼으로 파이프라인 실행 없이 즉시 세션 갱신을 시도할 수 있습니다.
 
 ---
 
@@ -135,7 +148,7 @@ docker compose up -d --build
 
 1. Turso DB 준비 (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`)
 2. Vercel 프로젝트 연결
-3. 환경변수 설정 후 배포
-4. 세션 업로드는 로컬에서 `npm run auth:setup` 후 대시보드로 업로드
+3. 환경변수 설정 후 배포 (`NAVER_ID`, `NAVER_PASSWORD`, `KAKAO_ID`, `KAKAO_PASSWORD`, `AUTH_AUTO_LOGIN=true` — [세션 자동 갱신](#세션-자동-갱신-설정-수동-업로드-최소화) 참고)
+4. 최초 1회 세션 업로드 또는 자동 로그인 시도
 
 > 참고: Vercel Hobby는 함수 시간 제한이 짧아 전체 자동 발행이 불안정할 수 있습니다. 안정 운영은 로컬/Docker를 권장합니다.
