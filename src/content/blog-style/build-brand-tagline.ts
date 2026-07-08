@@ -1,4 +1,5 @@
 /** 제목·키워드 기반 브랜드 밴드 전문분야 문구 생성 */
+import { brand } from "../../../config/brand.js";
 
 interface SpecialtyRule {
   label: string;
@@ -128,9 +129,9 @@ export function buildBrandTagline(title = "", keywords = ""): string {
   const source = normalizeSource(title, keywords);
 
   if (!source) {
-    return "강운준 행정사 행정인허가 전문";
+    return `${brand.brandName} 행정인허가 전문`;
   }
 
   const specialties = collectSpecialties(source);
-  return `강운준 행정사 ${specialties.join(" ")}`;
+  return `${brand.brandName} ${specialties.join(" ")}`;
 }

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CRON_SCHEDULE, CRON_TIMEZONE, RUN_ON_START } from "./cron.js";
+import { brand } from "./brand.js";
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -80,12 +81,11 @@ export const config = {
     "sub-thumbnail-template.html",
   ),
   subThumbnailContactName:
-    process.env.SUB_THUMBNAIL_CONTACT_NAME ?? "강운준 행정사",
+    process.env.SUB_THUMBNAIL_CONTACT_NAME ?? brand.brandName,
   subThumbnailContactPhone:
     process.env.SUB_THUMBNAIL_CONTACT_PHONE ??
-    process.env.CONTACT_PHONE ??
-    "1844-1347",
-  contactPhone: process.env.CONTACT_PHONE ?? "1844-1346",
+    brand.contactPhone,
+  contactPhone: brand.contactPhone,
 
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",
   tistoryBlogName: process.env.TISTORY_BLOG_NAME ?? "",

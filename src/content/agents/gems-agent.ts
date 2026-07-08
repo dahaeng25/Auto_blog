@@ -9,6 +9,8 @@ import {
 import { normalizeThumbnailLineBreaks } from "../../thumbnail/normalize-thumbnail-line-breaks.js";
 import { sanitizeBlogTitle } from "../sanitize-title.js";
 import type { PublishedPostRecord } from "../seo/published-post-repository.js";
+import { brand } from "../../../config/brand.js";
+import { parseJsonResponse } from "../llm/json-response-parser.js";
 
 export interface GemsArticleOutput {
   title: string;
@@ -18,6 +20,14 @@ export interface GemsArticleOutput {
 }
 
 const MIN_CHARS = loadBlogStyle().structure.minPlainTextChars ?? 3500;
+const BANNED_EXPRESSIONS = ["꿀팁", "상담", "총정리", "대박"] as const;
+
+interface LlmReviewResult {
+  aliasViolation: boolean;
+  bannedExpressionViolation: boolean;
+  fabricatedLegalReferenceSuspicion: boolean;
+  reason: string;
+}
 
 /** 프롬프트 본문 외 기술적 보조 지시 (네이버 스타일·HTML 제약) */
 function buildTechnicalInstruction(region?: RegionPickResult): string {
@@ -61,7 +71,7 @@ ${linkLines}`;
 
 function buildKnowledgeInstruction(knowledgeContext?: string): string {
   if (!knowledgeContext?.trim()) return "";
-  return knowledgeContext;
+  return `\n${knowledgeContext}`;
 }
 
 function buildTopicPlanningInstruction(topic: string): string {
@@ -108,32 +118,116 @@ ${buildTopicPlanningInstruction(topic)}
 
   return `블로그 주제: ${topic}${regionLine}
 
-위 주제로 강운준 행정사 1인칭 르포 형식 A형 글을 JSON 1건으로 작성하세요.
+위 주제로 ${brand.brandName} 1인칭 르포 형식 A형 글을 JSON 1건으로 작성하세요.
 최소 ${MIN_CHARS}자, 수임 사례 스토리텔링·반려 포인트·법령 인용·체크리스트·Q&A·면책·해시태그 포함.
 사례 인물은 '의뢰인'으로만 지칭 (실명·가명 금지).${buildInternalLinkInstruction(relatedPosts ?? [])}`;
 }
 
 /** LLM 응답에서 JSON 추출 */
 function parseGemsResponse(raw: string): GemsArticleOutput {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Gems 응답에서 JSON을 찾을 수 없습니다.");
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as Partial<GemsArticleOutput>;
-
-  if (!parsed.title || !parsed.htmlBody || !parsed.thumbnailText) {
-    throw new Error(
-      "Gems 응답 JSON에 title, htmlBody, thumbnailText가 모두 필요합니다.",
-    );
-  }
+  const { parsed } = parseJsonResponse<GemsArticleOutput>({
+    source: raw,
+    context: "Gems",
+    requiredKeys: ["title", "htmlBody", "thumbnailText"],
+  });
 
   return {
-    title: sanitizeBlogTitle(parsed.title),
-    htmlBody: parsed.htmlBody.trim(),
+    title: sanitizeBlogTitle(parsed.title as string),
+    htmlBody: (parsed.htmlBody as string).trim(),
     thumbnailTopLabel: (parsed.thumbnailTopLabel ?? "").trim(),
-    thumbnailText: normalizeThumbnailLineBreaks(parsed.thumbnailText.trim()),
+    thumbnailText: normalizeThumbnailLineBreaks((parsed.thumbnailText as string).trim()),
   };
+}
+
+function extractPlainText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectAliasViolation(text: string): boolean {
+  const patterns = [
+    /\b[A-Z](?:씨|님)\b/,
+    /[김이박최정강조윤장임한오서신권황안송류전홍고문양손배조백허유남심노정하곽성차주우구신임나전민][○〇O]{1,2}(?:씨|님)/,
+    /[김이박최정강조윤장임한오서신권황안송류전홍고문양손배조백허유남심노정하곽성차주우구신임나전민][가-힣]{1,2}(?:씨|님)/,
+    /대표님|사장님|고객님/,
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function detectBannedExpression(text: string): string[] {
+  return BANNED_EXPRESSIONS.filter((word) => text.includes(word));
+}
+
+function detectSuspiciousLegalReference(text: string): boolean {
+  const explicitSuspicious =
+    /(가상의?\s*법|임의의?\s*법|예시\s*법령|허구의?\s*법령|없는\s*법령)/.test(text);
+  if (explicitSuspicious) return true;
+
+  const references = Array.from(
+    text.matchAll(/([가-힣A-Za-z0-9·\s]{2,30}?)\s*제\s*(\d{1,4})\s*조/g),
+  );
+  for (const [, rawLawName, rawArticle] of references) {
+    const lawName = rawLawName.trim();
+    const article = Number(rawArticle);
+    const looksLikeLawName =
+      /(법|령|규칙|규정|조례|고시|훈령)$/.test(lawName) ||
+      /(시행령|시행규칙)/.test(lawName);
+    if (!looksLikeLawName || article >= 500) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseGemsReviewResponse(raw: string): LlmReviewResult {
+  const { parsed } = parseJsonResponse<LlmReviewResult>({
+    source: raw,
+    context: "Gems SelfReview",
+    requiredKeys: ["reason"],
+  });
+
+  return {
+    aliasViolation: Boolean(parsed.aliasViolation),
+    bannedExpressionViolation: Boolean(parsed.bannedExpressionViolation),
+    fabricatedLegalReferenceSuspicion: Boolean(
+      parsed.fabricatedLegalReferenceSuspicion,
+    ),
+    reason: (parsed.reason ?? "").trim(),
+  };
+}
+
+async function runLlmSelfReview(
+  draft: GemsArticleOutput,
+  plainText: string,
+): Promise<LlmReviewResult> {
+  const system = `당신은 블로그 원고 품질 검수자입니다.
+아래 3가지만 엄격하게 판정해 JSON만 출력하세요.
+1) aliasViolation: 실명/가명/개인호칭(대표님, 사장님, 고객님, A씨 등) 사용 여부
+2) bannedExpressionViolation: 금지어(꿀팁, 상담, 총정리, 대박 등) 사용 여부
+3) fabricatedLegalReferenceSuspicion: 법령명이 부자연스럽거나 허구로 보이는 인용 의심 여부
+
+반드시 JSON:
+{
+  "aliasViolation": boolean,
+  "bannedExpressionViolation": boolean,
+  "fabricatedLegalReferenceSuspicion": boolean,
+  "reason": "핵심 근거 한 줄"
+}`;
+
+  const reviewTarget = plainText.slice(0, 6000);
+  const user = `제목: ${draft.title}
+썸네일 상단: ${draft.thumbnailTopLabel}
+썸네일 문구: ${draft.thumbnailText}
+본문(일부): ${reviewTarget}`;
+
+  const raw = await chat({
+    system,
+    user,
+    temperature: 0.1,
+  });
+  return parseGemsReviewResponse(raw);
 }
 
 /**
@@ -141,6 +235,19 @@ function parseGemsResponse(raw: string): GemsArticleOutput {
  * 제목·HTML 본문·썸네일 문구를 한 번에 생성합니다.
  */
 export class GemsAgent {
+  private async generateDraft(
+    system: string,
+    userPrompt: string,
+    temperature: number,
+  ): Promise<GemsArticleOutput> {
+    const raw = await chat({
+      system,
+      user: userPrompt,
+      temperature,
+    });
+    return parseGemsResponse(raw);
+  }
+
   async run(
     topic: string,
     region?: RegionPickResult,
@@ -176,22 +283,70 @@ export class GemsAgent {
     console.log(`[Gems] LLM: ${config.llmProvider} / ${modelName}`);
     console.log(`[Gems] 프롬프트: ${config.gemsPromptPath}`);
 
-    const raw = await chat({
-      system,
-      user: buildUserPrompt(topic, region, relatedPosts, knowledgeContext),
-      temperature: config.llmProvider === "gemini" ? 0.7 : 0.65,
-    });
+    const baseUserPrompt = buildUserPrompt(
+      topic,
+      region,
+      relatedPosts,
+      knowledgeContext,
+    );
+    const temperature = config.llmProvider === "gemini" ? 0.7 : 0.65;
 
-    const result = parseGemsResponse(raw);
+    let result = await this.generateDraft(system, baseUserPrompt, temperature);
+    let plainText = extractPlainText(result.htmlBody);
+    let plainLen = plainText.length;
 
-    console.log(`[Gems] 제목: ${result.title}`);
-    const plainLen = result.htmlBody.replace(/<[^>]+>/g, "").length;
-    console.log(`[Gems] 본문: HTML ${result.htmlBody.length}자 / 순수텍스트 ${plainLen}자`);
     if (plainLen < MIN_CHARS) {
       console.warn(
-        `[Gems] ⚠ 순수 텍스트 ${plainLen}자 — 목표 ${MIN_CHARS}자 미달 (재생성 권장)`,
+        `[Gems] 본문 길이 미달(${plainLen}/${MIN_CHARS}) — 1회 자동 재생성`,
+      );
+      const regeneratePrompt =
+        `${baseUserPrompt}\n\n[재생성 지시]\n` +
+        `이전 초안은 순수 텍스트 ${plainLen}자로 최소 기준 ${MIN_CHARS}자에 미달했습니다.\n` +
+        "이번에는 사건 디테일·체크리스트·Q&A 답변을 보강해 길이 기준을 반드시 충족하세요.";
+      result = await this.generateDraft(system, regeneratePrompt, temperature);
+      plainText = extractPlainText(result.htmlBody);
+      plainLen = plainText.length;
+      if (plainLen < MIN_CHARS) {
+        throw new Error(
+          `[Gems] 본문 최소 길이 실패: 재생성 후에도 ${plainLen}/${MIN_CHARS}자입니다.`,
+        );
+      }
+    }
+
+    const aliasViolation = detectAliasViolation(plainText);
+    const bannedDetected = detectBannedExpression(plainText);
+    const legalSuspicious = detectSuspiciousLegalReference(plainText);
+    const llmReview = await runLlmSelfReview(result, plainText);
+
+    const mergedAliasViolation = aliasViolation || llmReview.aliasViolation;
+    const mergedBannedViolation =
+      bannedDetected.length > 0 || llmReview.bannedExpressionViolation;
+    const mergedLegalSuspicion =
+      legalSuspicious || llmReview.fabricatedLegalReferenceSuspicion;
+
+    const violations: string[] = [];
+    if (mergedAliasViolation) {
+      violations.push("의뢰인 호칭 규칙 위반(실명/가명/개인호칭)");
+    }
+    if (mergedBannedViolation) {
+      const suffix =
+        bannedDetected.length > 0
+          ? `: ${bannedDetected.join(", ")}`
+          : " (LLM 검수 플래그)";
+      violations.push(`금지 표현 감지${suffix}`);
+    }
+    if (mergedLegalSuspicion) {
+      violations.push(
+        `허위/의심 법령 인용 가능성 (${llmReview.reason || "검수 플래그"})`,
       );
     }
+    if (violations.length > 0) {
+      throw new Error(`[Gems] 자체 검수 실패: ${violations.join(" | ")}`);
+    }
+
+    console.log(`[Gems] 제목: ${result.title}`);
+    console.log(`[Gems] 본문: HTML ${result.htmlBody.length}자 / 순수텍스트 ${plainLen}자`);
+    console.log(`[Gems] 자체 검수 통과`);
     console.log(`[Gems] 상단 라벨: ${result.thumbnailTopLabel}`);
     console.log(`[Gems] 썸네일 제목: ${result.thumbnailText}`);
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../../../config/index.js";
+import { brand } from "../../../config/brand.js";
 
 export interface BlogTypography {
   fontFamily: string;
@@ -53,7 +54,7 @@ export interface BlogStyleConfig {
 
 const DEFAULT_STYLE: BlogStyleConfig = {
   referenceUrls: [],
-  brandTagline: "강운준 행정사",
+  brandTagline: brand.brandName,
   typography: {
     fontFamily: "'Nanum Gothic', 'Malgun Gothic', sans-serif",
     bodyFontSize: "16px",
@@ -112,6 +113,11 @@ export function loadBlogStyle(): BlogStyleConfig {
   return {
     ...DEFAULT_STYLE,
     ...raw,
+    brandTagline:
+      (raw.brandTagline ?? DEFAULT_STYLE.brandTagline)?.replace(
+        /\{\{BRAND_NAME\}\}/g,
+        brand.brandName,
+      ),
     typography: { ...DEFAULT_STYLE.typography, ...raw.typography },
     divider: {
       html: raw.divider?.html ?? DEFAULT_STYLE.divider.html,
@@ -138,7 +144,7 @@ export function buildSampleStructureInstruction(): string {
   const minChars = style.structure.minPlainTextChars ?? 3200;
 
   return `
-[참고 블로그 레이아웃 — dahaeng25 / 강운준 행정사 실무 톤]
+[참고 블로그 레이아웃 — dahaeng25 / ${brand.brandName} 실무 톤]
 참고 URL (톤·밀도·h2 흐름만 학습, 문장 복사 금지):
 - ${refs}
 

@@ -4,6 +4,7 @@ import { readLocalizedTextFile } from "../../fs/read-localized-text-file.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../../../config/index.js";
+import { brand } from "../../../config/brand.js";
 
 export interface Locality {
   name: string;
@@ -139,7 +140,7 @@ export function pickBlogRegions(regionInput: string): RegionPickResult {
 /** Gems 프롬프트에 삽입할 지역 지시문 */
 export function buildRegionInstruction(pick: RegionPickResult): string {
   const list = pick.pickedShort.join("·");
-  const titleSuffix = `${list}·강운준 행정사`;
+  const titleSuffix = `${list}·${brand.brandName}`;
   const hashTags = pick.pickedShort.map((s) => `#${s}`).join(" ");
 
   const unitLabel =
@@ -155,7 +156,7 @@ export function buildRegionInstruction(pick: RegionPickResult): string {
 - 본문·제목에 반드시 아래 ${pick.pickedShort.length}개 ${unitLabel} 지명을 자연스럽게 **5~6회 이상** 녹이세요: ${list}
 - 도입부·본문·사례·Q&A 곳곳에 분산 배치 (한 곳에 몰아넣지 말 것)
 - 제목 뒤 지역·이름 나열: ${titleSuffix}
-- 해시태그에 위 지명 + #강운준행정사 포함 (예: ${hashTags} #강운준행정사)
+- 해시태그에 위 지명 + #${brand.brandName.replace(/\s+/g, "")} 포함 (예: ${hashTags} #${brand.brandName.replace(/\s+/g, "")})
 - 위 목록에 없는 다른 시군구를 임의로 추가하지 마세요`;
 }
 

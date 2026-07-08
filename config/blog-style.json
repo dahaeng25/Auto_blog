@@ -6,7 +6,7 @@
     "https://blog.naver.com/dahaeng25/223771680192",
     "https://blog.naver.com/dahaeng25/224212935937"
   ],
-  "brandTagline": "강운준 행정사",
+  "brandTagline": "{{BRAND_NAME}}",
   "typography": {
     "fontFamily": "'Nanum Gothic', 'Malgun Gothic', sans-serif",
     "bodyFontSize": "16px",

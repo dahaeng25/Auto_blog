@@ -4,6 +4,8 @@ import type { RegionPickResult } from "../regions/pick-regions.js";
 import { searchNaverBlogTitles } from "./naver-blog-search.js";
 import { normalizeThumbnailLineBreaks } from "../../thumbnail/normalize-thumbnail-line-breaks.js";
 import { sanitizeBlogTitle } from "../sanitize-title.js";
+import { brand } from "../../../config/brand.js";
+import { parseJsonResponse } from "../llm/json-response-parser.js";
 
 export interface TitleSeoInput {
   topic: string;
@@ -20,16 +22,16 @@ export interface TitleSeoOutput {
 }
 
 function parseRefineResponse(raw: string): TitleSeoOutput | null {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as Partial<TitleSeoOutput>;
-    if (!parsed.title || !parsed.thumbnailText) return null;
+    const { parsed } = parseJsonResponse<TitleSeoOutput>({
+      source: raw,
+      context: "SEO",
+      requiredKeys: ["title", "thumbnailText"],
+    });
 
     return {
-      title: sanitizeBlogTitle(parsed.title),
-      thumbnailText: normalizeThumbnailLineBreaks(parsed.thumbnailText.trim()),
+      title: sanitizeBlogTitle(parsed.title as string),
+      thumbnailText: normalizeThumbnailLineBreaks((parsed.thumbnailText as string).trim()),
       thumbnailTopLabel: (parsed.thumbnailTopLabel ?? "").trim(),
     };
   } catch {
@@ -53,8 +55,8 @@ export async function refineTitleAndThumbnail(
   }
 
   const regionHint = input.region
-    ? `지역명: ${input.region.pickedShort.join("·")}·강운준 행정사`
-    : "강운준 행정사";
+    ? `지역명: ${input.region.pickedShort.join("·")}·${brand.brandName}`
+    : brand.brandName;
 
   const refList = referenceTitles
     .map((t, i) => `${i + 1}. ${t}`)
