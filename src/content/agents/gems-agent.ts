@@ -239,6 +239,47 @@ async function runLlmSelfReview(
   return parseGemsReviewResponse(raw);
 }
 
+interface ExpandChunkOutput {
+  htmlAppend: string;
+}
+
+function parseExpandChunkResponse(raw: string): string {
+  const { parsed } = parseJsonResponse<ExpandChunkOutput>({
+    source: raw,
+    context: "Gems Expand",
+    requiredKeys: ["htmlAppend"],
+  });
+  return (parsed.htmlAppend as string).trim();
+}
+
+function buildExpandChunkPrompt(
+  topic: string,
+  title: string,
+  plainLen: number,
+  shortage: number,
+  outline: string,
+): string {
+  const targetGain = Math.max(shortage + 200, 1200);
+  return `주제: ${topic}
+제목: ${title}
+
+[이어쓰기 보강 — 필수]
+현재 본문 순수 텍스트는 ${plainLen}자입니다. 최소 ${MIN_CHARS}자에 ${shortage}자 부족합니다.
+기존 원고 전체를 다시 쓰지 말고, **추가 HTML 조각만** 작성하세요.
+
+요구:
+- 순수 텍스트 기준 약 ${targetGain}자 분량의 신규 내용
+- h2 1~2개 + 문단/체크리스트/Q&A 보강
+- 사례는 '의뢰인' 호칭만, 금지어(꿀팁·상담·총정리·대박) 금지
+- 기존 내용을 반복하지 말 것
+
+참고용 기존 본문 일부:
+${outline}
+
+JSON만 출력:
+{"htmlAppend":"<h2>...</h2><p>...</p>..."}`;
+}
+
 /**
  * Gems 에이전트: 사용자 지정 주제 + Gems 프롬프트(작성 규칙)로
  * 제목·HTML 본문·썸네일 문구를 한 번에 생성합니다.
@@ -253,8 +294,34 @@ export class GemsAgent {
       system,
       user: userPrompt,
       temperature,
+      maxTokens: config.llmMaxTokens,
     });
     return parseGemsResponse(raw);
+  }
+
+  private async generateExpandChunk(
+    topic: string,
+    draft: GemsArticleOutput,
+    plainLen: number,
+  ): Promise<string> {
+    const shortage = MIN_CHARS - plainLen;
+    const outline = extractPlainText(draft.htmlBody).slice(0, 1800);
+    const system =
+      "당신은 한국어 블로그 본문 이어쓰기 전문가입니다. JSON만 출력하세요.";
+    const user = buildExpandChunkPrompt(
+      topic,
+      draft.title,
+      plainLen,
+      shortage,
+      outline,
+    );
+    const raw = await chat({
+      system,
+      user,
+      temperature: 0.55,
+      maxTokens: Math.min(config.llmMaxTokens, 8192),
+    });
+    return parseExpandChunkResponse(raw);
   }
 
   async run(
@@ -304,36 +371,30 @@ export class GemsAgent {
     let plainText = extractPlainText(result.htmlBody);
     let plainLen = plainText.length;
 
-    // 짧은 초안은 처음부터 다시 쓰기보다 기존 HTML을 보강하는 편이 길이 충족률이 높음
-    const maxLengthRetries = 2;
+    // 전체 재작성 대신 추가 HTML을 이어붙여 토큰 한도 잘림을 피함
+    const maxLengthRetries = 3;
     for (let attempt = 1; attempt <= maxLengthRetries && plainLen < MIN_CHARS; attempt++) {
       const shortage = MIN_CHARS - plainLen;
       console.warn(
-        `[Gems] 본문 길이 미달(${plainLen}/${MIN_CHARS}) — 보강 재작성 ${attempt}/${maxLengthRetries}`,
+        `[Gems] 본문 길이 미달(${plainLen}/${MIN_CHARS}) — 이어쓰기 보강 ${attempt}/${maxLengthRetries} (부족 ${shortage}자)`,
       );
-      const expandPrompt =
-        `${baseUserPrompt}\n\n[길이 보강 지시 — 필수]\n` +
-        `현재 초안 순수 텍스트는 ${plainLen}자로 최소 ${MIN_CHARS}자에 ${shortage}자 부족합니다.\n` +
-        "아래 초안 HTML의 제목·주제·구조를 유지한 채 htmlBody를 확장하세요.\n" +
-        "추가 요구:\n" +
-        "- 각 h2마다 사례 디테일·실무 체크포인트·서류/반려 사유를 2~3문단 보강\n" +
-        "- Q&A를 최소 5문항으로 늘리고 각 답변 4~6문장\n" +
-        "- 체크리스트 항목 8개 이상\n" +
-        `- 최종 순수 텍스트는 반드시 ${MIN_CHARS}자 이상 (목표 ${MIN_CHARS + 400}자 권장)\n` +
-        "- JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText)\n\n" +
-        `이전 초안 HTML:\n${result.htmlBody}`;
-      result = await this.generateDraft(
-        system,
-        expandPrompt,
-        Math.max(0.35, temperature - 0.15),
-      );
+      const htmlAppend = await this.generateExpandChunk(topic, result, plainLen);
+      if (!htmlAppend) {
+        console.warn("[Gems] 이어쓰기 조각이 비어 있음 — 다음 시도로 진행");
+        continue;
+      }
+      result = {
+        ...result,
+        htmlBody: `${result.htmlBody.trim()}\n${htmlAppend}`,
+      };
       plainText = extractPlainText(result.htmlBody);
       plainLen = plainText.length;
+      console.log(`[Gems] 이어쓰기 후 길이: ${plainLen}/${MIN_CHARS}`);
     }
 
     if (plainLen < MIN_CHARS) {
       throw new Error(
-        `[Gems] 본문 최소 길이 실패: 보강 ${maxLengthRetries}회 후에도 ${plainLen}/${MIN_CHARS}자입니다.`,
+        `[Gems] 본문 최소 길이 실패: 이어쓰기 보강 ${maxLengthRetries}회 후에도 ${plainLen}/${MIN_CHARS}자입니다.`,
       );
     }
 

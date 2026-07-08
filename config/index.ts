@@ -137,6 +137,8 @@ export const config = {
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
   llmRetryAttempts: Number(process.env.LLM_RETRY_ATTEMPTS ?? "3"),
   llmRetryDelayMs: Number(process.env.LLM_RETRY_DELAY_MS ?? "900"),
+  /** 긴 블로그 HTML(+JSON) 생성용 출력 토큰 상한 */
+  llmMaxTokens: Number(process.env.LLM_MAX_TOKENS ?? "16384"),
   gemsPromptPath: process.env.GEMINI_GEMS_PROMPT_PATH
     ? path.resolve(projectRoot, process.env.GEMINI_GEMS_PROMPT_PATH)
     : path.join(projectRoot, "prompts", "gems-system.prompt.md"),

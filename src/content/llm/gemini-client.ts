@@ -28,11 +28,15 @@ export async function geminiChat({
   system,
   user,
   temperature = 0.7,
+  maxTokens,
 }: ChatOptions): Promise<string> {
   const model = getClient().getGenerativeModel({
     model: config.geminiModel,
     systemInstruction: system,
-    generationConfig: { temperature },
+    generationConfig: {
+      temperature,
+      maxOutputTokens: maxTokens ?? config.llmMaxTokens,
+    } as { temperature?: number; maxOutputTokens?: number },
   });
 
   const result = await retry(() => model.generateContent(user), {

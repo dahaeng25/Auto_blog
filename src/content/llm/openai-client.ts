@@ -27,12 +27,14 @@ export async function openaiChat({
   system,
   user,
   temperature = 0.7,
+  maxTokens,
 }: ChatOptions): Promise<string> {
   const response = await retry(
     async () =>
       getClient().chat.completions.create({
         model: config.openaiModel,
         temperature,
+        max_tokens: maxTokens ?? config.llmMaxTokens,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -61,6 +63,13 @@ export async function openaiChat({
       },
     },
   );
+
+  const finishReason = response.choices[0]?.finish_reason;
+  if (finishReason === "length") {
+    logger.warn(
+      "[LLM/OpenAI] 응답이 max_tokens 한도로 잘렸습니다. LLM_MAX_TOKENS를 올리거나 이어쓰기 보강을 확인하세요.",
+    );
+  }
 
   const content = response.choices[0]?.message?.content?.trim();
   if (!content) {
