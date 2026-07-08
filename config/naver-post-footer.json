@@ -1,0 +1,19 @@
+{
+  "$comment": "네이버 블로그 본문 맨 끝에 자동 삽입되는 푸터 템플릿. enabled=true 후 blocks 또는 htmlFile을 수정하세요.",
+  "enabled": false,
+  "htmlFile": "assets/footer/naver-footer.html",
+  "blocks": [
+    {
+      "type": "image",
+      "file": "assets/footer/office-map.png",
+      "alt": "행정사사무소 다행 위치 안내",
+      "linkUrl": "https://map.naver.com/v5/search/%EC%A0%84%EB%B6%81%20%EC%A0%84%EC%A3%BC%EC%8B%9C%20%EB%8D%95%EC%A7%84%EB%A1%9C%20100"
+    },
+    {
+      "type": "image",
+      "file": "assets/thumbnail/footer-banner.png",
+      "alt": "강운준 행정사 문의 안내",
+      "linkUrl": "https://pf.kakao.com/_xgxnxgG"
+    }
+  ]
+}

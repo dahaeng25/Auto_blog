@@ -19,6 +19,7 @@ import { setNaverImageAltText } from "../utils/naver-image-meta.js";
 import { splitHtmlForPublishing } from "./html-splitter.js";
 import { loadBodyImages, type ResolvedBodyImage } from "./image-manifest.js";
 import { EDITOR_SELECTORS } from "../../../config/editor-selectors.js";
+import { buildNaverFooterPublishBlocks } from "../naver-post-footer.js";
 
 export interface FillBodyWithImagesOptions {
   page: Page;
@@ -147,6 +148,23 @@ function buildPublishBlocks(
         ? `단락 ${i + 1}: ${section.h2Title}`
         : `단락 ${i + 1}`,
     });
+  }
+
+  if (options.platform === "naver") {
+    const footerBlocks = buildNaverFooterPublishBlocks();
+    for (const footer of footerBlocks) {
+      if (footer.kind === "html" && footer.html) {
+        blocks.push({ kind: "html", html: footer.html, label: footer.label });
+      } else if (footer.kind === "image" && footer.path) {
+        blocks.push({
+          kind: "image",
+          path: footer.path,
+          label: footer.label,
+          altText: footer.altText,
+          linkUrl: footer.linkUrl,
+        });
+      }
+    }
   }
 
   return blocks;

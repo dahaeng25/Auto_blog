@@ -162,6 +162,11 @@ export const config = {
    */
   naverUseSampleStyle: process.env.NAVER_USE_SAMPLE_STYLE !== "false",
 
+  /** 네이버 본문 맨 끝 푸터 템플릿 (지도·이미지·HTML) */
+  naverPostFooterEnabled: process.env.NAVER_POST_FOOTER_ENABLED === "true",
+  naverPostFooterPath:
+    process.env.NAVER_POST_FOOTER_PATH ?? "config/naver-post-footer.json",
+
   rssFeedUrls: (process.env.RSS_FEED_URLS ?? "")
     .split(",")
     .map((u) => u.trim())
