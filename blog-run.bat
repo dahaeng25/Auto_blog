@@ -27,32 +27,38 @@ echo   블로그 자동화 - blog-run.bat
 echo  ========================================
 echo.
 if defined BLOG_KEYWORDS goto menu_show_keywords
-echo   현재 키워드: 미설정 - [1]에서 입력
+echo   현재 키워드: 미설정
 goto menu_keywords_done
 :menu_show_keywords
 echo   현재 키워드: !BLOG_KEYWORDS!
 :menu_keywords_done
 if defined BLOG_REGION goto menu_show_region
-echo   현재 지역:   미설정 - [1] 또는 [9]에서 입력
+echo   현재 지역:   미설정
 goto menu_region_done
 :menu_show_region
-echo   현재 지역:   !BLOG_REGION! - 시군구 자동 랜덤
+echo   현재 지역:   !BLOG_REGION!
 :menu_region_done
 echo.
-echo   [1] 키워드+지역 입력/수정
-echo   [9] 지역 입력/수정 - 도-광역시
+echo   --- 키워드·지역 설정 ---
+echo   [1] 직접 입력/수정 - 키워드+지역
+echo   [9] 지역만 입력/수정
+echo   [11] 키워드 자동 생성 - 업무별 랜덤/확장
 echo.
-echo   --- A. 외부 원고 - Gems, Notebook LM ---
-echo   [2] 전체 실행  - 붙여넣기 -^> 썸네일 -^> 업로드
-echo   [3] 붙여넣기 준비 - 편집 파일 열기
-echo   [4] 글 검토/수정
-echo   [5] 썸네일 생성
-echo   [6] 썸네일 미리보기
-echo   [7] 업로드만
+echo   --- AI 글작성 ---
+echo   [20] AI 글 작성
+echo   [21] 검토/수정 - 편집 폴더 열기
 echo.
-echo   --- B. AI 자동 - 키워드+지역 ---
-echo   [8] 전체 실행  - AI글작성 -^> 검토 -^> 썸네일 -^> 업로드
-echo   [10] AI 글 작성만
+echo   --- 썸네일·업로드 ---
+echo   [30] 썸네일 생성
+echo   [31] 썸네일 미리보기
+echo   [32] 업로드만
+echo.
+echo   --- 전체 실행 ---
+echo   [40] AI 전체 - 작성-^>검토-^>썸네일-^>업로드
+echo   [41] 외부원고 전체 - 붙여넣기-^>썸네일-^>업로드
+echo.
+echo   --- 외부 원고 ---
+echo   [50] 붙여넣기 준비
 echo.
 echo   [0] 편집 폴더 열기
 echo   [Q] 종료
@@ -63,17 +69,28 @@ set /p "CHOICE=번호를 선택하세요 > "
 if /i "!CHOICE!"=="Q" exit /b 0
 if "!CHOICE!"=="1" goto edit_keywords
 if "!CHOICE!"=="9" goto edit_region
-if "!CHOICE!"=="2" goto run_import_full
-if "!CHOICE!"=="3" goto run_import
-if "!CHOICE!"=="4" goto run_edit
-if "!CHOICE!"=="5" goto run_thumbnail
-if "!CHOICE!"=="6" goto run_thumbnail_preview
-if "!CHOICE!"=="7" goto run_publish
-if "!CHOICE!"=="8" goto run_full
-if "!CHOICE!"=="10" goto run_content
+if "!CHOICE!"=="11" goto run_auto_keywords
+if "!CHOICE!"=="20" goto run_content
+if "!CHOICE!"=="21" goto run_review
+if "!CHOICE!"=="30" goto run_thumbnail
+if "!CHOICE!"=="31" goto run_thumbnail_preview
+if "!CHOICE!"=="32" goto run_publish
+if "!CHOICE!"=="40" goto run_full
+if "!CHOICE!"=="41" goto run_import_full
+if "!CHOICE!"=="50" goto run_import
 if "!CHOICE!"=="0" goto open_folder
 echo 잘못된 선택입니다.
 timeout /t 2 >nul
+goto menu
+
+:run_auto_keywords
+echo.
+call npx tsx "%~dp0scripts\keyword-auto.ts" --interactive
+if errorlevel 1 goto menu
+call :load_keywords
+echo.
+echo 키워드가 저장되었습니다. 지역은 [9]에서 입력하세요.
+pause
 goto menu
 
 :run_import_full
@@ -126,7 +143,7 @@ echo [1/4] AI 글 작성 중...
 call npm.cmd run blog:workflow -- --step content --batch
 if errorlevel 1 goto done
 echo.
-echo [2/4] 편집용 폴더를 엽니다...
+echo [2/4] 검토 - 편집 폴더를 엽니다...
 call npm.cmd run blog:workflow -- --step edit --batch
 echo.
 echo ========================================
@@ -158,9 +175,9 @@ echo AI 글 작성을 시작합니다...
 call npm.cmd run blog:workflow -- --step content --batch
 goto done
 
-:run_edit
+:run_review
 echo.
-echo 편집용 폴더를 엽니다...
+echo 검토/수정 - 편집 폴더를 엽니다...
 call npm.cmd run blog:workflow -- --step edit --batch
 goto done
 
@@ -186,7 +203,7 @@ goto done
 :open_folder
 if exist "output\drafts\current" goto open_folder_start
 echo.
-echo 편집 폴더가 없습니다. [3] 붙여넣기 또는 [8] AI 글 작성을 먼저 실행하세요.
+echo 편집 폴더가 없습니다. [20] AI 글 작성 또는 [50] 붙여넣기를 먼저 실행하세요.
 pause
 goto menu
 :open_folder_start
@@ -267,6 +284,7 @@ echo.
 echo   쉼표로 구분해 입력하세요.
 echo   예: D-8-4, 외국인 창업
 echo.
+echo   자동 생성은 메뉴 [11]을 사용하세요.
 echo   그대로 두려면 Enter만 누르세요.
 echo.
 set "NEW_KEYWORDS="
@@ -303,7 +321,8 @@ exit /b 0
 :ensure_keywords
 if defined BLOG_KEYWORDS exit /b 0
 echo.
-echo 키워드가 설정되지 않았습니다. 입력해 주세요.
+echo 키워드가 설정되지 않았습니다.
+echo   [1] 직접 입력  또는  [11] 자동 생성
 call :edit_keywords_prompt return
 if errorlevel 1 exit /b 1
 call :ensure_region
@@ -345,7 +364,7 @@ exit /b 0
 echo.
 echo [안내] 제목 또는 본문이 아직 저장되지 않았습니다.
 echo   폴더: %~dp0output\drafts\current
-echo   title.txt, body.html 을 메모장에서 Ctrl+S 저장 후 다시 [2] 또는 [5] 실행
+echo   title.txt, body.html 을 메모장에서 Ctrl+S 저장 후 다시 실행
 exit /b 1
 
 :done
