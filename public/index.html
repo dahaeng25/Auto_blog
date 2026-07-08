@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="stylesheet" href="/styles.css?v=13" />
 </head>
 <body>
   <div id="app" class="app">
@@ -39,8 +39,8 @@
       </div>
       <div class="card status-card">
         <span class="label">세션</span>
-        <span id="session-status" class="value">—</span>
-        <span class="meta">네이버 · 티스토리 · Google</span>
+        <div id="session-status" class="session-details">—</div>
+        <span class="meta">네이버 · 티스토리 · Google (재로그인 버튼으로 검증)</span>
       </div>
     </section>
 
@@ -203,6 +203,6 @@
     document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
     purgeLegacyLogin();
   </script>
-  <script src="/dashboard.js?v=15" type="module"></script>
+  <script src="/dashboard.js?v=16" type="module"></script>
 </body>
 </html>

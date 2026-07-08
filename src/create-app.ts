@@ -8,6 +8,11 @@ import { PLATFORMS, type Platform } from "../config/platforms.js";
 import { jobStore } from "./api/job-store.js";
 import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
+import {
+  getAllSessionInfo,
+  markSessionVerified,
+  markSessionVerificationFailed,
+} from "./auth/session-info.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { TopicStatus } from "./content/types.js";
 import { PublishedPostRepository } from "./content/seo/published-post-repository.js";
@@ -32,6 +37,10 @@ async function getAllSessionStatus(): Promise<Record<Platform, boolean>> {
     platforms.map(async (platform) => [platform, await hasSession(platform)] as const),
   );
   return Object.fromEntries(entries) as Record<Platform, boolean>;
+}
+
+async function getAllSessionDetails() {
+  return getAllSessionInfo();
 }
 
 function readFirstNonCommentLine(filePath: string): string {
@@ -90,6 +99,7 @@ export async function createApp(
           minPlainTextChars: loadBlogStyle().structure.minPlainTextChars ?? 3500,
         },
         sessions: await getAllSessionStatus(),
+        sessionDetails: await getAllSessionDetails(),
       };
     } catch (error) {
       const message =
@@ -336,6 +346,7 @@ export async function createApp(
   });
 
   app.get("/api/sessions", async () => getAllSessionStatus());
+  app.get("/api/sessions/status", async () => getAllSessionDetails());
 
   app.post("/api/sessions/:platform", async (request, reply) => {
     const { platform } = request.params as { platform: string };
@@ -364,6 +375,34 @@ export async function createApp(
     try {
       const { ensureValidSession } = await import("./auth/ensure-session.js");
       await ensureValidSession(platform as Platform);
+
+      // 네이버/티스토리는 “정확한 로그인 유효성”을 위해 글쓰기 화면 접근까지 추가 검증합니다.
+      if (platform === "naver" && config.naverBlogId) {
+        const { verifyPlatformSession } = await import("./auth/session-verify.js");
+        const result = await verifyPlatformSession(
+          "naver",
+          config.authLoginHeadless,
+        );
+        if (!result.valid) {
+          markSessionVerificationFailed("naver", result.detail);
+          return reply.status(409).send({ error: result.detail });
+        }
+        markSessionVerified("naver");
+      }
+
+      if (platform === "tistory" && config.tistoryBlogName) {
+        const { verifyPlatformSession } = await import("./auth/session-verify.js");
+        const result = await verifyPlatformSession(
+          "tistory",
+          config.authLoginHeadless,
+        );
+        if (!result.valid) {
+          markSessionVerificationFailed("tistory", result.detail);
+          return reply.status(409).send({ error: result.detail });
+        }
+        markSessionVerified("tistory");
+      }
+
       return { ok: true, platform };
     } catch (error) {
       return reply.status(500).send({

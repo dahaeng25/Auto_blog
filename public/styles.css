@@ -151,6 +151,48 @@ body {
   color: var(--text-muted);
 }
 
+.session-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-platform {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.session-row-line {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.session-row-status {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.session-row-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .badge {
   display: inline-block;
   padding: 4px 10px;

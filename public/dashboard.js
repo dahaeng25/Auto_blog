@@ -24,17 +24,77 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-function formatSessionStatus(sessions, enabledPlatforms) {
+function renderSessionDetails(sessionDetails, enabledPlatforms) {
   const platforms =
     enabledPlatforms?.length > 0
       ? enabledPlatforms
       : Object.keys(PLATFORM_LABELS);
+
   return platforms
     .map((p) => {
       const label = PLATFORM_LABELS[p] ?? p;
-      return sessions[p] ? `${label} ✓` : `${label} ✗`;
+      const info = sessionDetails?.[p];
+
+      const hasSession = Boolean(info?.hasSession);
+      const valid = info?.valid ?? (hasSession ? "unknown" : "expired");
+      const check = valid === "ok" ? "✓" : "✗";
+      const badgeClass = valid === "ok" ? "success" : valid === "expired" ? "error" : "idle";
+
+      const accountId = info?.accountId ?? "—";
+      const blogId = info?.blogId ?? "—";
+
+      const statusText =
+        valid === "ok"
+          ? "유효"
+          : valid === "expired"
+            ? "만료"
+            : "미확인";
+      const verification =
+        info?.verifiedAt
+          ? info?.verifiedValid
+            ? " (검증됨)"
+            : " (검증실패)"
+          : valid === "ok"
+            ? " (쿠키기반)"
+            : "";
+
+      const loginSource =
+        info?.accountIdSource === "env"
+          ? " (설정 기준)"
+          : info?.accountIdSource === "unknown"
+            ? ""
+            : info?.accountIdSource === "session"
+              ? ""
+              : "";
+
+      const blogSource =
+        info?.blogIdSource === "env" ? " (설정 기준)" : "";
+
+      const lastVerified =
+        info?.verifiedAt ? `마지막 검증: ${escapeHtml(formatDate(info.verifiedAt))}` : "";
+
+      const googleNote =
+        p === "google"
+          ? `<div class="session-row-note">Google은 자동 재로그인 미지원 — 세션 파일만 사용</div>`
+          : "";
+
+      const title = info?.message ? escapeHtml(info.message) : "";
+
+      return `
+        <div class="session-row" data-platform="${escapeHtml(p)}" ${title ? `title="${title}"` : ""}>
+          <div class="session-row-top">
+            <span class="session-platform">${escapeHtml(label)}</span>
+            <span class="badge ${badgeClass} session-platform-check">${escapeHtml(check)}</span>
+          </div>
+          <div class="session-row-line">로그인 ID: ${escapeHtml(accountId)}${escapeHtml(loginSource)}</div>
+          <div class="session-row-line">블로그: ${escapeHtml(blogId)}${escapeHtml(blogSource)}</div>
+          <div class="session-row-line session-row-status">상태: ${escapeHtml(statusText)}${escapeHtml(verification)}</div>
+          ${lastVerified ? `<div class="session-row-note">${lastVerified}</div>` : ""}
+          ${googleNote}
+        </div>
+      `;
     })
-    .join(" · ");
+    .join("");
 }
 
 function statusBadgeClass(status) {
@@ -357,11 +417,18 @@ async function loadStatus(options = {}) {
     topicInput.placeholder = `기본값: ${data.config.blogTopic}`;
   }
 
-  const sessions = formatSessionStatus(
-    data.sessions,
-    data.config.enabledPlatforms,
-  );
-  document.getElementById("session-status").textContent = sessions;
+  const sessionEl = document.getElementById("session-status");
+  if (sessionEl) {
+    const details = data.sessionDetails;
+    if (details) {
+      sessionEl.innerHTML = renderSessionDetails(
+        details,
+        data.config.enabledPlatforms,
+      );
+    } else {
+      sessionEl.textContent = "—";
+    }
+  }
   document.getElementById("run-btn").disabled = data.isRunning;
 
   renderProgress(job, lastLogs, {
@@ -505,7 +572,10 @@ async function runPipelineStep(step) {
       !status.config.publishDryRun
     ) {
       const enabled = status.config.enabledPlatforms ?? ["naver", "tistory"];
-      const missing = enabled.filter((p) => !status.sessions[p]);
+      const details = status.sessionDetails;
+      const missing = enabled.filter((p) =>
+        details ? details[p]?.valid !== "ok" : !status.sessions[p],
+      );
       if (missing.length > 0) {
         const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
         throw {
@@ -567,7 +637,10 @@ async function runPipeline() {
 
     if (!status.config.publishDryRun) {
       const enabled = status.config.enabledPlatforms ?? ["naver", "tistory"];
-      const missing = enabled.filter((p) => !status.sessions[p]);
+      const details = status.sessionDetails;
+      const missing = enabled.filter((p) =>
+        details ? details[p]?.valid !== "ok" : !status.sessions[p],
+      );
       if (missing.length > 0) {
         const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
         throw {
@@ -755,6 +828,7 @@ async function refreshSession(platform) {
       hint ??
         "대시보드에서 세션 JSON을 업로드하거나 Vercel 환경변수(NAVER_ID 등)를 확인하세요.",
     );
+    await refreshAll();
   } finally {
     if (btn) {
       btn.disabled = false;
