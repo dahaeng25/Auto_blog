@@ -465,12 +465,14 @@ async function loadLogs() {
 }
 
 async function refreshAll() {
+  // 단계(스텝박스)와 아래 그래프(활동 미니바)가 같은 로그 스냅샷을 바라보도록
+  // `loadLogs()` → `loadStatus()` 순서로 순차 실행합니다.
+  await loadLogs();
+  const status = await loadStatus();
   await Promise.allSettled([
-    loadLogs(),
-    loadStatus(),
     loadArticles(),
     loadStats(),
-    loadPublishedPosts(),
+    ...(status?.isRunning ? [] : [loadPublishedPosts()]),
     loadInputHistory(),
   ]);
 }
