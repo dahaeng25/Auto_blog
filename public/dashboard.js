@@ -93,6 +93,135 @@ function inferCurrentStage(job, logs) {
   return inferStageFromText(text);
 }
 
+/** 로그 한 줄에서 타임스탬프·레벨 제거 */
+function stripLogPrefix(line) {
+  return String(line)
+    .replace(/^\[[^\]]+\]\s*\[(?:INFO|WARN|ERROR)\]\s*/i, "")
+    .trim();
+}
+
+/** 로그를 사용자 친화 한국어 설명으로 변환 */
+function humanizeLogLine(rawLine) {
+  const msg = stripLogPrefix(rawLine);
+  if (!msg) return "";
+
+  const rules = [
+    [/오케스트레이션 시작|파이프라인.*시작/i, "전체 파이프라인을 시작했습니다"],
+    [/phase\s*2|콘텐츠 생성|\[gems\]|\[content\]/i, "AI로 블로그 원고를 작성하는 중…"],
+    [/phase\s*3|썸네일|thumbnail|\[thumbnail\]/i, "썸네일 이미지를 생성하는 중…"],
+    [/phase\s*4|퍼블리싱|publish|\[publish\]/i, "블로그에 업로드하는 중…"],
+    [/rss|수집/i, "RSS에서 주제를 수집하는 중…"],
+    [/글쓰기 페이지|write.*page|에디터/i, "에디터 페이지에 접속하는 중…"],
+    [/세션 워밍업|저장된 세션|기존 세션/i, "로그인 세션을 확인하는 중…"],
+    [/자동 로그인|재로그인/i, "계정으로 자동 로그인을 시도하는 중…"],
+    [/\[네이버\]|네이버.*발행/i, "네이버 블로그에 글을 올리는 중…"],
+    [/\[티스토리\]|티스토리.*발행/i, "티스토리에 글을 올리는 중…"],
+    [/카테고리/i, "티스토리 카테고리를 선택하는 중…"],
+    [/공개 발행|발행 버튼/i, "발행 버튼을 누르는 중…"],
+    [/이미지|upload|업로드/i, "본문·이미지를 에디터에 넣는 중…"],
+    [/완료|success|✅/i, "단계가 완료되었습니다"],
+    [/실패|error|퍼블리싱 실패/i, "오류가 발생했습니다"],
+  ];
+
+  for (const [pattern, text] of rules) {
+    if (pattern.test(msg)) return text;
+  }
+
+  if (msg.length > 72) return `${msg.slice(0, 70)}…`;
+  return msg;
+}
+
+/** 최근 로그에서 의미 있는 설명만 추출 (중복 제거) */
+function extractActivityLines(logs, max = 5) {
+  const seen = new Set();
+  const result = [];
+
+  for (let i = logs.length - 1; i >= 0 && result.length < max; i--) {
+    const friendly = humanizeLogLine(logs[i]);
+    if (!friendly || seen.has(friendly)) continue;
+    seen.add(friendly);
+    result.unshift(friendly);
+  }
+
+  return result;
+}
+
+function activitySummaryText(job, stage, lines) {
+  if (job?.status === "running") {
+    const latest = lines[lines.length - 1];
+    if (latest) return `실행 중 — ${latest}`;
+    if (stage !== "idle" && stage !== "done") {
+      return `실행 중 — [${stage}] 단계를 처리하고 있습니다.`;
+    }
+    return "실행 중 — 작업을 처리하고 있습니다…";
+  }
+  if (job?.status === "success") {
+    return job.lastTitle
+      ? `완료 — 「${job.lastTitle}」 처리가 끝났습니다.`
+      : "완료 — 모든 단계가 성공적으로 끝났습니다.";
+  }
+  if (job?.status === "error") {
+    return "실패 — 아래 로그와 실패 요약을 확인해 주세요.";
+  }
+  return "대기 중 — 실행을 시작하면 여기에 진행 상황이 표시됩니다.";
+}
+
+function renderActivityBox(job, logs) {
+  const box = document.getElementById("activity-box");
+  const summaryEl = document.getElementById("activity-summary");
+  const pulseEl = document.getElementById("activity-pulse");
+  const miniEl = document.getElementById("activity-mini-steps");
+  const feedEl = document.getElementById("activity-feed");
+  if (!box || !summaryEl || !pulseEl || !miniEl || !feedEl) return;
+
+  const stage = inferCurrentStage(job, logs);
+  const stageIndex = STEP_LABELS.indexOf(stage);
+  const lines = extractActivityLines(logs, 5);
+
+  summaryEl.textContent = activitySummaryText(job, stage, lines);
+
+  pulseEl.className = "activity-pulse";
+  if (job?.status === "running") pulseEl.classList.add("running");
+  else if (job?.status === "success") pulseEl.classList.add("done");
+  else if (job?.status === "error") pulseEl.classList.add("error");
+  else pulseEl.classList.add("idle");
+
+  miniEl.innerHTML = STEP_LABELS.map((label, i) => {
+    let segClass = "";
+    if (job?.status === "success" || i < stageIndex) segClass = "done";
+    else if (job?.status === "error" && i === stageIndex) segClass = "error";
+    else if (job?.status === "running" && i === stageIndex) segClass = "running";
+    return `<span class="activity-mini-seg ${segClass}" title="${label}"></span>`;
+  }).join("");
+
+  if (lines.length === 0) {
+    feedEl.innerHTML = `<li>${escapeHtml(
+      job?.status === "idle" || !job?.status
+        ? "아직 활동 기록이 없습니다."
+        : "상세 로그를 불러오는 중…",
+    )}</li>`;
+  } else {
+    feedEl.innerHTML = lines
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("");
+  }
+}
+
+function renderLogsSummary(logs, job) {
+  const el = document.getElementById("logs-summary");
+  if (!el) return;
+
+  const lines = extractActivityLines(logs, 8);
+  if (lines.length === 0 || (!job?.status || job.status === "idle")) {
+    el.innerHTML = "";
+    return;
+  }
+
+  el.innerHTML = lines
+    .map((line) => `<span class="log-hint-line">${escapeHtml(line)}</span>`)
+    .join("");
+}
+
 function renderProgress(job, logs, statusConfig = {}) {
   const container = document.getElementById("pipeline-progress");
   const stage = inferCurrentStage(job, logs);
@@ -239,6 +368,7 @@ async function loadStatus(options = {}) {
     isRunning: data.isRunning,
     contentMode: data.config.contentMode,
   });
+  renderActivityBox(job, lastLogs);
 
   // 실패 요약은 현재 job이 error일 때만 표시. running/success/idle에서는 숨김
   if (!suppressErrorCard && job.status === "error") {
@@ -328,6 +458,10 @@ async function loadLogs() {
   lastLogs = data.lines ?? [];
   document.getElementById("logs").textContent =
     lastLogs.join("\n") || "로그가 없습니다.";
+  renderLogsSummary(lastLogs, lastStatus?.job);
+  if (lastStatus?.job) {
+    renderActivityBox(lastStatus.job, lastLogs);
+  }
 }
 
 async function refreshAll() {

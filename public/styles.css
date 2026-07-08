@@ -494,6 +494,147 @@ body {
   color: var(--error);
 }
 
+/* 실행 현황 미니 박스 */
+.activity-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0a0c10;
+  font-size: 0.82rem;
+}
+
+.activity-box-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.activity-pulse {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.activity-pulse.running {
+  background: var(--primary);
+  box-shadow: 0 0 0 0 rgba(99, 140, 255, 0.5);
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+
+.activity-pulse.done {
+  background: var(--success);
+}
+
+.activity-pulse.error {
+  background: var(--error);
+}
+
+@keyframes activity-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 140, 255, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(99, 140, 255, 0);
+  }
+}
+
+.activity-summary {
+  color: #c8d0e0;
+  line-height: 1.45;
+}
+
+.activity-mini-steps {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.activity-mini-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.25s ease;
+}
+
+.activity-mini-seg.done {
+  background: var(--success);
+}
+
+.activity-mini-seg.running {
+  background: var(--primary);
+  animation: activity-seg-pulse 1s ease-in-out infinite;
+}
+
+.activity-mini-seg.error {
+  background: var(--error);
+}
+
+@keyframes activity-seg-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.activity-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 5.5em;
+  overflow: hidden;
+}
+
+.activity-feed li {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.activity-feed li::before {
+  content: "› ";
+  color: var(--primary);
+}
+
+.logs-summary {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: #b8c0d4;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(99, 140, 255, 0.06);
+  border: 1px solid rgba(99, 140, 255, 0.12);
+}
+
+.logs-summary:empty {
+  display: none;
+}
+
+.logs-summary .log-hint-line {
+  display: block;
+  margin: 2px 0;
+}
+
+.logs-summary .log-hint-line::before {
+  content: "· ";
+  color: var(--primary);
+}
+
 .error-card {
   border-color: rgba(239, 91, 91, 0.35);
   margin-bottom: 16px;

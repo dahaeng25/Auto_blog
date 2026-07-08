@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=11" />
+  <link rel="stylesheet" href="/styles.css?v=12" />
 </head>
 <body>
   <div id="app" class="app">
@@ -82,6 +82,14 @@
         <h2>단계 진행 상황</h2>
       </div>
       <div id="pipeline-progress" class="progress-steps"></div>
+      <div id="activity-box" class="activity-box" aria-live="polite">
+        <div class="activity-box-header">
+          <span id="activity-pulse" class="activity-pulse idle" aria-hidden="true"></span>
+          <span id="activity-summary" class="activity-summary">대기 중 — 실행을 시작하면 여기에 진행 상황이 표시됩니다.</span>
+        </div>
+        <div id="activity-mini-steps" class="activity-mini-steps"></div>
+        <ul id="activity-feed" class="activity-feed"></ul>
+      </div>
     </section>
 
     <section id="error-card" class="card error-card hidden">
@@ -159,6 +167,7 @@
         <h2>실행 로그</h2>
         <button id="logs-refresh" class="btn btn-ghost btn-sm">로그 새로고침</button>
       </div>
+      <div id="logs-summary" class="logs-summary" aria-live="polite"></div>
       <pre id="logs" class="logs">로그를 불러오는 중...</pre>
     </section>
 
@@ -194,6 +203,6 @@
     document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
     purgeLegacyLogin();
   </script>
-  <script src="/dashboard.js?v=14" type="module"></script>
+  <script src="/dashboard.js?v=15" type="module"></script>
 </body>
 </html>
