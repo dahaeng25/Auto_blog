@@ -8,6 +8,10 @@
       "maxDuration": 300,
       "memory": 2048
     },
+    "api/sessions/[platform].ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
     "api/cron.ts": {
       "maxDuration": 300,
       "memory": 2048

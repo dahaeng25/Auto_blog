@@ -392,11 +392,22 @@ function closeModal() {
 }
 
 async function uploadSession(platform, file) {
-  const text = await file.text();
-  const json = JSON.parse(text);
   const msgEl = document.getElementById("upload-message");
+  msgEl.style.color = "var(--text-muted)";
+  msgEl.textContent = `${platform} 세션 업로드 중...`;
 
   try {
+    let json;
+    try {
+      json = JSON.parse(await file.text());
+    } catch {
+      throw {
+        message: "JSON 파일이 아닙니다. auth/*_state.json 을 선택하세요.",
+        stage: "발행",
+        hint: "npm run auth:setup 으로 생성된 파일을 업로드하세요.",
+      };
+    }
+
     await api(`/api/sessions/${platform}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -407,7 +418,11 @@ async function uploadSession(platform, file) {
     await loadStatus();
   } catch (err) {
     const error = normalizeError(err);
-    msgEl.textContent = error.message;
+    const hint =
+      /404|실패 \(404\)/.test(error.message)
+        ? "배포가 최신 코드가 아닐 수 있습니다. Vercel Redeploy 후 다시 시도하세요."
+        : error.hint;
+    msgEl.textContent = `${error.message}${hint ? ` — ${hint}` : ""}`;
     msgEl.style.color = "var(--error)";
   }
 }

@@ -1,12 +1,15 @@
 import { extractInputKeywordPhrases } from "../../publishing/images/keyword-slug.js";
-import {
-  searchNaverBlogReferences,
-  type NaverBlogPost,
-} from "./naver-blog-search.js";
+import { searchNaverBlogTitles } from "./naver-blog-search.js";
 import {
   PublishedPostRepository,
   type PublishedPostRecord,
 } from "./published-post-repository.js";
+
+export interface NaverBlogPost {
+  title: string;
+  snippet: string;
+  query: string;
+}
 
 export interface BlogReferenceItem {
   title: string;
@@ -21,6 +24,47 @@ export interface BlogReferenceBundle {
   naverPosts: NaverBlogPost[];
   internalPosts: PublishedPostRecord[];
   items: BlogReferenceItem[];
+}
+
+export interface NaverBlogReferenceOptions {
+  perQueryLimit?: number;
+  totalLimit?: number;
+  maxQueries?: number;
+}
+
+/**
+ * 네이버 유사 글 제목 수집 (기존 searchNaverBlogTitles 기반)
+ */
+export async function searchNaverBlogReferences(
+  topic: string,
+  options: NaverBlogReferenceOptions = {},
+): Promise<NaverBlogPost[]> {
+  const phrases = extractInputKeywordPhrases(topic);
+  const maxQueries = Math.min(
+    options.maxQueries ?? Math.min(phrases.length || 1, 4),
+    Math.max(phrases.length || 1, 1),
+  );
+  const perQueryLimit = options.perQueryLimit ?? 5;
+  const totalLimit = options.totalLimit ?? 12;
+
+  const queries =
+    phrases.length > 0 ? phrases.slice(0, maxQueries) : [topic.trim()].filter(Boolean);
+
+  const seen = new Set<string>();
+  const posts: NaverBlogPost[] = [];
+
+  for (const query of queries) {
+    if (posts.length >= totalLimit) break;
+    const titles = await searchNaverBlogTitles(query, perQueryLimit);
+    for (const title of titles) {
+      if (seen.has(title)) continue;
+      seen.add(title);
+      posts.push({ title, snippet: "", query });
+      if (posts.length >= totalLimit) break;
+    }
+  }
+
+  return posts;
 }
 
 /**
@@ -85,9 +129,7 @@ export function buildBlogReferenceContext(bundle: BlogReferenceBundle): string {
 
   const naverLines = bundle.naverPosts
     .map((post, i) => {
-      const snippetPart = post.snippet
-        ? `\n   요약: ${post.snippet}`
-        : "";
+      const snippetPart = post.snippet ? `\n   요약: ${post.snippet}` : "";
       return `${i + 1}. [검색어: ${post.query}] "${post.title}"${snippetPart}`;
     })
     .join("\n");
@@ -105,7 +147,9 @@ export function buildBlogReferenceContext(bundle: BlogReferenceBundle): string {
     ? `[기존 발행 글 — 내부 참고 (앵글·키워드 패턴 학습용)]\n${internalLines}`
     : "";
 
-  const referenceBody = [naverBlock, internalBlock].filter(Boolean).join("\n\n");
+  const referenceBody = [naverBlock, internalBlock]
+    .filter(Boolean)
+    .join("\n\n");
 
   return `
 ---
