@@ -1,6 +1,19 @@
 import type { Page } from "playwright";
 import type { Platform } from "../../config/platforms.js";
+import { isServerless } from "../browser/is-serverless.js";
 import { humanPause } from "../publishing/utils/human-input.js";
+
+function pageSettleMs(): number {
+  return isServerless() ? 6000 : 3000;
+}
+
+function editorPollAttempts(): number {
+  return isServerless() ? 15 : 5;
+}
+
+function editorPollIntervalMs(): number {
+  return isServerless() ? 2000 : 1000;
+}
 
 /** blog.naver.com/xxx 또는 전체 URL → 블로그 ID */
 export function normalizeNaverBlogId(raw: string): string {
@@ -77,7 +90,13 @@ async function isNaverEditorVisible(page: Page): Promise<boolean> {
   if (!frame) return false;
 
   const title = frame.locator(".se-documentTitle, .se-title-text").first();
-  return (await title.count()) > 0;
+  if ((await title.count()) === 0) return false;
+
+  try {
+    return await title.isVisible();
+  } catch {
+    return true;
+  }
 }
 
 async function isTistoryEditorVisible(page: Page): Promise<boolean> {
@@ -98,6 +117,53 @@ export async function isWriteEditorVisible(
   if (platform === "naver") return isNaverEditorVisible(page);
   if (platform === "tistory") return isTistoryEditorVisible(page);
   return false;
+}
+
+/** 서버리스 Chromium은 에디터 DOM 로딩이 느려 폴링으로 대기합니다. */
+async function waitForWriteEditor(
+  page: Page,
+  platform: Platform,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < editorPollAttempts(); attempt++) {
+    if (await isWriteEditorVisible(page, platform)) {
+      return true;
+    }
+    await humanPause(editorPollIntervalMs());
+  }
+  return false;
+}
+
+/** 저장된 세션 쿠키를 활성화하기 위해 플랫폼 홈을 먼저 방문합니다. */
+async function warmPlatformSession(
+  page: Page,
+  platform: Platform,
+  blogId: string,
+): Promise<void> {
+  if (!isServerless()) return;
+
+  const normalizedId =
+    platform === "naver"
+      ? normalizeNaverBlogId(blogId)
+      : normalizeTistoryBlogName(blogId);
+
+  const warmUrls =
+    platform === "naver"
+      ? [
+          "https://www.naver.com",
+          `https://blog.naver.com/${normalizedId}`,
+        ]
+      : platform === "tistory"
+        ? [
+            "https://www.tistory.com",
+            `https://${normalizedId}.tistory.com/manage/posts`,
+          ]
+        : [];
+
+  for (const url of warmUrls) {
+    console.log(`[글쓰기] 세션 워밍업: ${url}`);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await humanPause(2000);
+  }
 }
 
 /**
@@ -124,17 +190,19 @@ export async function navigateToWritePage(
       ? normalizeNaverBlogId(blogId)
       : normalizeTistoryBlogName(blogId);
 
+  await warmPlatformSession(page, platform, blogId);
+
   for (const url of urls) {
     console.log(`[글쓰기] 이동 시도: ${url}`);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await humanPause(3000);
+    await humanPause(pageSettleMs());
 
     if (await isPermissionDeniedPage(page)) {
       console.warn(`[글쓰기] 권한 없음 페이지 — 다음 URL 시도`);
       continue;
     }
 
-    if (await isWriteEditorVisible(page, platform)) {
+    if (await waitForWriteEditor(page, platform)) {
       console.log(`[글쓰기] 에디터 확인: ${url}`);
       return url;
     }

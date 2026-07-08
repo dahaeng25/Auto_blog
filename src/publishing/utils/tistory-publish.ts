@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import { config } from "../../../config/index.js";
+import { isServerless } from "../../browser/is-serverless.js";
 import { EDITOR_SELECTORS } from "../../../config/editor-selectors.js";
 import { findFirstVisible, splitSelectors, type PageOrFrame } from "./dom-utils.js";
 import { humanClick, humanPause } from "./human-input.js";
@@ -7,6 +8,14 @@ import { waitForPublishedUrl } from "./publish-verify.js";
 import { selectTistoryCategory } from "./tistory-category-select.js";
 
 const PLATFORM_NAME = "티스토리";
+
+function panelSettleMs(): number {
+  return isServerless() ? 4000 : 2000;
+}
+
+function publishConfirmAttempts(): number {
+  return isServerless() ? 25 : 15;
+}
 
 function getSearchContexts(page: Page, contexts: PageOrFrame[]): PageOrFrame[] {
   return [...new Set([page, ...contexts, ...page.frames()])];
@@ -18,18 +27,24 @@ async function openPublishPanel(
   contexts: PageOrFrame[],
 ): Promise<void> {
   const selectors = splitSelectors(EDITOR_SELECTORS.tistory.publishButton);
-  const publishBtn = await findFirstVisible(getSearchContexts(page, contexts), selectors);
+  const searchContexts = getSearchContexts(page, contexts);
+  const attempts = isServerless() ? 20 : 8;
 
-  if (!publishBtn) {
-    throw new Error(
-      `[${PLATFORM_NAME}] 발행 패널 열기 버튼을 찾을 수 없습니다. ` +
-        `PUBLISH_HEADLESS=false 로 확인하세요.`,
-    );
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const publishBtn = await findFirstVisible(searchContexts, selectors);
+    if (publishBtn) {
+      console.log(`[${PLATFORM_NAME}] ① 발행 설정 패널 열기`);
+      await humanClick(publishBtn.locator);
+      await humanPause(panelSettleMs());
+      return;
+    }
+    await humanPause(500);
   }
 
-  console.log(`[${PLATFORM_NAME}] ① 발행 설정 패널 열기`);
-  await humanClick(publishBtn.locator);
-  await humanPause(2000);
+  throw new Error(
+    `[${PLATFORM_NAME}] 발행 패널 열기 버튼을 찾을 수 없습니다. ` +
+      `PUBLISH_HEADLESS=false 로 확인하세요.`,
+  );
 }
 
 /** 발행 패널에서 '공개' 옵션 선택 */
@@ -142,7 +157,7 @@ async function clickPublicPublishButton(
   const selectors = splitSelectors(EDITOR_SELECTORS.tistory.publishConfirm);
   const searchContexts = getSearchContexts(page, contexts);
 
-  for (let attempt = 0; attempt < 15; attempt++) {
+  for (let attempt = 0; attempt < publishConfirmAttempts(); attempt++) {
     const confirmBtn = await findFirstVisible(searchContexts, selectors);
     if (confirmBtn) {
       console.log(`[${PLATFORM_NAME}] ④ 공개 발행 버튼 클릭`);

@@ -5,6 +5,7 @@ const PLATFORM_LABELS = {
 };
 
 const STEP_LABELS = ["수집", "생성", "썸네일", "발행"];
+const STEP_KEYS = ["collect", "content", "thumbnail", "publish"];
 let pollTimer = null;
 let lastLogs = [];
 let lastStatus = null;
@@ -92,10 +93,12 @@ function inferCurrentStage(job, logs) {
   return inferStageFromText(text);
 }
 
-function renderProgress(job, logs) {
+function renderProgress(job, logs, statusConfig = {}) {
   const container = document.getElementById("pipeline-progress");
   const stage = inferCurrentStage(job, logs);
   const stageIndex = STEP_LABELS.indexOf(stage);
+  const isRunning = Boolean(statusConfig.isRunning);
+  const contentMode = statusConfig.contentMode ?? "gems";
 
   container.innerHTML = STEP_LABELS.map((label, i) => {
     let stateClass = "waiting";
@@ -112,11 +115,25 @@ function renderProgress(job, logs) {
       stateText = "진행중";
     }
 
+    const stepKey = STEP_KEYS[i];
+    const isCollectNa = stepKey === "collect" && contentMode === "gems";
+    const btnDisabled = isRunning || isCollectNa;
+    const btnTitle = isCollectNa
+      ? "gems 모드에서는 RSS 수집이 필요하지 않습니다"
+      : `${label} 단계만 실행`;
+
     return `
       <div class="progress-step ${stateClass}">
         <span class="step-index">Step ${i + 1}</span>
         <span class="step-label">${label}</span>
         <span class="step-state">${stateText}</span>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm step-run-btn"
+          data-step="${stepKey}"
+          ${btnDisabled ? "disabled" : ""}
+          title="${escapeHtml(btnTitle)}"
+        >실행</button>
       </div>
     `;
   }).join("");
@@ -218,7 +235,10 @@ async function loadStatus(options = {}) {
   document.getElementById("session-status").textContent = sessions;
   document.getElementById("run-btn").disabled = data.isRunning;
 
-  renderProgress(job, lastLogs);
+  renderProgress(job, lastLogs, {
+    isRunning: data.isRunning,
+    contentMode: data.config.contentMode,
+  });
 
   // 실패 요약은 현재 job이 error일 때만 표시. running/success/idle에서는 숨김
   if (!suppressErrorCard && job.status === "error") {
@@ -319,6 +339,70 @@ async function refreshAll() {
     loadPublishedPosts(),
     loadInputHistory(),
   ]);
+}
+
+async function runPipelineStep(step) {
+  const msgEl = document.getElementById("run-message");
+  msgEl.textContent = `${STEP_LABELS[STEP_KEYS.indexOf(step)] ?? step} 단계 실행 중...`;
+  msgEl.className = "run-message";
+  clearErrorCard();
+
+  try {
+    const status = await loadStatus({ suppressErrorCard: true });
+    clearErrorCard();
+
+    const topicInput = document.getElementById("blog-topic");
+    const regionInput = document.getElementById("blog-region");
+    const blogTopic = topicInput?.value?.trim() || undefined;
+    const region = regionInput?.value?.trim() || "";
+
+    if (step === "content" && !blogTopic && !status.config.blogTopic) {
+      throw {
+        message: "블로그 주제를 입력하거나 Vercel에 BLOG_TOPIC 환경 변수를 설정하세요.",
+        stage: "생성",
+        hint: "키워드를 입력한 뒤 다시 실행하세요.",
+      };
+    }
+
+    if (
+      step === "publish" &&
+      !status.config.publishDryRun
+    ) {
+      const enabled = status.config.enabledPlatforms ?? ["naver", "tistory"];
+      const missing = enabled.filter((p) => !status.sessions[p]);
+      if (missing.length > 0) {
+        const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
+        throw {
+          message: `${labels} 세션이 없습니다.`,
+          stage: "발행",
+          hint: "하단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
+        };
+      }
+    }
+
+    const blogRegion = region || undefined;
+    const result = await api("/api/run/step", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step, trigger: "web-step", blogTopic, blogRegion }),
+    });
+
+    if (result.title) {
+      msgEl.textContent = `완료 (${step}): ${result.title}`;
+    } else {
+      msgEl.textContent = result.message;
+    }
+    msgEl.className = "run-message success";
+    if (blogTopic || region) {
+      rememberInput(blogTopic ?? "", region);
+    }
+    await refreshAll();
+  } catch (err) {
+    const error = normalizeError(err);
+    msgEl.textContent = error.message;
+    msgEl.className = "run-message error";
+    showErrorCard(error.message, error.stage, error.hint);
+  }
 }
 
 async function runPipeline() {
@@ -540,6 +624,12 @@ async function init() {
 
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("run-btn").addEventListener("click", runPipeline);
+  document.getElementById("pipeline-progress")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".step-run-btn");
+    if (!btn || btn.disabled) return;
+    const step = btn.dataset.step;
+    if (step) void runPipelineStep(step);
+  });
   document.getElementById("logs-refresh").addEventListener("click", loadLogs);
   document.getElementById("modal-close").addEventListener("click", closeModal);
   document

@@ -21,6 +21,11 @@
       "maxDuration": 30,
       "memory": 1024
     },
+    "api/run/step.ts": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
+    },
     "api/cron.ts": {
       "maxDuration": 300,
       "memory": 2048,

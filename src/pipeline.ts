@@ -8,29 +8,22 @@ import { notifyError, notifySuccess } from "./monitoring/discord-notifier.js";
 import { logger } from "./monitoring/logger.js";
 import { persistPublishedPosts } from "./content/seo/persist-published-posts.js";
 import { assertOrchestrationReady } from "./pipeline/preflight.js";
-import { prepareNaverImageSet } from "./publishing/images/prepare-naver-images.js";
 import {
-  buildKeywordSlug,
-  buildTopLabelFromKeywords,
-  extractMainKeywords,
-} from "./publishing/images/keyword-slug.js";
-import { PublishPipeline } from "./publishing/publish-pipeline.js";
+  resolveActiveTopic,
+  runPublishPhase,
+  runThumbnailPhase,
+} from "./pipeline/phases.js";
 import type { PublishResult } from "./publishing/types.js";
-import { ThumbnailRenderer } from "./thumbnail/thumbnail-renderer.js";
-import { generateSubThumbnails } from "./thumbnail/generate-sub-thumbnails.js";
 import {
-  refreshThumbnailTexts,
-  thumbnailMatchesTopic,
-} from "./thumbnail/resolve-thumbnail-texts.js";
+  acquirePipelineLock,
+  isPipelineRunning as checkPipelineRunning,
+  releasePipelineLock,
+  type OrchestrationOptions,
+} from "./pipeline/lock.js";
 
-export interface OrchestrationOptions {
-  /** 실행 시 지정한 블로그 주제/키워드 */
-  blogTopic?: string;
-  /** 실행 시 지정한 지역(도·광역시). 비우면 .env/blog-region.txt 폴백 */
-  blogRegion?: string;
-  /** 실행 트리거 식별자 (web, cron, vercel-cron 등) */
-  trigger?: string;
-}
+export type { OrchestrationOptions } from "./pipeline/lock.js";
+export { runPipelineStep } from "./pipeline/step-runner.js";
+export type { PipelineStep, StepRunOptions, StepRunResult } from "./pipeline/step-runner.js";
 
 export interface OrchestrationResult {
   draft: ArticleDraft;
@@ -38,11 +31,8 @@ export interface OrchestrationResult {
   publishResults: PublishResult[];
 }
 
-/** 동시 실행 방지 락 */
-let isRunning = false;
-
 export function isPipelineRunning(): boolean {
-  return isRunning;
+  return checkPipelineRunning();
 }
 
 /**
@@ -52,18 +42,15 @@ export function isPipelineRunning(): boolean {
 export async function runOrchestration(
   options: OrchestrationOptions = {},
 ): Promise<OrchestrationResult> {
-  if (isRunning) {
+  if (!acquirePipelineLock()) {
     const msg = "이전 파이프라인이 아직 실행 중입니다. 이번 실행을 건너뜁니다.";
     logger.warn(msg);
     throw new Error(msg);
   }
 
-  isRunning = true;
   const trigger = options.trigger ?? "manual";
   const repo = new TopicRepository();
   const contentPipeline = new ContentPipeline(repo);
-  const thumbnailRenderer = new ThumbnailRenderer();
-  const publishPipeline = new PublishPipeline();
 
   logger.info("═══ 블로그 오케스트레이션 시작 ═══");
   const activeTopic = options.blogTopic ?? config.blogTopic;
@@ -81,77 +68,23 @@ export async function runOrchestration(
         `SKIP_THUMBNAIL=${config.publishSkipThumbnail}`,
     );
 
-    // Phase 2: 콘텐츠 생성
     const draft = await contentPipeline.run({
       blogTopic: options.blogTopic,
       blogRegion: options.blogRegion,
     });
 
-    // Phase 3: 썸네일 렌더링 (네이버 샘플 스타일 시 키워드1.png 파일명)
-    logger.info("Phase 3: 썸네일 생성");
-    const keywords = extractMainKeywords(activeTopic, draft.title);
-    const keywordSlug = buildKeywordSlug(keywords);
-    const enabledPlatforms = getEnabledPlatforms();
-    const needsPreparedImages =
-      enabledPlatforms.includes("naver") ||
-      enabledPlatforms.includes("tistory");
+    const topic = resolveActiveTopic(options.blogTopic, draft);
+    const { thumbnailPath, naverImages } = await runThumbnailPhase(draft, topic);
+    await jobStore
+      .updateArtifacts({ lastTitle: draft.title, lastThumbnailPath: thumbnailPath })
+      .catch(() => {});
 
-    const topLabel =
-      draft.thumbnailTopLabel?.trim() ||
-      buildTopLabelFromKeywords(keywords);
-
-    let thumbnailTopLabel = topLabel;
-    let thumbnailText = draft.thumbnailText;
-
-    if (
-      activeTopic &&
-      !thumbnailMatchesTopic(
-        activeTopic,
-        draft.title,
-        thumbnailTopLabel,
-        thumbnailText,
-      )
-    ) {
-      logger.info("썸네일 문구를 키워드·제목에 맞게 재생성합니다.");
-      const refreshed = await refreshThumbnailTexts(activeTopic, draft.title);
-      thumbnailTopLabel = refreshed.topLabel;
-      thumbnailText = refreshed.mainText;
-    }
-
-    const thumbnailPath = await thumbnailRenderer.render({
-      text: thumbnailText,
-      topLabel: thumbnailTopLabel,
-      keywords,
-      keywordSlug,
-      ...(needsPreparedImages ? { outputFilename: `${keywordSlug}1.png` } : {}),
-    });
-
-    const subThumbnails = await generateSubThumbnails({
-      htmlBody: draft.htmlBody,
-      keywords,
-      keywordSlug,
-      title: draft.title,
-    });
-
-    let naverImages;
-    if (needsPreparedImages) {
-      naverImages = await prepareNaverImageSet({
-        thumbnailPath,
-        htmlBody: draft.htmlBody,
-        title: draft.title,
-        blogTopic: activeTopic,
-        subThumbnails,
-      });
-    }
-
-    // Phase 4: 네이버 + 티스토리 퍼블리싱
-    const publishResults = await publishPipeline.run({
-      title: draft.title,
-      htmlBody: draft.htmlBody,
-      thumbnailPath: naverImages?.thumbnail.absolutePath ?? thumbnailPath,
-      blogTopic: activeTopic,
+    const publishResults = await runPublishPhase(
+      draft,
+      topic,
+      naverImages?.thumbnail.absolutePath ?? thumbnailPath,
       naverImages,
-    });
+    );
 
     if (!config.publishDryRun) {
       const allPublished = publishResults.every((r) => r.postUrl);
@@ -162,7 +95,7 @@ export async function runOrchestration(
         await persistPublishedPosts({
           topicId: draft.topicId,
           title: draft.title,
-          keywords: activeTopic,
+          keywords: topic,
           results: publishResults,
         });
       } else {
@@ -207,6 +140,6 @@ export async function runOrchestration(
   } finally {
     contentPipeline.close();
     repo.close();
-    isRunning = false;
+    releasePipelineLock();
   }
 }

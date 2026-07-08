@@ -82,14 +82,15 @@ export const jobStore = {
   },
 
   async markRunning(trigger: string): Promise<void> {
+    const prev = await this.get();
     await writeState({
       status: "running",
       trigger,
       startedAt: new Date().toISOString(),
       finishedAt: null,
       lastError: null,
-      lastTitle: null,
-      lastThumbnailPath: null,
+      lastTitle: prev.lastTitle,
+      lastThumbnailPath: prev.lastThumbnailPath,
     });
   },
 
@@ -113,5 +114,12 @@ export const jobStore = {
       finishedAt: new Date().toISOString(),
       lastError: error,
     });
+  },
+
+  async updateArtifacts(
+    partial: Partial<Pick<JobRecord, "lastTitle" | "lastThumbnailPath">>,
+  ): Promise<void> {
+    const prev = await this.get();
+    await writeState({ ...prev, ...partial });
   },
 };

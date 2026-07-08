@@ -131,6 +131,35 @@ export class TopicRepository {
     };
   }
 
+  async getLatestArticle(): Promise<(ArticleDraft & { id: number }) | null> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT a.id, a.topic_id, a.title, a.html_body, a.thumbnail_text, a.created_at,
+              t.source_url, t.summary, t.title as topic_title
+       FROM articles a
+       JOIN topics t ON t.id = a.topic_id
+       ORDER BY a.id DESC
+       LIMIT 1`,
+    );
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0] as Record<string, unknown>;
+    return {
+      id: Number(row.id),
+      topicId: Number(row.topic_id),
+      sourceTopic: {
+        sourceUrl: String(row.source_url),
+        title: String(row.topic_title),
+        summary: String(row.summary),
+        sourceFeed: "gems-manual",
+      },
+      title: String(row.title),
+      htmlBody: String(row.html_body),
+      thumbnailText: String(row.thumbnail_text),
+      createdAt: String(row.created_at),
+    };
+  }
+
   async deleteTopicAndArticles(sourceUrl: string): Promise<void> {
     const db = await this.db();
     const topicResult = await db.execute(

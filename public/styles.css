@@ -403,6 +403,17 @@ body {
   font-size: 0.78rem;
 }
 
+.progress-step .step-run-btn {
+  margin-top: 6px;
+  align-self: flex-start;
+  min-width: 56px;
+}
+
+.progress-step .step-run-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .progress-step.waiting .step-state {
   color: var(--text-muted);
 }

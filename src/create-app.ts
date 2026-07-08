@@ -17,7 +17,8 @@ import { ensureSchema } from "./db/migrate.js";
 import { useLibsql } from "./db/client.js";
 import { readLocalizedTextFileSync } from "./fs/read-localized-text-file.js";
 import { logger } from "./monitoring/logger.js";
-import { isPipelineRunning, runOrchestration } from "./pipeline.js";
+import { isPipelineRunning, runOrchestration, runPipelineStep } from "./pipeline.js";
+import type { PipelineStep } from "./pipeline.js";
 import { saveStoredSession } from "./storage/session-store.js";
 
 export interface CreateAppOptions {
@@ -82,6 +83,7 @@ export async function createApp(
           tistoryBlogName: config.tistoryBlogName || null,
           bloggerBlogId: config.bloggerBlogId || null,
           enabledPlatforms: getEnabledPlatforms(),
+          contentMode: config.contentMode,
           deploymentMode: config.deploymentMode,
           rssFeedCount: config.rssFeedUrls.length,
           isVercel: config.isVercel,
@@ -149,6 +151,81 @@ export async function createApp(
 
     return reply.status(202).send({
       message: "파이프라인 실행을 시작했습니다.",
+      job: await jobStore.get(),
+    });
+  });
+
+  app.post("/api/run/step", async (request, reply) => {
+    if (await isPipelineRunning()) {
+      return reply.status(409).send({
+        error: "파이프라인이 이미 실행 중입니다.",
+        job: await jobStore.get(),
+      });
+    }
+
+    const body =
+      (request.body as
+        | {
+            step?: PipelineStep;
+            trigger?: string;
+            blogTopic?: string;
+            blogRegion?: string;
+          }
+        | undefined) ?? {};
+
+    const step = body.step;
+    if (
+      !step ||
+      !["collect", "content", "thumbnail", "publish"].includes(step)
+    ) {
+      return reply.status(400).send({
+        error: "step은 collect | content | thumbnail | publish 중 하나여야 합니다.",
+      });
+    }
+
+    const trigger = body.trigger ?? `web-step:${step}`;
+    const blogTopic = body.blogTopic?.trim() || undefined;
+    const blogRegion = body.blogRegion?.trim() || undefined;
+
+    if (config.isVercel) {
+      try {
+        const result = await runPipelineStep({
+          step,
+          trigger,
+          blogTopic,
+          blogRegion,
+        });
+        return {
+          message: `${step} 단계가 완료되었습니다.`,
+          step: result.step,
+          title: result.title ?? result.topicTitle,
+          thumbnailPath: result.thumbnailPath,
+          job: await jobStore.get(),
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stage =
+          step === "publish"
+            ? "발행"
+            : step === "thumbnail"
+              ? "썸네일"
+              : step === "collect"
+                ? "수집"
+                : "생성";
+        return reply.status(500).send({
+          error: message,
+          stage,
+          job: await jobStore.get(),
+        });
+      }
+    }
+
+    void runPipelineStep({ step, trigger, blogTopic, blogRegion }).catch(
+      () => {},
+    );
+
+    return reply.status(202).send({
+      message: `${step} 단계 실행을 시작했습니다.`,
       job: await jobStore.get(),
     });
   });
