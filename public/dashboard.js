@@ -58,6 +58,14 @@ function inferStageFromText(text = "") {
   }
   if (t.includes("thumbnail") || t.includes("썸네일")) return "썸네일";
   if (
+    t.includes("browsertype.launch") ||
+    t.includes("libnss3") ||
+    t.includes("libnspr4") ||
+    t.includes("/tmp/chromium")
+  ) {
+    return "썸네일";
+  }
+  if (
     t.includes("publish") ||
     t.includes("업로드") ||
     t.includes("네이버") ||

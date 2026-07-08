@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Browser, LaunchOptions } from "playwright-core";
 
 const SERVERLESS_ARGS = [
@@ -29,6 +30,11 @@ async function getLocalChromium() {
   return localChromiumPromise;
 }
 
+function appendLdLibraryPath(...dirs: string[]): void {
+  const existing = process.env.LD_LIBRARY_PATH?.split(":").filter(Boolean) ?? [];
+  process.env.LD_LIBRARY_PATH = [...new Set([...dirs, ...existing])].join(":");
+}
+
 /**
  * 로컬: playwright-extra + stealth / Vercel: playwright-core + @sparticuz/chromium
  */
@@ -36,12 +42,24 @@ export async function launchChromium(
   options: LaunchOptions = {},
 ): Promise<Browser> {
   if (useServerlessChromium()) {
+    // Vercel Fluid Compute는 Lambda env가 없어 @sparticuz/chromium이 AL2023 libs를 못 풀 수 있음
+    if (process.env.VERCEL && !process.env.AWS_LAMBDA_JS_RUNTIME) {
+      process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs22.x";
+    }
+
     const { chromium } = await import("playwright-core");
     const chromiumPkg = (await import("@sparticuz/chromium")).default;
 
+    const executablePath = await chromiumPkg.executablePath();
+    appendLdLibraryPath(
+      path.dirname(executablePath),
+      "/tmp/al2023/lib",
+      "/tmp/al2/lib",
+    );
+
     return chromium.launch({
       args: [...chromiumPkg.args, ...SERVERLESS_ARGS],
-      executablePath: await chromiumPkg.executablePath(),
+      executablePath,
       headless: true,
       ...options,
     });

@@ -7,7 +7,7 @@
     "api/[[...path]].ts": {
       "maxDuration": 300,
       "memory": 2048,
-      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json}"
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**}"
     },
     "api/sessions/[platform].ts": {
       "maxDuration": 30,
@@ -16,7 +16,7 @@
     "api/cron.ts": {
       "maxDuration": 300,
       "memory": 2048,
-      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json}"
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**}"
     },
     "api/dashboard.ts": {
       "maxDuration": 10,
@@ -36,7 +36,8 @@
   "env": {
     "PUBLISH_HEADLESS": "true",
     "USE_SERVERLESS_CHROMIUM": "true",
-    "ENABLE_WEB_SCHEDULER": "false"
+    "ENABLE_WEB_SCHEDULER": "false",
+    "AWS_LAMBDA_JS_RUNTIME": "nodejs22.x"
   },
   "headers": [
     {
