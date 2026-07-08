@@ -1,123 +1,141 @@
 # Auto_blog
 
-RSS 수집 → AI 원고 생성 → 썸네일 생성 → **네이버 · 티스토리 · Google Blogger** 자동 발행 파이프라인입니다.
+RSS 수집 또는 키워드 기반 생성 → AI 원고 작성/검수 → 썸네일 생성 → **네이버 · 티스토리 · Google Blogger** 자동 발행을 수행하는 블로그 자동화 프로젝트입니다.
 
-## Docker 실행 (권장)
+## 핵심 변경점 (현재 구조)
 
-가장 안정적인 운영 방식입니다. 상세 가이드: [docs/DOCKER.md](docs/DOCKER.md)
-
-```bash
-cp .env.docker.example .env   # API 키·블로그 ID 설정
-npm install && npx playwright install chromium
-npm run auth:setup            # 최초 1회 — 브라우저 로그인
-docker compose up -d --build
-```
-
-대시보드: http://localhost:3000
+- 기본 운영 UI를 **웹 대시보드**(`public/index.html`) 기준으로 통합
+- 브랜드 정보(`강운준 행정사`, `1844-1346` 등)를 `config/brand.ts`로 중앙화
+- Gems 프롬프트를 `persona / structure / content-rules / output-schema`로 분리하고 로더에서 조합
+- LLM(OpenAI/Gemini) 및 발행 단계에 **재시도 + 로그 레벨 정리** 적용
+- 발행 성공 URL을 `published_posts`에 저장하고 대시보드에 최근 이력 표시
 
 ---
 
-## 로컬 실행
+## 빠른 시작 (로컬)
 
 ```bash
 npm install
 npx playwright install chromium
-cp .env.example .env   # API 키 등 설정
-npm run auth:setup     # 활성화된 플랫폼 로그인 (최초 1회)
-npm run web            # 웹 대시보드 + 스케줄러
+cp .env.example .env
+npm run auth:setup
+npm run web
 ```
 
-**Windows PowerShell**에서 `npm` 실행이 막히면 아래 중 하나를 사용하세요.
+브라우저에서 [http://localhost:3000](http://localhost:3000) 접속
+
+Windows PowerShell에서 `npm` 실행이 막히면:
 
 ```powershell
 npm.cmd run web
-# 또는 더블클릭
+# 또는
 web.bat
 ```
 
-브라우저에서 http://localhost:3000 접속
-
 ---
 
-## Vercel 배포 (GitHub 연동)
+## Docker 실행 (권장)
 
-### 사전 준비
-
-1. **Turso DB** (무료) — Vercel은 파일 DB를 지원하지 않습니다.
-   ```bash
-   # Turso CLI 설치 후
-   turso db create blog-orchestrator
-   turso db show blog-orchestrator --url
-   turso db tokens create blog-orchestrator
-   ```
-
-2. **Vercel Pro 권장** — 파이프라인 실행에 최대 300초 필요 (Hobby 플랜은 10초 제한)
-
-### Vercel Hobby (무료) 제한
-
-- 함수 메모리: 최대 **2048MB** (`vercel.json`에 반영됨)
-- 함수 실행 시간: 최대 **10초** — 글 생성·발행 전체 파이프라인은 **10초 안에 끝나지 않을 수 있음**
-- 전체 자동 발행이 필요하면 **로컬 `web.bat`** 또는 **Docker** 사용 권장
-
-### GitHub → Vercel 배포 단계
-
-1. GitHub에 저장소 push
-2. [vercel.com](https://vercel.com) → **Add New Project** → GitHub 저장소 연결
-3. 프로젝트 이름: `auto-blog_` 등 **기존과 겹치지 않는 이름** 사용
-4. **Environment Variables** 설정:
-
-| 변수 | 설명 |
-|------|------|
-| `OPENAI_API_KEY` | OpenAI API 키 (필수) |
-| `TURSO_DATABASE_URL` | Turso DB URL (필수) |
-| `TURSO_AUTH_TOKEN` | Turso 인증 토큰 (필수) |
-| `NAVER_BLOG_ID` | 네이버 블로그 ID |
-| `TISTORY_BLOG_NAME` | 티스토리 서브도메인 |
-| `PUBLISH_DRY_RUN` | `false`로 설정 시 실제 발행 |
-| `DISCORD_WEBHOOK_URL` | 알림 (선택) |
-| `CRON_SECRET` | Vercel Cron 보안키 (Vercel이 자동 생성 가능) |
-
-4. **Deploy** 클릭
-5. 배포 완료 후 `https://your-app.vercel.app` 접속
-
-### 세션 업로드
-
-로컬 PC에서 `npm run auth:setup` 실행 후, 대시보드 **세션 업로드**에서 JSON 파일을 올리세요.
-
-- `auth/naver_state.json`
-- `auth/tistory_state.json`
-
-### 자동 스케줄
-
-`vercel.json`에 매일 **09:00 KST** (UTC 00:00) cron이 등록되어 있습니다.  
-Vercel Pro 플랜에서만 300초 실행이 가능합니다.
-
----
-
-## Docker 배포
+상세 가이드: [docs/DOCKER.md](docs/DOCKER.md)
 
 ```bash
+cp .env.docker.example .env
+npm install && npx playwright install chromium
+npm run auth:setup
 docker compose up -d --build
 ```
 
-자세한 내용은 Docker 섹션은 이전과 동일합니다. Turso 없이 로컬 `file:` DB를 사용합니다.
+대시보드: [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 스크립트
+## 환경변수 가이드
 
-| 명령 | 설명 |
-|------|------|
-| `npm run web` | 웹 대시보드 + cron (Docker/로컬) |
-| `npm run start:cli` | 터미널 전용 cron |
-| `npm run run:once` | 파이프라인 1회 실행 |
-| `npm run auth:setup` | 네이버·티스토리 로그인 |
+실제 키는 `.env`에 설정하고, 기본 템플릿은 `.env.example`을 사용하세요.
 
-## API
+### 1) 브랜드 통합 설정
 
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/api/status` | 상태 조회 |
-| POST | `/api/run` | 파이프라인 실행 |
-| GET | `/api/articles` | 원고 목록 |
-| POST | `/api/sessions/:platform` | 세션 JSON 업로드 |
+- `BRAND_NAME` (기본: `강운준 행정사`)
+- `BRAND_OFFICE_NAME` (기본: `행정사사무소 다행`)
+- `CONTACT_PHONE` (기본: `1844-1346`)
+
+위 값은 프롬프트/썸네일/스타일 전반에 공통 적용됩니다.
+
+### 2) LLM/재시도
+
+- `LLM_PROVIDER` = `openai` | `gemini`
+- `OPENAI_API_KEY`, `OPENAI_MODEL`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `LLM_RETRY_ATTEMPTS` (기본 3)
+- `LLM_RETRY_DELAY_MS` (기본 900)
+
+### 3) 퍼블리싱/재시도
+
+- `PUBLISH_DRY_RUN`, `PUBLISH_HEADLESS`, `PUBLISH_SKIP_THUMBNAIL`
+- `PUBLISH_RETRY_ATTEMPTS` (기본 2)
+- `PUBLISH_RETRY_DELAY_MS` (기본 2000)
+- `ENABLE_NAVER_PUBLISH`, `ENABLE_TISTORY_PUBLISH`, `ENABLE_GOOGLE_PUBLISH`
+
+### 4) 블로그 식별자
+
+- `NAVER_BLOG_ID`
+- `TISTORY_BLOG_NAME`
+- `BLOGGER_BLOG_ID`
+
+---
+
+## 프롬프트 구조
+
+`prompts/` 디렉토리:
+
+- `persona.prompt.md`
+- `structure.prompt.md`
+- `content-rules.prompt.md`
+- `output-schema.prompt.md`
+- `gems-system.prompt.md` (레거시 fallback)
+
+런타임 로더 `src/content/llm/gems-prompt-loader.ts`가 분리 프롬프트를 우선 조합하고, 누락 시 레거시 파일로 폴백합니다.
+
+---
+
+## 웹 대시보드 기능
+
+- 파이프라인 상태/로그/통계 조회
+- 키워드 입력 + 히스토리 자동완성
+- 원고 미리보기 + 본문 글자수(최소 기준 대비) 확인
+- 세션 업로드(`auth/*_state.json`)
+- 최근 발행 이력(플랫폼 배지 + URL 바로가기)
+- 단계 진행 상태(수집/생성/썸네일/발행) 및 실패 카드 표시
+
+---
+
+## 주요 스크립트
+
+- `npm run web`: 웹 대시보드 + cron (로컬/Docker)
+- `npm run start:cli`: CLI 스케줄 실행
+- `npm run run:once`: 파이프라인 1회 실행
+- `npm run auth:setup`: 플랫폼 로그인 세션 생성
+- `npm run blog:workflow`: 단계별 워크플로우 실행
+
+---
+
+## 주요 API
+
+- `GET /api/status`: 현재 상태, 설정, 세션 상태
+- `POST /api/run`: 파이프라인 실행
+- `GET /api/articles`: 원고 목록
+- `GET /api/articles/:id`: 원고 상세
+- `GET /api/published-posts`: 최근 발행 이력
+- `GET /api/input-history`: 키워드/지역 입력 히스토리
+- `POST /api/sessions/:platform`: 세션 JSON 업로드
+
+---
+
+## Vercel 배포 (요약)
+
+1. Turso DB 준비 (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`)
+2. Vercel 프로젝트 연결
+3. 환경변수 설정 후 배포
+4. 세션 업로드는 로컬에서 `npm run auth:setup` 후 대시보드로 업로드
+
+> 참고: Vercel Hobby는 함수 시간 제한이 짧아 전체 자동 발행이 불안정할 수 있습니다. 안정 운영은 로컬/Docker를 권장합니다.
