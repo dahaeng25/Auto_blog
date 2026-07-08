@@ -73,6 +73,17 @@ export interface WorkflowRunOptions {
 const DEFAULT_KEYWORDS_FILE = "blog-keywords.txt";
 
 async function resolveKeywords(options: WorkflowRunOptions): Promise<string> {
+  // blog-run.bat cmd 인코딩 깨짐 방지 — 배치 모드는 파일에서 UTF-8로 읽기
+  if (options.batchMode || options.keywordsFile) {
+    try {
+      return await readKeywordsFromFile(
+        options.keywordsFile ?? DEFAULT_KEYWORDS_FILE,
+      );
+    } catch {
+      if (!options.blogTopic?.trim()) throw new Error("키워드 파일을 읽을 수 없습니다.");
+    }
+  }
+
   const direct = options.blogTopic?.trim();
   if (direct) {
     return normalizeTopicInput(direct);
@@ -176,7 +187,9 @@ export async function runContentStep(
   const keywords = await resolveKeywords(options);
   console.log(`\n[키워드] ${keywords}`);
 
-  const regionInput = await resolveBlogRegionInput(options.blogRegion);
+  const regionInput = await resolveBlogRegionInput(
+    options.batchMode ? undefined : options.blogRegion,
+  );
   console.log(`[지역 입력] ${regionInput}`);
 
   const pipeline = new ContentPipeline();
@@ -240,7 +253,9 @@ export async function runImportStep(
   const keywords = await resolveKeywords(options);
   console.log(`\n[키워드] ${keywords} (썸네일·SEO용)`);
 
-  const regionInput = await resolveBlogRegionInput(options.blogRegion);
+  const regionInput = await resolveBlogRegionInput(
+    options.batchMode ? undefined : options.blogRegion,
+  );
   const regionPick = regionInput ? pickBlogRegions(regionInput) : undefined;
   if (regionPick) {
     console.log(

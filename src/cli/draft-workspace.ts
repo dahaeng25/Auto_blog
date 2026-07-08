@@ -3,6 +3,10 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
 import { config } from "../../config/index.js";
+import {
+  looksLikeMojibake,
+  readLocalizedTextFile,
+} from "../fs/read-localized-text-file.js";
 import { normalizeTopicInput } from "./resolve-blog-topic.js";
 import type { ArticleDraft } from "../content/types.js";
 import { normalizeThumbnailLineBreaks } from "../thumbnail/normalize-thumbnail-line-breaks.js";
@@ -60,7 +64,7 @@ export async function readKeywordsFromFile(
 
   let content: string;
   try {
-    content = await fs.readFile(abs, "utf-8");
+    content = await readLocalizedTextFile(abs);
   } catch {
     throw new Error(
       `키워드 파일을 찾을 수 없습니다: ${abs}\n` +
@@ -295,9 +299,9 @@ export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
     );
   }
 
-  const [keywords, title, htmlBody, thumbnailTop, thumbnailMain, metaRaw] =
+  const [keywordsRaw, title, htmlBody, thumbnailTop, thumbnailMain, metaRaw] =
     await Promise.all([
-      fs.readFile(path.join(CURRENT_WORKSPACE, FILES.keywords), "utf-8"),
+      readLocalizedTextFile(path.join(CURRENT_WORKSPACE, FILES.keywords)),
       fs.readFile(path.join(CURRENT_WORKSPACE, FILES.title), "utf-8"),
       fs.readFile(path.join(CURRENT_WORKSPACE, FILES.body), "utf-8"),
       fs.readFile(path.join(CURRENT_WORKSPACE, FILES.thumbnailTop), "utf-8"),
@@ -306,6 +310,26 @@ export async function loadDraftFromWorkspace(): Promise<LoadedWorkspace> {
     ]);
 
   const meta = JSON.parse(metaRaw) as DraftWorkspaceMeta;
+
+  let keywords = keywordsRaw.trim();
+  if (looksLikeMojibake(keywords) || keywords !== meta.keywords?.trim()) {
+    if (meta.keywords && !looksLikeMojibake(meta.keywords)) {
+      keywords = meta.keywords.trim();
+    } else {
+      try {
+        keywords = await readKeywordsFromFile("blog-keywords.txt");
+      } catch {
+        // keep workspace value
+      }
+    }
+    if (keywords && !looksLikeMojibake(keywords)) {
+      await fs.writeFile(
+        path.join(CURRENT_WORKSPACE, FILES.keywords),
+        `${keywords}\n`,
+        "utf-8",
+      );
+    }
+  }
 
   let thumbnailPath = meta.thumbnailPath;
   try {

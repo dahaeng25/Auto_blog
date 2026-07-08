@@ -153,7 +153,7 @@ export function thumbnailMatchesTopic(
   const inputPhrases = extractInputKeywordPhrases(keywords);
 
   if (inputPhrases.length > 0) {
-    if (!inputPhrases.every((phrase) => phraseMatchesHaystack(haystack, phrase))) {
+    if (!inputPhrases.some((phrase) => phraseMatchesHaystack(haystack, phrase))) {
       return false;
     }
     return mainTextMatchesKeywords(keywords, main);
@@ -164,7 +164,7 @@ export function thumbnailMatchesTopic(
   );
 
   if (keywordList.length === 0) return mainTextMatchesKeywords(keywords, main);
-  if (!keywordList.every((kw) => phraseMatchesHaystack(haystack, kw))) {
+  if (!keywordList.some((kw) => phraseMatchesHaystack(haystack, kw))) {
     return false;
   }
   return mainTextMatchesKeywords(keywords, main);

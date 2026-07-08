@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import fsPromises from "node:fs/promises";
+import { readLocalizedTextFile } from "../../fs/read-localized-text-file.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../../../config/index.js";
@@ -172,7 +173,7 @@ export async function resolveBlogRegionInput(
 
   const filePath = path.join(config.projectRoot, "blog-region.txt");
   try {
-    const content = await fsPromises.readFile(filePath, "utf-8");
+    const content = await readLocalizedTextFile(filePath);
     const line = content
       .split(/\r?\n/)
       .map((l) => l.trim())
