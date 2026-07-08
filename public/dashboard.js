@@ -8,7 +8,6 @@ const STEP_LABELS = ["수집", "생성", "썸네일", "발행"];
 let pollTimer = null;
 let lastLogs = [];
 let lastStatus = null;
-let previewObjectUrl = null;
 
 async function api(path, options = {}) {
   const res = await fetch(path, options);
@@ -236,17 +235,20 @@ async function loadStatus(options = {}) {
 }
 
 async function loadArticles() {
-  const articles = await api("/api/articles?limit=10");
   const container = document.getElementById("articles-list");
+  if (!container) return;
 
-  if (!articles.length) {
-    container.innerHTML = '<p class="empty">원고가 없습니다.</p>';
-    return;
-  }
+  try {
+    const articles = await api("/api/articles?limit=10");
 
-  container.innerHTML = articles
-    .map(
-      (a) => `
+    if (!articles.length) {
+      container.innerHTML = '<p class="empty">원고가 없습니다.</p>';
+      return;
+    }
+
+    container.innerHTML = articles
+      .map(
+        (a) => `
     <div class="article-item">
       <div class="article-info">
         <div class="article-title">${escapeHtml(a.title)}</div>
@@ -254,16 +256,20 @@ async function loadArticles() {
       </div>
       <button type="button" class="btn btn-ghost btn-sm article-preview-btn" data-id="${a.id}">미리보기</button>
     </div>`,
-    )
-    .join("");
+      )
+      .join("");
 
-  container.querySelectorAll(".article-preview-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openArticle(Number(btn.dataset.id));
+    container.querySelectorAll(".article-preview-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openArticle(Number(btn.dataset.id));
+      });
     });
-  });
+  } catch (err) {
+    const error = normalizeError(err);
+    container.innerHTML = `<p class="empty preview-error">${escapeHtml(error.message)}</p>`;
+  }
 }
 
 async function loadPublishedPosts() {
@@ -398,35 +404,7 @@ function toPlainTextLength(html) {
   return (div.textContent ?? "").replace(/\s+/g, "").length;
 }
 
-function stripScripts(html) {
-  return String(html).replace(
-    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-    "",
-  );
-}
-
-function buildPreviewDocument(htmlBody) {
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-    body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;line-height:1.75;padding:20px 24px;margin:0;color:#1a1a1a;background:#fff}
-    h2,h3{margin:1.2em 0 0.6em;font-size:1.1em}
-    p,li{margin:0.5em 0}
-    table{border-collapse:collapse;width:100%;margin:12px 0}
-    th,td{border:1px solid #ccc;padding:8px;text-align:left}
-    img{max-width:100%;height:auto}
-    blockquote{margin:12px 0;padding:8px 12px;border-left:3px solid #ccc;color:#444}
-  </style></head><body>${htmlBody}</body></html>`;
-}
-
-function revokePreviewUrl() {
-  if (previewObjectUrl) {
-    URL.revokeObjectURL(previewObjectUrl);
-    previewObjectUrl = null;
-  }
-}
-
 function mountPreviewIframe(container, articleId) {
-  revokePreviewUrl();
-
   const iframe = document.createElement("iframe");
   iframe.className = "article-preview-frame";
   iframe.title = "원고 본문 미리보기";
@@ -473,7 +451,6 @@ async function openArticle(id) {
 }
 
 function closeModal() {
-  revokePreviewUrl();
   document.getElementById("article-modal")?.classList.add("hidden");
   document.body.classList.remove("modal-open");
   const body = document.getElementById("modal-body");
