@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { config } from "../../../config/index.js";
 import type { Platform } from "../../../config/platforms.js";
+import { logger } from "../../monitoring/logger.js";
 import { findFirstVisible, splitSelectors, type PageOrFrame } from "./dom-utils.js";
 import { humanClick, humanPause } from "./human-input.js";
 import { dismissNaverRightPanelIfVisible } from "./naver-sidebar-handler.js";
@@ -32,7 +33,7 @@ async function clickConfirmInPanel(
     const confirmBtn = await findFirstVisible(searchContexts, selectors);
 
     if (confirmBtn) {
-      console.log(`[${platformName}] 발행 패널 → 최종 '발행' 확인 클릭`);
+      logger.info(`[${platformName}] 발행 패널 → 최종 '발행' 확인 클릭`);
       await humanClick(confirmBtn.locator);
       await humanPause(2000);
       return true;
@@ -60,7 +61,7 @@ export async function clickPublishButton(
   } = options;
 
   if (config.publishDryRun) {
-    console.log(`[${platformName}] DRY-RUN: 발행 버튼 클릭 생략 (에디터 입력만 완료)`);
+    logger.info(`[${platformName}] DRY-RUN: 발행 버튼 클릭 생략 (에디터 입력만 완료)`);
     return undefined;
   }
 
@@ -83,7 +84,7 @@ export async function clickPublishButton(
     );
   }
 
-  console.log(`[${platformName}] ① 발행 패널 열기 클릭`);
+  logger.info(`[${platformName}] ① 발행 패널 열기 클릭`);
   await humanClick(publishBtn.locator);
   await humanPause(2500);
 

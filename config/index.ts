@@ -135,6 +135,8 @@ export const config = {
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+  llmRetryAttempts: Number(process.env.LLM_RETRY_ATTEMPTS ?? "3"),
+  llmRetryDelayMs: Number(process.env.LLM_RETRY_DELAY_MS ?? "900"),
   gemsPromptPath: process.env.GEMINI_GEMS_PROMPT_PATH
     ? path.resolve(projectRoot, process.env.GEMINI_GEMS_PROMPT_PATH)
     : path.join(projectRoot, "prompts", "gems-system.prompt.md"),
@@ -160,6 +162,9 @@ export const config = {
   publishDryRun: process.env.PUBLISH_DRY_RUN === "true",
   /** 퍼블리싱 시 headless 모드 (디버깅 시 false 권장) */
   publishHeadless: process.env.PUBLISH_HEADLESS !== "false",
+  /** 플랫폼별 발행 재시도 횟수 (총 시도 횟수) */
+  publishRetryAttempts: Number(process.env.PUBLISH_RETRY_ATTEMPTS ?? "2"),
+  publishRetryDelayMs: Number(process.env.PUBLISH_RETRY_DELAY_MS ?? "2000"),
   /** true이면 썸네일 업로드 단계를 건너뜀 (에디터 입력만 테스트) */
   publishSkipThumbnail: process.env.PUBLISH_SKIP_THUMBNAIL === "true",
   /**

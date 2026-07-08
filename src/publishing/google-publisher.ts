@@ -10,6 +10,7 @@ import type { PublishInput, PublishResult } from "./types.js";
 import { editorSettleDelay } from "./utils/dom-utils.js";
 import { humanPause, humanType } from "./utils/human-input.js";
 import { pasteHtmlToEditor } from "./utils/editor-paste.js";
+import { logger } from "../monitoring/logger.js";
 
 /**
  * Google Blogger 퍼블리셔 (브라우저 RPA)
@@ -56,7 +57,7 @@ export class GooglePublisher extends BasePublisher {
     input: PublishInput,
   ): Promise<string | undefined> {
     const writeUrl = PLATFORMS.google.postWriteUrl(config.bloggerBlogId);
-    console.log(`[Google] 글쓰기 페이지 이동: ${writeUrl}`);
+    logger.info(`[Google] 글쓰기 페이지 이동: ${writeUrl}`);
 
     await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 90_000 });
     await humanPause(3000);
@@ -100,7 +101,7 @@ export class GooglePublisher extends BasePublisher {
     await humanPause(editorSettleDelay(input.htmlBody.length));
 
     if (config.publishDryRun) {
-      console.log("[Google] DRY-RUN — 발행 버튼 클릭 생략");
+      logger.info("[Google] DRY-RUN — 발행 버튼 클릭 생략");
       return undefined;
     }
 

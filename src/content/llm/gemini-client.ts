@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../../../config/index.js";
+import { logger } from "../../monitoring/logger.js";
+import { retry } from "../../utils/retry.js";
 import type { ChatOptions } from "./types.js";
 
 let client: GoogleGenerativeAI | null = null;
@@ -33,7 +35,29 @@ export async function geminiChat({
     generationConfig: { temperature },
   });
 
-  const result = await model.generateContent(user);
+  const result = await retry(() => model.generateContent(user), {
+    attempts: Math.max(1, config.llmRetryAttempts),
+    initialDelayMs: Math.max(200, config.llmRetryDelayMs),
+    shouldRetry: (error) => {
+      const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+      return (
+        message.includes("timeout") ||
+        message.includes("timed out") ||
+        message.includes("429") ||
+        message.includes("quota") ||
+        message.includes("rate") ||
+        message.includes("503") ||
+        message.includes("502") ||
+        message.includes("500")
+      );
+    },
+    onRetry: (error, attempt, nextDelayMs) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        `[LLM/Gemini] 요청 실패(시도 ${attempt}) → ${nextDelayMs}ms 후 재시도: ${message}`,
+      );
+    },
+  });
   const content = result.response.text()?.trim();
 
   if (!content) {

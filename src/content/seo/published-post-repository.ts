@@ -127,6 +127,19 @@ export class PublishedPostRepository {
     return results.slice(0, limit);
   }
 
+  /** 최근 발행 이력 조회 (대시보드용) */
+  async listRecent(limit = 20): Promise<PublishedPostRecord[]> {
+    const db = await this.db();
+    const result = await db.execute(
+      `SELECT id, topic_id, platform, title, keywords, post_url, published_at
+       FROM published_posts
+       ORDER BY published_at DESC
+       LIMIT ?`,
+      [limit],
+    );
+    return result.rows.map((row) => mapRow(row as Record<string, unknown>));
+  }
+
   close(): void {
     /* 싱글톤 DbExecutor — 연결 유지 */
   }

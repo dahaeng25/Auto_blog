@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import type { Frame, Page } from "playwright";
 import { config } from "../../config/index.js";
+import { logger } from "../monitoring/logger.js";
 import type { PublishInput, PublishResult } from "./types.js";
 import { humanClick, humanPause } from "./utils/human-input.js";
 import {
@@ -43,7 +44,7 @@ export abstract class BasePublisher {
     fileInputSelector: string,
   ): Promise<void> {
     if (config.publishSkipThumbnail) {
-      console.log(`[${this.platformName}] PUBLISH_SKIP_THUMBNAIL=true — 썸네일 업로드 생략`);
+      logger.info(`[${this.platformName}] PUBLISH_SKIP_THUMBNAIL=true — 썸네일 업로드 생략`);
       return;
     }
 
@@ -59,7 +60,7 @@ export abstract class BasePublisher {
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.warn(`[${this.platformName}] 썸네일 업로드 실패 — 건너뜀: ${msg}`);
+      logger.warn(`[${this.platformName}] 썸네일 업로드 실패 — 건너뜀: ${msg}`);
     }
   }
 
@@ -106,7 +107,7 @@ export abstract class BasePublisher {
 
   protected failResult(error: unknown): PublishResult {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[${this.platformName}] 실패: ${message}`);
+    logger.error(`[${this.platformName}] 실패: ${message}`);
     return {
       platform: this.getPlatform(),
       success: false,

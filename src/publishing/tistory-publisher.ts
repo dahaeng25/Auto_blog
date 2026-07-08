@@ -20,6 +20,7 @@ import {
   findContentEditable,
 } from "./utils/editor-paste.js";
 import { sanitizeBlogTitle } from "../content/sanitize-title.js";
+import { logger } from "../monitoring/logger.js";
 
 /**
  * 티스토리 에디터 퍼블리셔 (오픈 API 종료 → 브라우저 RPA)
@@ -69,7 +70,7 @@ export class TistoryPublisher extends BasePublisher {
       "tistory",
       normalizeTistoryBlogName(config.tistoryBlogName),
     );
-    console.log(`[티스토리] 글쓰기 페이지 이동: ${writeUrl}`);
+    logger.info(`[티스토리] 글쓰기 페이지 이동: ${writeUrl}`);
 
     await assertEditorAccessible(page, "tistory");
 

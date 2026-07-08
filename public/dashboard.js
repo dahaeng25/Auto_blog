@@ -4,6 +4,25 @@ const PLATFORM_LABELS = {
   google: "Google",
 };
 
+const STEP_LABELS = ["수집", "생성", "썸네일", "발행"];
+let pollTimer = null;
+let lastLogs = [];
+let lastStatus = null;
+
+async function api(path, options = {}) {
+  const res = await fetch(path, options);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const error = body.error ?? body.message ?? `요청 실패 (${res.status})`;
+    const stage = body.stage ?? inferStageFromText(error);
+    const hint =
+      body.hint ??
+      "실행 로그를 확인한 뒤, 해당 단계 버튼부터 다시 실행해 주세요.";
+    throw { message: error, stage, hint };
+  }
+  return res.json();
+}
+
 function formatSessionStatus(sessions, enabledPlatforms) {
   const platforms =
     enabledPlatforms?.length > 0
@@ -16,17 +35,6 @@ function formatSessionStatus(sessions, enabledPlatforms) {
     })
     .join(" · ");
 }
-let pollTimer = null;
-
-async function api(path, options = {}) {
-  const res = await fetch(path, options);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = body.error ?? body.message ?? `요청 실패 (${res.status})`;
-    throw new Error(detail);
-  }
-  return res.json();
-}
 
 function statusBadgeClass(status) {
   return `badge ${status ?? "idle"}`;
@@ -37,9 +45,117 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString("ko-KR");
 }
 
+function inferStageFromText(text = "") {
+  const t = String(text).toLowerCase();
+  if (t.includes("rss") || t.includes("수집")) return "수집";
+  if (
+    t.includes("gems") ||
+    t.includes("생성") ||
+    t.includes("title") ||
+    t.includes("content")
+  ) {
+    return "생성";
+  }
+  if (t.includes("thumbnail") || t.includes("썸네일")) return "썸네일";
+  if (
+    t.includes("publish") ||
+    t.includes("업로드") ||
+    t.includes("네이버") ||
+    t.includes("티스토리") ||
+    t.includes("blogger")
+  ) {
+    return "발행";
+  }
+  return "생성";
+}
+
+function inferCurrentStage(job, logs) {
+  if (job?.status === "success") return "done";
+  if (job?.status === "error") return inferStageFromText(job.lastError);
+  if (job?.status !== "running") return "idle";
+  const text = [...logs].reverse().join("\n");
+  return inferStageFromText(text);
+}
+
+function renderProgress(job, logs) {
+  const container = document.getElementById("pipeline-progress");
+  const stage = inferCurrentStage(job, logs);
+  const stageIndex = STEP_LABELS.indexOf(stage);
+
+  container.innerHTML = STEP_LABELS.map((label, i) => {
+    let stateClass = "waiting";
+    let stateText = "대기";
+
+    if (job?.status === "success" || i < stageIndex) {
+      stateClass = "done";
+      stateText = "완료";
+    } else if (job?.status === "error" && i === stageIndex) {
+      stateClass = "error";
+      stateText = "실패";
+    } else if (job?.status === "running" && i === stageIndex) {
+      stateClass = "running";
+      stateText = "진행중";
+    }
+
+    return `
+      <div class="progress-step ${stateClass}">
+        <span class="step-index">Step ${i + 1}</span>
+        <span class="step-label">${label}</span>
+        <span class="step-state">${stateText}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function showErrorCard(errorText, stage, hint) {
+  const card = document.getElementById("error-card");
+  const body = document.getElementById("error-card-body");
+  body.innerHTML = `
+    <p class="error-summary">[${stage}] 단계에서 실패했습니다.</p>
+    <p>${escapeHtml(errorText)}</p>
+    <p class="error-hint">${escapeHtml(hint)}</p>
+  `;
+  card.classList.remove("hidden");
+}
+
+function clearErrorCard() {
+  document.getElementById("error-card").classList.add("hidden");
+}
+
+function rememberInput(keyword, region) {
+  const raw = localStorage.getItem("blog-history-v1");
+  const prev = raw ? JSON.parse(raw) : { keywords: [], regions: [] };
+  if (keyword) {
+    prev.keywords = [keyword, ...prev.keywords.filter((k) => k !== keyword)].slice(
+      0,
+      10,
+    );
+  }
+  if (region) {
+    prev.regions = [region, ...prev.regions.filter((r) => r !== region)].slice(0, 10);
+  }
+  localStorage.setItem("blog-history-v1", JSON.stringify(prev));
+  return prev;
+}
+
+function renderDatalist(id, items) {
+  const el = document.getElementById(id);
+  el.innerHTML = items.map((v) => `<option value="${escapeHtml(v)}"></option>`).join("");
+}
+
+async function loadInputHistory() {
+  const server = await api("/api/input-history");
+  const local = JSON.parse(localStorage.getItem("blog-history-v1") ?? "{\"keywords\":[],\"regions\":[]}");
+  const keywords = [...new Set([...(server.keywords ?? []), ...(local.keywords ?? [])])];
+  const regions = [...new Set([...(server.regions ?? []), ...(local.regions ?? [])])];
+  renderDatalist("keyword-history", keywords);
+  renderDatalist("region-history", regions);
+}
+
 async function loadStatus() {
   const data = await api("/api/status");
   const job = data.job;
+  lastStatus = data;
 
   const statusEl = document.getElementById("job-status");
   statusEl.textContent =
@@ -60,10 +176,8 @@ async function loadStatus() {
   document.getElementById("job-detail").textContent =
     detail.join(" · ") || "아직 실행 이력이 없습니다.";
 
-  document.getElementById("cron-schedule").textContent =
-    data.config.cronSchedule;
-  document.getElementById("cron-timezone").textContent =
-    data.config.cronTimezone;
+  document.getElementById("cron-schedule").textContent = data.config.cronSchedule;
+  document.getElementById("cron-timezone").textContent = data.config.cronTimezone;
   document.getElementById("dry-run").textContent = data.config.publishDryRun
     ? "테스트 (발행 안 함)"
     : "실제 발행";
@@ -81,9 +195,17 @@ async function loadStatus() {
     data.config.enabledPlatforms,
   );
   document.getElementById("session-status").textContent = sessions;
+  document.getElementById("run-btn").disabled = data.isRunning;
 
-  const runBtn = document.getElementById("run-btn");
-  runBtn.disabled = data.isRunning;
+  renderProgress(job, lastLogs);
+
+  if (job.status === "error") {
+    showErrorCard(
+      job.lastError ?? "실행 중 오류가 발생했습니다.",
+      inferCurrentStage(job, lastLogs),
+      "실행 로그와 해당 단계를 확인해 주세요.",
+    );
+  }
 
   return data;
 }
@@ -111,10 +233,31 @@ async function loadArticles() {
     .join("");
 
   container.querySelectorAll("button[data-id]").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      openArticle(Number(btn.dataset.id)),
-    );
+    btn.addEventListener("click", () => openArticle(Number(btn.dataset.id)));
   });
+}
+
+async function loadPublishedPosts() {
+  const posts = await api("/api/published-posts?limit=15");
+  const container = document.getElementById("published-list");
+  if (!posts.length) {
+    container.innerHTML = '<p class="empty">발행 이력이 없습니다.</p>';
+    return;
+  }
+
+  container.innerHTML = posts
+    .map(
+      (p) => `
+      <div class="published-item">
+        <span class="platform-badge ${p.platform}">${PLATFORM_LABELS[p.platform] ?? p.platform}</span>
+        <div>
+          <div class="published-title">${escapeHtml(p.title)}</div>
+          <div class="published-date">${formatDate(p.publishedAt)}</div>
+        </div>
+        <a class="published-link" href="${escapeHtml(p.postUrl)}" target="_blank" rel="noopener noreferrer">바로가기</a>
+      </div>`,
+    )
+    .join("");
 }
 
 async function loadStats() {
@@ -127,28 +270,41 @@ async function loadStats() {
 
 async function loadLogs() {
   const data = await api("/api/logs?lines=150");
+  lastLogs = data.lines ?? [];
   document.getElementById("logs").textContent =
-    data.lines.join("\n") || "로그가 없습니다.";
+    lastLogs.join("\n") || "로그가 없습니다.";
 }
 
 async function refreshAll() {
-  await Promise.all([loadStatus(), loadArticles(), loadStats(), loadLogs()]);
+  await Promise.all([
+    loadLogs(),
+    loadStatus(),
+    loadArticles(),
+    loadStats(),
+    loadPublishedPosts(),
+    loadInputHistory(),
+  ]);
 }
 
 async function runPipeline() {
   const msgEl = document.getElementById("run-message");
   msgEl.textContent = "실행 중...";
   msgEl.className = "run-message";
+  clearErrorCard();
 
   try {
     const status = await loadStatus();
     const topicInput = document.getElementById("blog-topic");
+    const regionInput = document.getElementById("blog-region");
     const blogTopic = topicInput?.value?.trim() || undefined;
+    const region = regionInput?.value?.trim() || "";
 
     if (!blogTopic && !status.config.blogTopic) {
-      throw new Error(
-        "블로그 주제를 입력하거나 Vercel에 BLOG_TOPIC 환경 변수를 설정하세요.",
-      );
+      throw {
+        message: "블로그 주제를 입력하거나 Vercel에 BLOG_TOPIC 환경 변수를 설정하세요.",
+        stage: "생성",
+        hint: "키워드를 입력한 뒤 다시 실행하세요.",
+      };
     }
 
     if (!status.config.publishDryRun) {
@@ -156,9 +312,11 @@ async function runPipeline() {
       const missing = enabled.filter((p) => !status.sessions[p]);
       if (missing.length > 0) {
         const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
-        throw new Error(
-          `${labels} 세션이 없습니다. 하단 「세션 업로드」에서 auth/*_state.json 파일을 업로드하거나 호스트에서 npm run auth:setup 을 실행하세요.`,
-        );
+        throw {
+          message: `${labels} 세션이 없습니다.`,
+          stage: "발행",
+          hint: "하단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
+        };
       }
     }
 
@@ -173,16 +331,49 @@ async function runPipeline() {
       msgEl.textContent = result.message;
     }
     msgEl.className = "run-message success";
+    rememberInput(blogTopic ?? "", region);
     await refreshAll();
   } catch (err) {
-    msgEl.textContent = err.message;
+    const error = normalizeError(err);
+    msgEl.textContent = error.message;
     msgEl.className = "run-message error";
+    showErrorCard(error.message, error.stage, error.hint);
   }
+}
+
+function normalizeError(err) {
+  if (err && typeof err === "object" && "message" in err) {
+    return {
+      message: String(err.message ?? "오류가 발생했습니다."),
+      stage: String(err.stage ?? inferStageFromText(String(err.message))),
+      hint: String(
+        err.hint ?? "실행 로그를 확인한 뒤 해당 단계부터 다시 시도하세요.",
+      ),
+    };
+  }
+  const fallback = String(err ?? "오류가 발생했습니다.");
+  return {
+    message: fallback,
+    stage: inferStageFromText(fallback),
+    hint: "실행 로그를 확인해 주세요.",
+  };
+}
+
+function toPlainTextLength(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return (div.textContent ?? "").replace(/\s+/g, "").length;
 }
 
 async function openArticle(id) {
   const article = await api(`/api/articles/${id}`);
+  const minChars = lastStatus?.config?.minPlainTextChars ?? 3500;
+  const plainLen = toPlainTextLength(article.htmlBody);
+  const gap = plainLen - minChars;
+
   document.getElementById("modal-title").textContent = article.title;
+  document.getElementById("modal-meta").textContent =
+    `글자 수: ${plainLen.toLocaleString()}자 / 최소 기준: ${minChars.toLocaleString()}자 (${gap >= 0 ? `+${gap}` : gap})`;
 
   const body = document.getElementById("modal-body");
   body.innerHTML = `
@@ -211,15 +402,17 @@ async function uploadSession(platform, file) {
       body: JSON.stringify(json),
     });
     msgEl.textContent = `${platform} 세션 업로드 완료`;
+    msgEl.style.color = "var(--success)";
     await loadStatus();
   } catch (err) {
-    msgEl.textContent = err.message;
+    const error = normalizeError(err);
+    msgEl.textContent = error.message;
     msgEl.style.color = "var(--error)";
   }
 }
 
 function escapeHtml(str) {
-  return str
+  return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -230,12 +423,13 @@ function startPolling() {
   stopPolling();
   pollTimer = setInterval(async () => {
     try {
+      await loadLogs();
       const data = await loadStatus();
-      if (data.isRunning) {
-        await loadLogs();
+      if (!data.isRunning) {
+        await loadPublishedPosts();
       }
     } catch {
-      /* ignore poll errors */
+      // ignore poll errors
     }
   }, 5000);
 }
@@ -284,12 +478,11 @@ async function init() {
   try {
     await refreshAll();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const error = normalizeError(err);
     const msgEl = document.getElementById("run-message");
-    if (msgEl) {
-      msgEl.textContent = msg;
-      msgEl.className = "run-message error";
-    }
+    msgEl.textContent = error.message;
+    msgEl.className = "run-message error";
+    showErrorCard(error.message, error.stage, error.hint);
   }
 }
 

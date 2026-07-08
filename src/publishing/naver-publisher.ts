@@ -25,6 +25,7 @@ import {
   waitForNaverEditorReady,
 } from "./utils/naver-draft-handler.js";
 import { dismissNaverRightPanel } from "./utils/naver-sidebar-handler.js";
+import { logger } from "../monitoring/logger.js";
 
 /**
  * 네이버 블로그 스마트에디터 ONE 퍼블리셔.
@@ -73,7 +74,7 @@ export class NaverPublisher extends BasePublisher {
       "naver",
       normalizeNaverBlogId(config.naverBlogId),
     );
-    console.log(`[네이버] 글쓰기 페이지 이동: ${writeUrl}`);
+    logger.info(`[네이버] 글쓰기 페이지 이동: ${writeUrl}`);
 
     await assertEditorAccessible(page, "naver");
     await waitForNaverEditorReady(page);

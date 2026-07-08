@@ -10,8 +10,11 @@ import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { TopicStatus } from "./content/types.js";
+import { PublishedPostRepository } from "./content/seo/published-post-repository.js";
+import { loadBlogStyle } from "./content/blog-style/load-style.js";
 import { ensureSchema } from "./db/migrate.js";
 import { useLibsql } from "./db/client.js";
+import { readLocalizedTextFileSync } from "./fs/read-localized-text-file.js";
 import { logger } from "./monitoring/logger.js";
 import { isPipelineRunning, runOrchestration } from "./pipeline.js";
 import { saveStoredSession } from "./storage/session-store.js";
@@ -27,6 +30,17 @@ async function getAllSessionStatus(): Promise<Record<Platform, boolean>> {
     platforms.map(async (platform) => [platform, await hasSession(platform)] as const),
   );
   return Object.fromEntries(entries) as Record<Platform, boolean>;
+}
+
+function readFirstNonCommentLine(filePath: string): string {
+  if (!fs.existsSync(filePath)) return "";
+  const raw = readLocalizedTextFileSync(filePath);
+  return (
+    raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith("#")) ?? ""
+  );
 }
 
 export async function createApp(
@@ -70,6 +84,7 @@ export async function createApp(
           deploymentMode: config.deploymentMode,
           rssFeedCount: config.rssFeedUrls.length,
           isVercel: config.isVercel,
+          minPlainTextChars: loadBlogStyle().structure.minPlainTextChars ?? 3500,
         },
         sessions: await getAllSessionStatus(),
       };
@@ -175,6 +190,31 @@ export async function createApp(
     return {
       lines: readRecentLogs(Number.isFinite(lines) ? lines : 200),
     };
+  });
+
+  app.get("/api/input-history", async () => {
+    const keywords = readFirstNonCommentLine(
+      path.join(config.projectRoot, "blog-keywords.txt"),
+    );
+    const region = readFirstNonCommentLine(
+      path.join(config.projectRoot, "blog-region.txt"),
+    );
+
+    return {
+      keywords: keywords ? [keywords] : [],
+      regions: region ? [region] : [],
+    };
+  });
+
+  app.get("/api/published-posts", async (request) => {
+    const query = request.query as { limit?: string };
+    const limit = query.limit ? Number(query.limit) : 20;
+    const repo = new PublishedPostRepository();
+    try {
+      return await repo.listRecent(Number.isFinite(limit) ? limit : 20);
+    } finally {
+      repo.close();
+    }
   });
 
   app.get("/api/sessions", async () => getAllSessionStatus());
