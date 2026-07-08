@@ -119,8 +119,17 @@ ${buildTopicPlanningInstruction(topic)}
   return `블로그 주제: ${topic}${regionLine}
 
 위 주제로 ${brand.brandName} 1인칭 르포 형식 A형 글을 JSON 1건으로 작성하세요.
-최소 ${MIN_CHARS}자, 수임 사례 스토리텔링·반려 포인트·법령 인용·체크리스트·Q&A·면책·해시태그 포함.
-사례 인물은 '의뢰인'으로만 지칭 (실명·가명 금지).${buildInternalLinkInstruction(relatedPosts ?? [])}`;
+최소 ${MIN_CHARS}자(목표 ${MIN_CHARS + 400}자), 반드시 충족. 짧은 요약문·개요만 작성 금지.
+
+필수 구성:
+- 수임 사례 스토리텔링(의뢰인 상황·준비과정·반려/보완·해결)을 전편에 걸쳐 전개
+- 6개 h2 섹션 + 각 섹션 본문 충분히 작성
+- 법령·심사 포인트·서류 체크리스트(8항목+)·Q&A(5문항+, 답변 상세)
+- 면책·해시태그·사무소 정보 포함
+사례 인물은 '의뢰인'으로만 지칭 (실명·가명 금지).
+JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText).
+thumbnailTopLabel: 핵심 키워드 1개 5~10자
+thumbnailText: 선정한 제목을 2~3줄로 압축 (\\n 줄바꿈)${buildInternalLinkInstruction(relatedPosts ?? [])}`;
 }
 
 /** LLM 응답에서 JSON 추출 */
@@ -295,22 +304,37 @@ export class GemsAgent {
     let plainText = extractPlainText(result.htmlBody);
     let plainLen = plainText.length;
 
-    if (plainLen < MIN_CHARS) {
+    // 짧은 초안은 처음부터 다시 쓰기보다 기존 HTML을 보강하는 편이 길이 충족률이 높음
+    const maxLengthRetries = 2;
+    for (let attempt = 1; attempt <= maxLengthRetries && plainLen < MIN_CHARS; attempt++) {
+      const shortage = MIN_CHARS - plainLen;
       console.warn(
-        `[Gems] 본문 길이 미달(${plainLen}/${MIN_CHARS}) — 1회 자동 재생성`,
+        `[Gems] 본문 길이 미달(${plainLen}/${MIN_CHARS}) — 보강 재작성 ${attempt}/${maxLengthRetries}`,
       );
-      const regeneratePrompt =
-        `${baseUserPrompt}\n\n[재생성 지시]\n` +
-        `이전 초안은 순수 텍스트 ${plainLen}자로 최소 기준 ${MIN_CHARS}자에 미달했습니다.\n` +
-        "이번에는 사건 디테일·체크리스트·Q&A 답변을 보강해 길이 기준을 반드시 충족하세요.";
-      result = await this.generateDraft(system, regeneratePrompt, temperature);
+      const expandPrompt =
+        `${baseUserPrompt}\n\n[길이 보강 지시 — 필수]\n` +
+        `현재 초안 순수 텍스트는 ${plainLen}자로 최소 ${MIN_CHARS}자에 ${shortage}자 부족합니다.\n` +
+        "아래 초안 HTML의 제목·주제·구조를 유지한 채 htmlBody를 확장하세요.\n" +
+        "추가 요구:\n" +
+        "- 각 h2마다 사례 디테일·실무 체크포인트·서류/반려 사유를 2~3문단 보강\n" +
+        "- Q&A를 최소 5문항으로 늘리고 각 답변 4~6문장\n" +
+        "- 체크리스트 항목 8개 이상\n" +
+        `- 최종 순수 텍스트는 반드시 ${MIN_CHARS}자 이상 (목표 ${MIN_CHARS + 400}자 권장)\n` +
+        "- JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText)\n\n" +
+        `이전 초안 HTML:\n${result.htmlBody}`;
+      result = await this.generateDraft(
+        system,
+        expandPrompt,
+        Math.max(0.35, temperature - 0.15),
+      );
       plainText = extractPlainText(result.htmlBody);
       plainLen = plainText.length;
-      if (plainLen < MIN_CHARS) {
-        throw new Error(
-          `[Gems] 본문 최소 길이 실패: 재생성 후에도 ${plainLen}/${MIN_CHARS}자입니다.`,
-        );
-      }
+    }
+
+    if (plainLen < MIN_CHARS) {
+      throw new Error(
+        `[Gems] 본문 최소 길이 실패: 보강 ${maxLengthRetries}회 후에도 ${plainLen}/${MIN_CHARS}자입니다.`,
+      );
     }
 
     const aliasViolation = detectAliasViolation(plainText);

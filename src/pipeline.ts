@@ -73,8 +73,10 @@ export async function runOrchestration(
     await ensureWritableDirs();
     await jobStore.markRunning(trigger);
 
+    const activeRegion = options.blogRegion?.trim() || config.blogRegion || "";
     logger.info(
       `설정: MODE=${config.contentMode}, TOPIC=${activeTopic || "(rss)"}, ` +
+        `REGION=${activeRegion || "(default/file)"}, ` +
         `LLM=${config.llmProvider}, DRY_RUN=${config.publishDryRun}, ` +
         `SKIP_THUMBNAIL=${config.publishSkipThumbnail}`,
     );
