@@ -15,6 +15,7 @@
     "thumbnail:test": "tsx scripts/test-thumbnail.ts",
     "publish:test": "tsx scripts/test-publish.ts",
     "run:once": "tsx scripts/run-once.ts",
+    "blog:workflow": "tsx scripts/blog-workflow.ts",
     "keyword:auto": "tsx scripts/keyword-auto.ts",
     "build": "tsc --noEmit",
     "web": "tsx src/server.ts",
