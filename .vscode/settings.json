@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.bat": "bat"
+  },
+  "[bat]": {
+    "files.encoding": "cp949"
+  }
+}
