@@ -1,9 +1,14 @@
 import { loadBlogStyle } from "./load-style.js";
 import { buildBrandTagline } from "./build-brand-tagline.js";
+import { brand } from "../../../config/brand.js";
 
 export interface ApplyBlogStyleOptions {
   title?: string;
   keywords?: string;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function stripInlineStyle(tagHtml: string): string {
@@ -27,10 +32,11 @@ function stripSystemDecorations(html: string): string {
     "",
   );
 
-  result = result.replace(
-    /<p[^>]*>\s*강운준 행정사[^<]*<\/p>/gi,
-    "",
+  const brandPattern = new RegExp(
+    `<p[^>]*>\\s*${escapeRegExp(brand.brandName)}[^<]*<\\/p>`,
+    "gi",
   );
+  result = result.replace(brandPattern, "");
 
   return result.trim();
 }
@@ -80,8 +86,20 @@ function restyleFooterParagraphs(section: string): string {
   const margin = style.spacing.paragraphMargin;
   const typo = style.typography;
   const footerStyle = pStyle(footerAlign, margin, typo);
-  const footerPattern =
-    /<p[^>]*>([^<]*(?:마치며|강운준 행정사였습니다|행정사사무소|1844-1346|※ 본 정보|#\w)[^<]*)<\/p>/gi;
+  const brandClosing = `${brand.brandName}였습니다`;
+  const footerMarkers = [
+    "마치며",
+    brandClosing,
+    brand.officeName,
+    brand.contactPhone,
+    "※ 본 정보",
+  ]
+    .map(escapeRegExp)
+    .join("|");
+  const footerPattern = new RegExp(
+    `<p[^>]*>([^<]*(?:${footerMarkers}|#\\w)[^<]*)<\\/p>`,
+    "gi",
+  );
 
   return section.replace(footerPattern, (_full, content) => {
     return `<p style="${footerStyle}">${content.trim()}</p>`;

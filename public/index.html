@@ -59,17 +59,16 @@
       </label>
       <div class="region-field-wrap">
         <label class="topic-field" for="blog-region">
-          <span class="topic-label">지역 (히스토리)</span>
+          <span class="topic-label">지역</span>
           <input
             id="blog-region"
             type="text"
             placeholder="예: 전라북도"
             autocomplete="off"
             list="region-history"
-            disabled
           />
           <datalist id="region-history"></datalist>
-          <span class="topic-hint">현재 웹 실행은 지역 입력을 참고용으로 표시합니다.</span>
+          <span class="topic-hint">비우면 .env BLOG_REGION / blog-region.txt 기본값을 사용합니다.</span>
         </label>
       </div>
       <button id="run-btn" class="btn btn-primary btn-lg">

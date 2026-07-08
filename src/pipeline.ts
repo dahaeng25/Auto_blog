@@ -26,6 +26,8 @@ import {
 export interface OrchestrationOptions {
   /** 실행 시 지정한 블로그 주제/키워드 */
   blogTopic?: string;
+  /** 실행 시 지정한 지역(도·광역시). 비우면 .env/blog-region.txt 폴백 */
+  blogRegion?: string;
   /** 실행 트리거 식별자 (web, cron, vercel-cron 등) */
   trigger?: string;
 }
@@ -78,7 +80,10 @@ export async function runOrchestration(
     );
 
     // Phase 2: 콘텐츠 생성
-    const draft = await contentPipeline.run({ blogTopic: options.blogTopic });
+    const draft = await contentPipeline.run({
+      blogTopic: options.blogTopic,
+      blogRegion: options.blogRegion,
+    });
 
     // Phase 3: 썸네일 렌더링 (네이버 샘플 스타일 시 키워드1.png 파일명)
     logger.info("Phase 3: 썸네일 생성");

@@ -320,10 +320,11 @@ async function runPipeline() {
       }
     }
 
+    const blogRegion = region || undefined;
     const result = await api("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trigger: "web", blogTopic }),
+      body: JSON.stringify({ trigger: "web", blogTopic, blogRegion }),
     });
     if (result.title) {
       msgEl.textContent = `완료: ${result.title}`;

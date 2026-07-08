@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { brand } from "../../config/brand.js";
 import { config } from "../../config/index.js";
 
 export interface NaverFooterImageBlock {
@@ -37,6 +38,18 @@ function resolveProjectPath(relativePath: string): string {
     : path.resolve(config.projectRoot, relativePath);
 }
 
+/** 정적 JSON/HTML의 브랜드 문구를 config/brand.ts 값으로 치환 */
+function applyBrandPlaceholders(text: string): string {
+  return text
+    .replaceAll("{{BRAND_NAME}}", brand.brandName)
+    .replaceAll("{{OFFICE_NAME}}", brand.officeName)
+    .replaceAll("{{CONTACT_PHONE}}", brand.contactPhone)
+    .replaceAll("강운준 행정사", brand.brandName)
+    .replaceAll("행정사사무소 다행", brand.officeName)
+    .replaceAll("1844-1346", brand.contactPhone)
+    .replaceAll("1844-1347", brand.contactPhone);
+}
+
 function loadFooterConfig(): NaverPostFooterConfig | null {
   const configPath = resolveProjectPath(config.naverPostFooterPath);
   if (!fs.existsSync(configPath)) return null;
@@ -55,7 +68,7 @@ function loadHtmlFile(relativePath: string): string | null {
     console.warn(`[NaverFooter] HTML 파일 없음: ${abs}`);
     return null;
   }
-  return fs.readFileSync(abs, "utf-8").trim();
+  return applyBrandPlaceholders(fs.readFileSync(abs, "utf-8").trim());
 }
 
 /** 네이버 업로드 맨 끝에 붙일 푸터 블록 생성 */
@@ -80,7 +93,7 @@ export function buildNaverFooterPublishBlocks(): NaverFooterPublishBlock[] {
 
   for (const block of footerConfig.blocks ?? []) {
     if (block.type === "html") {
-      const html = block.html.trim();
+      const html = applyBrandPlaceholders(block.html.trim());
       if (!html) continue;
       blocks.push({
         kind: "html",
@@ -100,7 +113,7 @@ export function buildNaverFooterPublishBlocks(): NaverFooterPublishBlock[] {
       kind: "image",
       path: abs,
       label: `푸터 이미지 (${path.basename(abs)})`,
-      altText: block.alt,
+      altText: block.alt ? applyBrandPlaceholders(block.alt) : undefined,
       linkUrl: block.linkUrl,
     });
   }

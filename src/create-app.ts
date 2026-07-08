@@ -107,14 +107,22 @@ export async function createApp(
       });
     }
 
-    const body = (request.body as { trigger?: string; blogTopic?: string } | undefined) ?? {};
+    const body =
+      (request.body as
+        | { trigger?: string; blogTopic?: string; blogRegion?: string }
+        | undefined) ?? {};
     const trigger = body.trigger ?? "web";
     const blogTopic = body.blogTopic?.trim() || undefined;
+    const blogRegion = body.blogRegion?.trim() || undefined;
 
     // Vercel 서버리스: 함수 종료 전까지 파이프라인 완료 대기
     if (config.isVercel) {
       try {
-        const result = await runOrchestration({ trigger, blogTopic });
+        const result = await runOrchestration({
+          trigger,
+          blogTopic,
+          blogRegion,
+        });
         return {
           message: "파이프라인이 완료되었습니다.",
           job: await jobStore.get(),
@@ -128,7 +136,7 @@ export async function createApp(
       }
     }
 
-    void runOrchestration({ trigger, blogTopic }).catch(() => {});
+    void runOrchestration({ trigger, blogTopic, blogRegion }).catch(() => {});
 
     return reply.status(202).send({
       message: "파이프라인 실행을 시작했습니다.",
