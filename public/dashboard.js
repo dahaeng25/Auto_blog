@@ -119,7 +119,10 @@ function showErrorCard(errorText, stage, hint) {
 }
 
 function clearErrorCard() {
-  document.getElementById("error-card").classList.add("hidden");
+  const card = document.getElementById("error-card");
+  const body = document.getElementById("error-card-body");
+  if (body) body.innerHTML = "";
+  card.classList.add("hidden");
 }
 
 function rememberInput(keyword, region) {
@@ -152,7 +155,8 @@ async function loadInputHistory() {
   renderDatalist("region-history", regions);
 }
 
-async function loadStatus() {
+async function loadStatus(options = {}) {
+  const suppressErrorCard = Boolean(options.suppressErrorCard);
   const data = await api("/api/status");
   const job = data.job;
   lastStatus = data;
@@ -172,7 +176,9 @@ async function loadStatus() {
   if (job.lastTitle) detail.push(`최근: ${job.lastTitle}`);
   if (job.startedAt) detail.push(`시작: ${formatDate(job.startedAt)}`);
   if (job.finishedAt) detail.push(`종료: ${formatDate(job.finishedAt)}`);
-  if (job.lastError) detail.push(`오류: ${job.lastError}`);
+  if (job.status === "error" && job.lastError) {
+    detail.push(`오류: ${job.lastError}`);
+  }
   document.getElementById("job-detail").textContent =
     detail.join(" · ") || "아직 실행 이력이 없습니다.";
 
@@ -199,12 +205,15 @@ async function loadStatus() {
 
   renderProgress(job, lastLogs);
 
-  if (job.status === "error") {
+  // 실패 요약은 현재 job이 error일 때만 표시. running/success/idle에서는 숨김
+  if (!suppressErrorCard && job.status === "error") {
     showErrorCard(
       job.lastError ?? "실행 중 오류가 발생했습니다.",
       inferCurrentStage(job, lastLogs),
       "실행 로그와 해당 단계를 확인해 주세요.",
     );
+  } else {
+    clearErrorCard();
   }
 
   return data;
@@ -293,7 +302,10 @@ async function runPipeline() {
   clearErrorCard();
 
   try {
-    const status = await loadStatus();
+    // 사전 검증용. 이전 실행이 error여도 새 실행 시작 전에는 실패 요약을 다시 띄우지 않음
+    const status = await loadStatus({ suppressErrorCard: true });
+    clearErrorCard();
+
     const topicInput = document.getElementById("blog-topic");
     const regionInput = document.getElementById("blog-region");
     const blogTopic = topicInput?.value?.trim() || undefined;
