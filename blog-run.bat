@@ -104,6 +104,7 @@ set "DO_PUB="
 set /p "DO_PUB=업로드를 진행할까요? y/N > "
 if /i not "!DO_PUB!"=="y" goto done
 echo [3/3] 업로드 중...
+set "DID_PUBLISH=1"
 call npm.cmd run blog:workflow -- --step publish --batch
 goto done
 
@@ -143,6 +144,7 @@ set "DO_PUB="
 set /p "DO_PUB=업로드를 진행할까요? y/N > "
 if /i not "!DO_PUB!"=="y" goto done
 echo [4/4] 업로드 중...
+set "DID_PUBLISH=1"
 call npm.cmd run blog:workflow -- --step publish --batch
 goto done
 
@@ -177,6 +179,7 @@ goto done
 :run_publish
 echo.
 echo 업로드를 시작합니다...
+set "DID_PUBLISH=1"
 call npm.cmd run blog:workflow -- --step publish --batch
 goto done
 
@@ -285,12 +288,9 @@ exit /b 0
 
 :load_keywords
 set "BLOG_KEYWORDS="
-if not exist "%~dp0blog-keywords.txt" goto load_keywords_default
+if not exist "%~dp0blog-keywords.txt" goto load_keywords_done
 call npx tsx "%~dp0scripts\export-line-cp949.ts" "%~dp0blog-keywords.txt" "%TEMP%\ab_kw_cp949.txt" >nul 2>&1
 if exist "%TEMP%\ab_kw_cp949.txt" for /f "usebackq delims=" %%a in ("%TEMP%\ab_kw_cp949.txt") do set "BLOG_KEYWORDS=%%a"
-goto load_keywords_done
-:load_keywords_default
-if not defined BLOG_KEYWORDS set "BLOG_KEYWORDS=D-8-4, 외국인 창업"
 :load_keywords_done
 exit /b 0
 
@@ -319,12 +319,9 @@ exit /b 0
 
 :load_region
 set "BLOG_REGION="
-if not exist "%~dp0blog-region.txt" goto load_region_default
+if not exist "%~dp0blog-region.txt" goto load_region_done
 call npx tsx "%~dp0scripts\export-line-cp949.ts" "%~dp0blog-region.txt" "%TEMP%\ab_rg_cp949.txt" >nul 2>&1
 if exist "%TEMP%\ab_rg_cp949.txt" for /f "usebackq delims=" %%a in ("%TEMP%\ab_rg_cp949.txt") do set "BLOG_REGION=%%a"
-goto load_region_done
-:load_region_default
-if not defined BLOG_REGION set "BLOG_REGION=전라북도"
 :load_region_done
 exit /b 0
 
@@ -332,6 +329,12 @@ exit /b 0
 > "%TEMP%\ab_rg.tmp" echo !BLOG_REGION!
 call npx tsx "%~dp0scripts\write-text-line.ts" "%~dp0blog-region.txt" "%TEMP%\ab_rg.tmp"
 del "%TEMP%\ab_rg.tmp" >nul 2>&1
+exit /b 0
+
+:reset_session
+set "BLOG_KEYWORDS="
+set "BLOG_REGION="
+call npx tsx "%~dp0scripts\reset-blog-session.ts" >nul 2>&1
 exit /b 0
 
 :check_import_ready
@@ -350,6 +353,8 @@ set "EXIT_CODE=!ERRORLEVEL!"
 echo.
 if !EXIT_CODE! neq 0 goto done_error
 echo 완료.
+if defined DID_PUBLISH call :reset_session
+set "DID_PUBLISH="
 goto done_pause
 :done_error
 echo 실행 중 오류가 발생했습니다.

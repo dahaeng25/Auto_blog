@@ -43,6 +43,7 @@ import {
   shouldRefreshThumbnailTexts,
   buildTopLabelFromTitleAndKeywords,
 } from "../thumbnail/resolve-thumbnail-texts.js";
+import { resetBlogSessionFiles } from "./reset-blog-session.js";
 
 export type WorkflowStep =
   | "content"
@@ -507,6 +508,13 @@ export async function runPublishStep(): Promise<void> {
         });
 
         await notifySuccess(draft.title, results);
+      }
+
+      if (results.some((r) => r.success)) {
+        await resetBlogSessionFiles();
+        console.log(
+          "\n[설정] 업로드 완료 — 키워드·지역을 초기화했습니다. 다음 글은 [1] 또는 [9]에서 다시 입력하세요.",
+        );
       }
     } finally {
       repo.close();

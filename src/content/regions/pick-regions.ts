@@ -172,18 +172,28 @@ export async function resolveBlogRegionInput(
   if (direct) return direct;
 
   const filePath = path.join(config.projectRoot, "blog-region.txt");
+  let fileExists = false;
   try {
     const content = await readLocalizedTextFile(filePath);
+    fileExists = true;
     const line = content
       .split(/\r?\n/)
       .map((l) => l.trim())
       .find((l) => l && !l.startsWith("#"));
     if (line) return line;
   } catch {
-    // 파일 없으면 기본값
+    fileExists = false;
   }
 
-  const data = loadRegionsFile();
-  const fallback = data.regions.find((r) => r.id === data.defaultRegionId);
-  return fallback?.name ?? "전라북도";
+  if (fileExists || config.blogRegion?.trim()) {
+    throw new Error(
+      "지역이 설정되지 않았습니다.\n" +
+        "  • blog-run.bat [9] 지역 입력/수정\n" +
+        "  • blog-region.txt 에 도·광역시 입력",
+    );
+  }
+
+  throw new Error(
+    "지역이 없습니다. blog-region.txt 파일을 만들거나 [9]에서 입력하세요.",
+  );
 }
