@@ -12,6 +12,7 @@ import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { TopicStatus } from "./content/types.js";
 import { PublishedPostRepository } from "./content/seo/published-post-repository.js";
 import { loadBlogStyle } from "./content/blog-style/load-style.js";
+import { buildArticlePreviewHtml } from "./api/article-preview-html.js";
 import { ensureSchema } from "./db/migrate.js";
 import { useLibsql } from "./db/client.js";
 import { readLocalizedTextFileSync } from "./fs/read-localized-text-file.js";
@@ -129,8 +130,16 @@ export async function createApp(
           title: result.draft.title,
         };
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stage =
+          error instanceof Error && "pipelineStage" in error
+            ? error.pipelineStage === "publish"
+              ? "발행"
+              : String((error as Error & { pipelineStage?: string }).pipelineStage)
+            : undefined;
         return reply.status(500).send({
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
+          stage,
           job: await jobStore.get(),
         });
       }
@@ -164,6 +173,30 @@ export async function createApp(
     try {
       const limit = query.limit ? Number(query.limit) : 20;
       return await repo.listArticles(Number.isFinite(limit) ? limit : 20);
+    } finally {
+      repo.close();
+    }
+  });
+
+  app.get("/api/articles/:id/preview", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const articleId = Number(id);
+    if (!Number.isFinite(articleId) || articleId <= 0) {
+      return reply.status(400).send({ error: "잘못된 원고 ID입니다." });
+    }
+
+    const repo = new TopicRepository();
+    try {
+      const article = await repo.getArticleById(articleId);
+      if (!article) {
+        return reply.status(404).send({ error: "원고를 찾을 수 없습니다." });
+      }
+
+      const html = buildArticlePreviewHtml(article.title, article.htmlBody);
+      return reply
+        .header("Content-Type", "text/html; charset=utf-8")
+        .header("Cache-Control", "no-store")
+        .send(html);
     } finally {
       repo.close();
     }

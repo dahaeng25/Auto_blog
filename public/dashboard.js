@@ -8,6 +8,7 @@ const STEP_LABELS = ["수집", "생성", "썸네일", "발행"];
 let pollTimer = null;
 let lastLogs = [];
 let lastStatus = null;
+let previewObjectUrl = null;
 
 async function api(path, options = {}) {
   const res = await fetch(path, options);
@@ -49,15 +50,8 @@ function inferStageFromText(text = "") {
   const t = String(text).toLowerCase();
   if (t.includes("rss") || t.includes("수집")) return "수집";
   if (
-    t.includes("gems") ||
-    t.includes("생성") ||
-    t.includes("title") ||
-    t.includes("content")
-  ) {
-    return "생성";
-  }
-  if (t.includes("thumbnail") || t.includes("썸네일")) return "썸네일";
-  if (
+    t.includes("thumbnail") ||
+    t.includes("썸네일") ||
     t.includes("browsertype.launch") ||
     t.includes("browsercontext.newpage") ||
     t.includes("libnss3") ||
@@ -69,12 +63,24 @@ function inferStageFromText(text = "") {
   }
   if (
     t.includes("publish") ||
+    t.includes("퍼블리싱") ||
     t.includes("업로드") ||
+    t.includes("자동 로그인") ||
+    t.includes("세션") ||
     t.includes("네이버") ||
     t.includes("티스토리") ||
-    t.includes("blogger")
+    t.includes("blogger") ||
+    t.includes("발행")
   ) {
     return "발행";
+  }
+  if (
+    t.includes("gems") ||
+    t.includes("생성") ||
+    t.includes("title") ||
+    t.includes("content")
+  ) {
+    return "생성";
   }
   return "생성";
 }
@@ -246,20 +252,17 @@ async function loadArticles() {
         <div class="article-title">${escapeHtml(a.title)}</div>
         <div class="article-date">${formatDate(a.createdAt)}</div>
       </div>
-      <button type="button" class="btn btn-ghost btn-sm" data-id="${a.id}">미리보기</button>
+      <button type="button" class="btn btn-ghost btn-sm article-preview-btn" data-id="${a.id}">미리보기</button>
     </div>`,
     )
     .join("");
-}
 
-function bindArticlePreviewClicks() {
-  const container = document.getElementById("articles-list");
-  if (!container || container.dataset.previewBound === "1") return;
-  container.dataset.previewBound = "1";
-  container.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-id]");
-    if (!btn) return;
-    openArticle(Number(btn.dataset.id));
+  container.querySelectorAll(".article-preview-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openArticle(Number(btn.dataset.id));
+    });
   });
 }
 
@@ -302,7 +305,7 @@ async function loadLogs() {
 }
 
 async function refreshAll() {
-  await Promise.all([
+  await Promise.allSettled([
     loadLogs(),
     loadStatus(),
     loadArticles(),
@@ -414,11 +417,29 @@ function buildPreviewDocument(htmlBody) {
   </style></head><body>${htmlBody}</body></html>`;
 }
 
+function revokePreviewUrl() {
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = null;
+  }
+}
+
+function mountPreviewIframe(container, articleId) {
+  revokePreviewUrl();
+
+  const iframe = document.createElement("iframe");
+  iframe.className = "article-preview-frame";
+  iframe.title = "원고 본문 미리보기";
+  iframe.src = `/api/articles/${articleId}/preview?ts=${Date.now()}`;
+  container.append(iframe);
+  return iframe;
+}
+
 async function openArticle(id) {
   const modal = document.getElementById("article-modal");
   const body = document.getElementById("modal-body");
 
-  if (!modal || !body || !Number.isFinite(id)) {
+  if (!modal || !body || !Number.isFinite(id) || id <= 0) {
     showErrorCard("미리보기를 열 수 없습니다.", "미리보기", "페이지를 새로고침 후 다시 시도해 주세요.");
     return;
   }
@@ -437,28 +458,22 @@ async function openArticle(id) {
     document.getElementById("modal-meta").textContent =
       `글자 수: ${plainLen.toLocaleString()}자 / 최소 기준: ${minChars.toLocaleString()}자 (${gap >= 0 ? `+${gap}` : gap})`;
 
-    const iframe = document.createElement("iframe");
-    iframe.className = "article-preview-frame";
-    iframe.title = "원고 본문 미리보기";
-    iframe.setAttribute(
-      "sandbox",
-      "allow-same-origin",
-    );
-    iframe.srcdoc = buildPreviewDocument(stripScripts(article.htmlBody ?? ""));
-
     body.replaceChildren();
     const label = document.createElement("p");
     label.className = "preview-thumb-label";
     label.textContent = `썸네일 텍스트: ${article.thumbnailText ?? ""}`;
-    body.append(label, iframe);
+    body.append(label);
+    mountPreviewIframe(body, id);
   } catch (err) {
-    closeModal();
     const error = normalizeError(err);
+    body.innerHTML = `<p class="empty preview-error">${escapeHtml(error.message)}</p>`;
+    document.getElementById("modal-meta").textContent = "";
     showErrorCard(error.message, "미리보기", error.hint);
   }
 }
 
 function closeModal() {
+  revokePreviewUrl();
   document.getElementById("article-modal")?.classList.add("hidden");
   document.body.classList.remove("modal-open");
   const body = document.getElementById("modal-body");
@@ -541,7 +556,6 @@ function purgeLegacyLoginUi() {
 
 async function init() {
   purgeLegacyLoginUi();
-  bindArticlePreviewClicks();
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeModal();

@@ -33,6 +33,20 @@ function hasCredentials(platform: Platform): boolean {
   return Boolean(id && pw);
 }
 
+/** .env 계정으로 자동 로그인 가능 여부 */
+function canAutoLogin(platform: Platform): boolean {
+  if (!config.authAutoLogin) return false;
+  return hasCredentials(platform);
+}
+
+/**
+ * Vercel·수동 세션 환경에서는 브라우저 검증을 생략하고 저장된 세션을 신뢰합니다.
+ * (서버리스 Chromium 검증이 flaky 하고, 자격증명 없이는 폴백 불가)
+ */
+function shouldTrustStoredSession(platform: Platform): boolean {
+  return config.isVercel || !canAutoLogin(platform);
+}
+
 /** 글쓰기 URL 접근으로 세션 유효성 확인 */
 async function isWritePageAccessible(
   page: Page,
@@ -90,9 +104,15 @@ async function isWritePageAccessible(
 export async function ensureValidSession(platform: Platform): Promise<string> {
   const headless = config.authLoginHeadless;
 
-  // 1) 기존 세션으로 검증
+  // 1) 기존 세션
   if (await hasSession(platform)) {
     const statePath = await requireSession(platform);
+
+    if (shouldTrustStoredSession(platform)) {
+      console.log(`[${PLATFORMS[platform].name}] 저장된 세션 사용`);
+      return statePath;
+    }
+
     const session = await createBrowserSession({
       headless,
       storageStatePath: statePath,
@@ -122,14 +142,7 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
   }
 
   // 2) 자동 로그인
-  if (!config.authAutoLogin) {
-    throw new Error(
-      sessionExpiredMessage(platform) +
-        "\n\n또는 .env 에 AUTH_AUTO_LOGIN=true 와 계정 정보를 설정하세요.",
-    );
-  }
-
-  if (!hasCredentials(platform)) {
+  if (!canAutoLogin(platform)) {
     if (platform === "google") {
       throw new Error(
         `[${PLATFORMS[platform].name}] Google은 자동 로그인을 지원하지 않습니다.\n` +
@@ -137,11 +150,10 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
       );
     }
     throw new Error(
-      `[${PLATFORMS[platform].name}] 자동 로그인 계정이 없습니다.\n` +
-        (platform === "naver"
-          ? "  .env → NAVER_ID, NAVER_PASSWORD\n"
-          : "  .env → KAKAO_ID, KAKAO_PASSWORD\n") +
-        "  또는 npm run auth:setup 으로 수동 로그인",
+      sessionExpiredMessage(platform) +
+        (config.isVercel
+          ? "\n\n대시보드에서 세션 JSON을 업로드하세요."
+          : "\n\n대시보드에서 세션 JSON을 업로드하거나 npm run auth:setup 으로 세션을 저장하세요."),
     );
   }
 

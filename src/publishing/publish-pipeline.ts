@@ -75,7 +75,11 @@ export class PublishPipeline {
       const messages = failed
         .map((r) => `[${r.platform}] ${r.error}`)
         .join("\n");
-      throw new Error(`퍼블리싱 실패:\n${messages}`);
+      const error = new Error(`퍼블리싱 실패:\n${messages}`) as Error & {
+        pipelineStage: string;
+      };
+      error.pipelineStage = "publish";
+      throw error;
     }
 
     logger.info("✅ 모든 플랫폼 퍼블리싱 완료");

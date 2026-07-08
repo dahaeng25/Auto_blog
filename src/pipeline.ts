@@ -91,9 +91,10 @@ export async function runOrchestration(
     logger.info("Phase 3: 썸네일 생성");
     const keywords = extractMainKeywords(activeTopic, draft.title);
     const keywordSlug = buildKeywordSlug(keywords);
-    const useNaverSample =
-      config.naverUseSampleStyle &&
-      getEnabledPlatforms().includes("naver");
+    const enabledPlatforms = getEnabledPlatforms();
+    const needsPreparedImages =
+      enabledPlatforms.includes("naver") ||
+      enabledPlatforms.includes("tistory");
 
     const topLabel =
       draft.thumbnailTopLabel?.trim() ||
@@ -122,7 +123,7 @@ export async function runOrchestration(
       topLabel: thumbnailTopLabel,
       keywords,
       keywordSlug,
-      ...(useNaverSample ? { outputFilename: `${keywordSlug}1.png` } : {}),
+      ...(needsPreparedImages ? { outputFilename: `${keywordSlug}1.png` } : {}),
     });
 
     const subThumbnails = await generateSubThumbnails({
@@ -133,7 +134,7 @@ export async function runOrchestration(
     });
 
     let naverImages;
-    if (useNaverSample) {
+    if (needsPreparedImages) {
       naverImages = await prepareNaverImageSet({
         thumbnailPath,
         htmlBody: draft.htmlBody,

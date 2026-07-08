@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import type {
   Browser,
   BrowserContext,
@@ -51,19 +50,12 @@ export async function createBrowserSession(
   const browser = await launchChromium({ headless });
 
   if (isServerless()) {
-    const page = await browser.newPage();
-    const context = page.context();
+    const context = await browser.newContext({
+      ...DEFAULT_CONTEXT_OPTIONS,
+      ...(storageStatePath ? { storageState: storageStatePath } : {}),
+    });
     await context.addInitScript(STEALTH_INIT_SCRIPT);
-
-    if (storageStatePath) {
-      const raw = await fs.readFile(storageStatePath, "utf-8");
-      const state = JSON.parse(raw) as {
-        cookies?: Parameters<BrowserContext["addCookies"]>[0];
-      };
-      if (state.cookies?.length) {
-        await context.addCookies(state.cookies);
-      }
-    }
+    const page = await context.newPage();
 
     return {
       browser,

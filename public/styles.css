@@ -540,6 +540,10 @@ body.modal-open {
   margin-bottom: 12px;
 }
 
+.preview-error {
+  color: var(--error);
+}
+
 .article-preview-frame {
   width: 100%;
   min-height: 360px;
