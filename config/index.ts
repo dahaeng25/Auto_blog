@@ -70,15 +70,21 @@ export const config = {
   subThumbnailTextBackgroundOpacity: Number(
     process.env.SUB_THUMBNAIL_TEXT_BG_OPACITY ?? "0.38",
   ),
-  /** 서브썸네일 AI 배경 — 기본 켜짐 (OPENAI_API_KEY 필요) */
+  /** 서브썸네일 AI 배경 (기본 꺼짐 — 그라데이션 단순 스타일) */
   subThumbnailDynamicBackground:
-    process.env.SUB_THUMBNAIL_DYNAMIC_BG !== "false",
+    process.env.SUB_THUMBNAIL_DYNAMIC_BG === "true",
   subThumbnailTemplatePath: path.join(
     projectRoot,
     "src",
     "thumbnail",
     "sub-thumbnail-template.html",
   ),
+  subThumbnailContactName:
+    process.env.SUB_THUMBNAIL_CONTACT_NAME ?? "강운준 행정사",
+  subThumbnailContactPhone:
+    process.env.SUB_THUMBNAIL_CONTACT_PHONE ??
+    process.env.CONTACT_PHONE ??
+    "1844-1347",
   contactPhone: process.env.CONTACT_PHONE ?? "1844-1346",
 
   naverBlogId: process.env.NAVER_BLOG_ID ?? "",

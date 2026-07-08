@@ -4,51 +4,51 @@ import { pathToFileURL } from "node:url";
 import type { Browser, Page } from "playwright-core";
 import { launchChromium } from "../browser/launch-chromium.js";
 import { config } from "../../config/index.js";
-import {
-  assetExists,
-  loadThumbnailBrand,
-  resolveAssetPath,
-} from "./brand-config.js";
 import { parseH2SectionTitle } from "../publishing/images/keyword-slug.js";
 import { mutateImageHashBuffer } from "./image-hash-mutator.js";
 
 export interface SubThumbnailRenderOptions {
-  /** 단락(h2) 소제목 — 번호·제목 분리 표시 */
+  /** 단락(h2) 소제목 — 중앙 키워드/문구로 표시 */
   sectionTitle: string;
-  /** 배경 이미지 절대 경로 (없으면 bg.png·그라데이션) */
-  backgroundPath?: string | null;
   /** 저장 파일명 (예: D84외국인창업2.png) */
   outputFilename: string;
+  /** 그라데이션 팔레트 순환용 (0부터) */
+  sectionIndex?: number;
+  contactName?: string;
   phone?: string;
 }
 
-const TITLE_MAX_CHARS = 36;
+const TITLE_MAX_CHARS = 28;
 
-function buildSectionLabels(sectionTitle: string): {
-  number: string;
-  title: string;
-} {
+const GRADIENT_PRESETS = [
+  "linear-gradient(145deg, #1a3a5c 0%, #2d6a9f 48%, #1e4d73 100%)",
+  "linear-gradient(145deg, #152d47 0%, #3a7ca5 55%, #1a3a5c 100%)",
+  "linear-gradient(145deg, #1e4466 0%, #4a8fb8 50%, #163a56 100%)",
+  "linear-gradient(145deg, #0f2a42 0%, #2b5f8a 52%, #1a3a5c 100%)",
+  "linear-gradient(145deg, #1a3a5c 0%, #3d8bb5 45%, #234b6e 100%)",
+];
+
+function buildSectionKeyword(sectionTitle: string): string {
   const parsed = parseH2SectionTitle(sectionTitle);
-  const title = parsed.title.slice(0, TITLE_MAX_CHARS);
-  return { number: parsed.number, title };
+  return parsed.title.slice(0, TITLE_MAX_CHARS);
 }
 
-function resolveBaseImage(): string | null {
-  const brand = loadThumbnailBrand();
-  if (brand.background.type === "image" && assetExists(brand.background.image)) {
-    return resolveAssetPath(brand.background.image!);
-  }
-  return null;
+function pickGradient(sectionIndex: number): string {
+  return GRADIENT_PRESETS[sectionIndex % GRADIENT_PRESETS.length]!;
 }
 
-async function fitSectionTitleFont(page: Page, text: string, maxWidth: number): Promise<void> {
+async function fitSectionKeywordFont(
+  page: Page,
+  text: string,
+  maxWidth: number,
+): Promise<void> {
   await page.evaluate(
     ({ text: content, maxWidth: mw }) => {
-      const el = document.getElementById("section-title");
+      const el = document.getElementById("section-keyword");
       if (!el) return;
 
-      let size = 44;
-      const min = 26;
+      let size = 56;
+      const min = 32;
       el.textContent = content;
       el.style.fontSize = `${size}px`;
 
@@ -62,8 +62,7 @@ async function fitSectionTitleFont(page: Page, text: string, maxWidth: number): 
 }
 
 /**
- * 단락별 서브썸네일 (700×700) 렌더링.
- * 메인 썸네일(bg.png) + h2 번호·소제목, 우하단 전화번호.
+ * 단락별 서브썸네일 (700×700) — 그라데이션 + 중앙 키워드 + 우하단 연락처.
  */
 export class SubThumbnailRenderer {
   private readonly templatePath: string;
@@ -109,14 +108,11 @@ export class SubThumbnailRenderer {
     );
     await fs.mkdir(config.thumbnailsDir, { recursive: true });
 
-    const phone = options.phone ?? config.contactPhone;
-    const { number, title } = buildSectionLabels(options.sectionTitle);
-    const bgOpacity = config.subThumbnailBackgroundOpacity;
-    const baseImagePath = resolveBaseImage();
-    const baseUrl = baseImagePath ? pathToFileURL(baseImagePath).href : null;
-    const bgUrl = options.backgroundPath
-      ? pathToFileURL(options.backgroundPath).href
-      : null;
+    const keyword = buildSectionKeyword(options.sectionTitle);
+    const contactName =
+      options.contactName ?? config.subThumbnailContactName;
+    const phone = options.phone ?? config.subThumbnailContactPhone;
+    const gradient = pickGradient(options.sectionIndex ?? 0);
 
     const context = await browser.newContext({
       viewport: { width: this.size, height: this.size + 50 },
@@ -132,70 +128,26 @@ export class SubThumbnailRenderer {
       await page.waitForTimeout(200);
 
       await page.evaluate(
-        ({ size, phone, number, title, baseUrl, bgUrl, bgOpacity }) => {
+        ({ size, keyword, contactName, phone, gradient }) => {
           const canvas = document.getElementById("sub-canvas");
-          const baseImg = document.getElementById("sub-bg-base") as HTMLImageElement | null;
-          const bgImg = document.getElementById("sub-bg") as HTMLImageElement | null;
-          const bgFallback = document.getElementById("bg-fallback");
-          const numberWrap = document.getElementById("section-number-wrap");
-          const numberEl = document.getElementById("section-number");
-          const titleEl = document.getElementById("section-title");
-          const phoneEl = document.getElementById("phone-text");
+          const bg = document.getElementById("bg-gradient");
+          const keywordEl = document.getElementById("section-keyword");
+          const nameEl = document.getElementById("contact-name");
+          const phoneEl = document.getElementById("contact-phone");
 
           if (canvas) {
             canvas.style.width = `${size}px`;
             canvas.style.height = `${size}px`;
           }
-          if (titleEl) titleEl.textContent = title;
+          if (bg) bg.style.background = gradient;
+          if (keywordEl) keywordEl.textContent = keyword;
+          if (nameEl) nameEl.textContent = contactName;
           if (phoneEl) phoneEl.textContent = phone;
-
-          if (number && numberEl && numberWrap) {
-            numberEl.textContent = number;
-            numberWrap.style.display = "block";
-          } else if (numberWrap) {
-            numberWrap.style.display = "none";
-          }
-
-          if (baseUrl && baseImg) {
-            baseImg.src = baseUrl;
-            baseImg.style.display = "block";
-          }
-
-          if (bgUrl && bgImg) {
-            bgImg.src = bgUrl;
-            bgImg.style.display = "block";
-            bgImg.style.opacity = String(bgOpacity);
-            if (bgFallback) bgFallback.style.display = "none";
-          } else if (!baseUrl && bgFallback) {
-            bgFallback.style.display = "block";
-          }
         },
-        { size: this.size, phone, number, title, baseUrl, bgUrl, bgOpacity },
+        { size: this.size, keyword, contactName, phone, gradient },
       );
 
-      if (baseUrl) {
-        await page.waitForFunction(
-          () => {
-            const img = document.getElementById("sub-bg-base") as HTMLImageElement | null;
-            return Boolean(img?.complete && img.naturalWidth > 0);
-          },
-          undefined,
-          { timeout: 15_000 },
-        );
-      }
-
-      if (bgUrl) {
-        await page.waitForFunction(
-          () => {
-            const img = document.getElementById("sub-bg") as HTMLImageElement | null;
-            return Boolean(img?.complete && img.naturalWidth > 0);
-          },
-          undefined,
-          { timeout: 15_000 },
-        );
-      }
-
-      await fitSectionTitleFont(page, title, this.size * 0.86);
+      await fitSectionKeywordFont(page, keyword, this.size * 0.86);
 
       const screenshot = await page.locator("#sub-canvas").screenshot({
         type: "png",
