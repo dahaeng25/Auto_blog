@@ -246,13 +246,20 @@ async function loadArticles() {
         <div class="article-title">${escapeHtml(a.title)}</div>
         <div class="article-date">${formatDate(a.createdAt)}</div>
       </div>
-      <button class="btn btn-ghost btn-sm" data-id="${a.id}">미리보기</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-id="${a.id}">미리보기</button>
     </div>`,
     )
     .join("");
+}
 
-  container.querySelectorAll("button[data-id]").forEach((btn) => {
-    btn.addEventListener("click", () => openArticle(Number(btn.dataset.id)));
+function bindArticlePreviewClicks() {
+  const container = document.getElementById("articles-list");
+  if (!container || container.dataset.previewBound === "1") return;
+  container.dataset.previewBound = "1";
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-id]");
+    if (!btn) return;
+    openArticle(Number(btn.dataset.id));
   });
 }
 
@@ -388,29 +395,74 @@ function toPlainTextLength(html) {
   return (div.textContent ?? "").replace(/\s+/g, "").length;
 }
 
+function stripScripts(html) {
+  return String(html).replace(
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    "",
+  );
+}
+
+function buildPreviewDocument(htmlBody) {
+  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+    body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;line-height:1.75;padding:20px 24px;margin:0;color:#1a1a1a;background:#fff}
+    h2,h3{margin:1.2em 0 0.6em;font-size:1.1em}
+    p,li{margin:0.5em 0}
+    table{border-collapse:collapse;width:100%;margin:12px 0}
+    th,td{border:1px solid #ccc;padding:8px;text-align:left}
+    img{max-width:100%;height:auto}
+    blockquote{margin:12px 0;padding:8px 12px;border-left:3px solid #ccc;color:#444}
+  </style></head><body>${htmlBody}</body></html>`;
+}
+
 async function openArticle(id) {
-  const article = await api(`/api/articles/${id}`);
-  const minChars = lastStatus?.config?.minPlainTextChars ?? 3500;
-  const plainLen = toPlainTextLength(article.htmlBody);
-  const gap = plainLen - minChars;
-
-  document.getElementById("modal-title").textContent = article.title;
-  document.getElementById("modal-meta").textContent =
-    `글자 수: ${plainLen.toLocaleString()}자 / 최소 기준: ${minChars.toLocaleString()}자 (${gap >= 0 ? `+${gap}` : gap})`;
-
+  const modal = document.getElementById("article-modal");
   const body = document.getElementById("modal-body");
-  body.innerHTML = `
-    <p style="color:var(--text-muted);margin-bottom:12px">
-      썸네일 텍스트: ${escapeHtml(article.thumbnailText)}
-    </p>
-    <div>${article.htmlBody}</div>
-  `;
 
-  document.getElementById("article-modal").classList.remove("hidden");
+  if (!modal || !body || !Number.isFinite(id)) {
+    showErrorCard("미리보기를 열 수 없습니다.", "미리보기", "페이지를 새로고침 후 다시 시도해 주세요.");
+    return;
+  }
+
+  try {
+    body.innerHTML = '<p class="empty">원고를 불러오는 중...</p>';
+    modal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+
+    const article = await api(`/api/articles/${id}`);
+    const minChars = lastStatus?.config?.minPlainTextChars ?? 3500;
+    const plainLen = toPlainTextLength(article.htmlBody ?? "");
+    const gap = plainLen - minChars;
+
+    document.getElementById("modal-title").textContent = article.title ?? "원고 미리보기";
+    document.getElementById("modal-meta").textContent =
+      `글자 수: ${plainLen.toLocaleString()}자 / 최소 기준: ${minChars.toLocaleString()}자 (${gap >= 0 ? `+${gap}` : gap})`;
+
+    const iframe = document.createElement("iframe");
+    iframe.className = "article-preview-frame";
+    iframe.title = "원고 본문 미리보기";
+    iframe.setAttribute(
+      "sandbox",
+      "allow-same-origin",
+    );
+    iframe.srcdoc = buildPreviewDocument(stripScripts(article.htmlBody ?? ""));
+
+    body.replaceChildren();
+    const label = document.createElement("p");
+    label.className = "preview-thumb-label";
+    label.textContent = `썸네일 텍스트: ${article.thumbnailText ?? ""}`;
+    body.append(label, iframe);
+  } catch (err) {
+    closeModal();
+    const error = normalizeError(err);
+    showErrorCard(error.message, "미리보기", error.hint);
+  }
 }
 
 function closeModal() {
-  document.getElementById("article-modal").classList.add("hidden");
+  document.getElementById("article-modal")?.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  const body = document.getElementById("modal-body");
+  if (body) body.replaceChildren();
 }
 
 async function uploadSession(platform, file) {
@@ -489,6 +541,11 @@ function purgeLegacyLoginUi() {
 
 async function init() {
   purgeLegacyLoginUi();
+  bindArticlePreviewClicks();
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
 
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("run-btn").addEventListener("click", runPipeline);

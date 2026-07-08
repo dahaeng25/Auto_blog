@@ -491,10 +491,14 @@ body {
 }
 
 /* Modal */
+body.modal-open {
+  overflow: hidden;
+}
+
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -528,4 +532,19 @@ body {
   max-width: 100%;
   border-radius: 8px;
   margin-bottom: 16px;
+}
+
+.preview-thumb-label {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+}
+
+.article-preview-frame {
+  width: 100%;
+  min-height: 360px;
+  height: 55vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
 }

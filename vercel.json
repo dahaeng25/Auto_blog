@@ -20,12 +20,20 @@
     },
     "api/dashboard.ts": {
       "maxDuration": 10,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "public/index.html"
+    },
+    "api/files/[name].ts": {
+      "maxDuration": 10,
+      "memory": 256,
+      "includeFiles": "public/{dashboard.js,styles.css,index.html}"
     }
   },
   "rewrites": [
     { "source": "/", "destination": "/api/dashboard" },
-    { "source": "/app.js", "destination": "/dashboard.js" }
+    { "source": "/dashboard.js", "destination": "/api/files/dashboard.js" },
+    { "source": "/styles.css", "destination": "/api/files/styles.css" },
+    { "source": "/app.js", "destination": "/api/files/dashboard.js" }
   ],
   "crons": [
     {
