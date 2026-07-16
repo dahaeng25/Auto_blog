@@ -5,69 +5,54 @@
   "framework": null,
   "functions": {
     "api/[[...path]].ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
     },
     "api/run.ts": {
       "maxDuration": 300,
-      "memory": 2048,
       "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/run/step.ts": {
       "maxDuration": 300,
-      "memory": 2048,
       "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/cron.ts": {
       "maxDuration": 300,
-      "memory": 2048,
       "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/sessions/[platform]/refresh.ts": {
       "maxDuration": 300,
-      "memory": 2048,
       "includeFiles": "{node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/sessions/[platform].ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
     },
     "api/articles/[id].ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
     },
     "api/articles/[id]/preview.ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
     },
     "api/articles/clear.ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
     },
     "api/auth/signup.ts": {
-      "maxDuration": 15,
-      "memory": 1024
+      "maxDuration": 15
     },
     "api/auth/login.ts": {
-      "maxDuration": 15,
-      "memory": 1024
+      "maxDuration": 15
     },
     "api/auth/logout.ts": {
-      "maxDuration": 10,
-      "memory": 512
+      "maxDuration": 10
     },
     "api/auth/me.ts": {
-      "maxDuration": 10,
-      "memory": 512
+      "maxDuration": 10
     },
     "api/dashboard.ts": {
       "maxDuration": 10,
-      "memory": 1024,
       "includeFiles": "public/index.html"
     },
     "api/files/[name].ts": {
       "maxDuration": 10,
-      "memory": 256,
       "includeFiles": "public/{dashboard.js,styles.css,index.html}"
     }
   },
