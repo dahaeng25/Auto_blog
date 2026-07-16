@@ -14,6 +14,7 @@ let lastLogs = [];
 let lastStatus = null;
 let currentUser = null;
 let authMode = "login";
+let envLoginAvailable = { naver: false, tistory: false };
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -574,6 +575,12 @@ async function loadStatus(options = {}) {
     }
   }
   updateConnectPanelStatus(data.sessionDetails);
+  if (data.config?.envLoginAvailable) {
+    envLoginAvailable = {
+      naver: Boolean(data.config.envLoginAvailable.naver),
+      tistory: Boolean(data.config.envLoginAvailable.tistory),
+    };
+  }
   document.getElementById("run-btn").disabled = data.isRunning;
 
   renderProgress(job, lastLogs, {
@@ -944,8 +951,6 @@ function closeModal() {
   const body = document.getElementById("modal-body");
   if (body) body.replaceChildren();
 }
-
-let envLoginAvailable = { naver: false, tistory: false };
 
 function openPlatformLogin(platform) {
   const screen = document.getElementById("platform-login-screen");
@@ -1492,14 +1497,6 @@ async function init() {
     .querySelector(".modal-backdrop")
     ?.addEventListener("click", closeModal);
 
-  document.getElementById("upload-naver")?.addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) uploadSession("naver", file);
-  });
-  document.getElementById("upload-tistory")?.addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) uploadSession("tistory", file);
-  });
   document.getElementById("upload-thumb-bg")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) void uploadThumbnailBackground(file);
@@ -1508,19 +1505,24 @@ async function init() {
     void clearThumbnailBackground();
   });
 
-  document.querySelectorAll(".paste-upload-btn").forEach((btn) => {
+  document.querySelectorAll(".btn-connect").forEach((btn) => {
     btn.addEventListener("click", () => {
       const platform = btn.dataset.platform;
-      if (platform) void uploadPastedSession(platform);
+      if (platform) openPlatformLogin(platform);
     });
   });
-
-  document.querySelectorAll(".session-refresh-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const platform = btn.dataset.platform;
-      if (platform) void refreshSession(platform);
+  document
+    .getElementById("platform-login-back")
+    ?.addEventListener("click", () => closePlatformLogin());
+  document
+    .getElementById("platform-login-form")
+    ?.addEventListener("submit", (e) => void handlePlatformLoginSubmit(e));
+  document
+    .getElementById("platform-login-env-btn")
+    ?.addEventListener("click", () => {
+      const platform = document.getElementById("platform-login-platform")?.value;
+      if (platform) void connectPlatform(platform);
     });
-  });
 
   const ok = await checkAuth();
   if (!ok) return;
@@ -1543,7 +1545,7 @@ async function init() {
       error.message,
       stage,
       error.hint ??
-        "상단 세션 업로드·로그인 상태를 확인한 뒤 새로고침하세요.",
+        "계정 연결 상태를 확인한 뒤 새로고침해 주세요.",
     );
   }
 }
