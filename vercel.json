@@ -4,7 +4,7 @@
   "buildCommand": "npm run build",
   "framework": null,
   "functions": {
-    "api/[[...path]].ts": {
+    "api/proxy.ts": {
       "maxDuration": 30
     },
     "api/run.ts": {
@@ -23,30 +23,6 @@
       "maxDuration": 300,
       "includeFiles": "{node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
-    "api/sessions/[platform].ts": {
-      "maxDuration": 30
-    },
-    "api/articles/[id].ts": {
-      "maxDuration": 30
-    },
-    "api/articles/[id]/preview.ts": {
-      "maxDuration": 30
-    },
-    "api/articles/clear.ts": {
-      "maxDuration": 30
-    },
-    "api/auth/signup.ts": {
-      "maxDuration": 15
-    },
-    "api/auth/login.ts": {
-      "maxDuration": 15
-    },
-    "api/auth/logout.ts": {
-      "maxDuration": 10
-    },
-    "api/auth/me.ts": {
-      "maxDuration": 10
-    },
     "api/dashboard.ts": {
       "maxDuration": 10,
       "includeFiles": "public/index.html"
@@ -60,7 +36,11 @@
     { "source": "/", "destination": "/api/dashboard" },
     { "source": "/dashboard.js", "destination": "/api/files/dashboard.js" },
     { "source": "/styles.css", "destination": "/api/files/styles.css" },
-    { "source": "/app.js", "destination": "/api/files/dashboard.js" }
+    { "source": "/app.js", "destination": "/api/files/dashboard.js" },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/proxy?p=:path*"
+    }
   ],
   "crons": [
     {
