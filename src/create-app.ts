@@ -148,11 +148,7 @@ export async function createApp(
             username: sessionUser.username,
           };
           request.authUser = user;
-          if (!isPublicPath(request.url)) {
-            runWithUser(user, () => done());
-            return;
-          }
-          // 공개 경로도 세션이 있으면 컨텍스트 유지 (/api/auth/me 등)
+          // 공개·보호 경로 모두 ALS 유지 (/api/auth/me, /api/status 등)
           runWithUser(user, () => done());
           return;
         }
@@ -603,11 +599,24 @@ export async function createApp(
 
     const json = JSON.stringify(validated.state);
     try {
-      await runWithUser(user, () => saveStoredSession(platform as Platform, json));
+      await runWithUser(user, async () => {
+        await saveStoredSession(platform as Platform, json);
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({ error: "로그인이 필요합니다." });
+      }
+      if (isLikelyDbConnectionError(message)) {
+        return reply.status(503).send({
+          error:
+            "세션 저장 실패. Vercel에 TURSO_DATABASE_URL / TURSO_AUTH_TOKEN 이 설정됐는지 확인하세요.",
+          detail: message,
+        });
+      }
       return reply.status(500).send({
         error: `세션 저장에 실패했습니다: ${message}`,
+        detail: message,
       });
     }
 
