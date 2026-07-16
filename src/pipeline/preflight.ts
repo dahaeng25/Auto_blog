@@ -63,7 +63,7 @@ export async function assertOrchestrationReady(
 
       if (!(await hasSession(platform))) {
         errors.push(
-          `${PLATFORMS[platform].name} 세션이 없습니다. npm run auth:setup 실행 후 auth/${platform}_state.json 이 생성됐는지 확인하세요.`,
+          `${PLATFORMS[platform].name}가 연결되지 않았습니다. 대시보드 「계정 연결」에서 로그인해 주세요.`,
         );
       }
     }

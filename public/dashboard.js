@@ -89,18 +89,18 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
 
       const statusText =
         valid === "ok"
-          ? "유효"
+          ? "연결됨"
           : valid === "expired"
-            ? "만료"
-            : "미확인";
+            ? "다시 연결 필요"
+            : hasSession
+              ? "연결됨"
+              : "연결 안 됨";
       const verification =
         info?.verifiedAt
           ? info?.verifiedValid
-            ? " (검증됨)"
-            : " (검증실패)"
-          : valid === "ok"
-            ? " (쿠키기반)"
-            : "";
+            ? " (확인됨)"
+            : " (확인 실패)"
+          : "";
 
       const loginSource =
         info?.accountIdSource === "env"
@@ -109,9 +109,6 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
 
       const blogSource =
         info?.blogIdSource === "env" ? " (설정 기준)" : "";
-
-      const lastVerified =
-        info?.verifiedAt ? `마지막 검증: ${escapeHtml(formatDate(info.verifiedAt))}` : "";
 
       const title = info?.message ? escapeHtml(info.message) : "";
 
@@ -124,7 +121,6 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
           <div class="session-row-line">로그인 ID: ${escapeHtml(accountId)}${escapeHtml(loginSource)}</div>
           <div class="session-row-line">블로그: ${escapeHtml(blogId)}${escapeHtml(blogSource)}</div>
           <div class="session-row-line session-row-status">상태: ${escapeHtml(statusText)}${escapeHtml(verification)}</div>
-          ${lastVerified ? `<div class="session-row-note">${lastVerified}</div>` : ""}
         </div>
       `;
     })
@@ -779,9 +775,9 @@ async function runPipelineStep(step) {
       if (missing.length > 0) {
         const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
         throw {
-          message: `${labels} 세션이 없습니다.`,
+          message: `${labels} 연결이 없습니다.`,
           stage: "발행",
-          hint: "상단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
+          hint: "「계정 연결」에서 다시 로그인해 주세요.",
         };
       }
     }
@@ -846,9 +842,9 @@ async function runPipeline() {
       if (missing.length > 0) {
         const labels = missing.map((p) => PLATFORM_LABELS[p] ?? p).join(" · ");
         throw {
-          message: `${labels} 세션이 없습니다.`,
+          message: `${labels} 연결이 없습니다.`,
           stage: "발행",
-          hint: "상단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
+          hint: "「계정 연결」에서 다시 로그인해 주세요.",
         };
       }
     }

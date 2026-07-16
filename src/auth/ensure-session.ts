@@ -224,7 +224,7 @@ export async function ensureValidSession(
 
   // 2) 자동 로그인
   const credentials = resolveCredentials(platform, options.credentials);
-  if (!credentials || (!options.credentials && !config.authAutoLogin)) {
+  if (!credentials) {
     if (platform === "google") {
       await notifyAutoLoginFailure(platform);
       throw new Error(
@@ -237,7 +237,11 @@ export async function ensureValidSession(
     );
   }
 
-  if (!canLogin(platform, options.credentials)) {
+  // 발행 중 자동 폴백은 AUTH_AUTO_LOGIN이 켜져 있을 때만.
+  // 대시보드 「계정 연결」(force) 또는 폼 자격증명은 항상 허용.
+  const userInitiated =
+    force || Boolean(options.credentials?.id && options.credentials.password);
+  if (!userInitiated && !config.authAutoLogin) {
     await notifyAutoLoginFailure(platform);
     throw new Error(
       sessionExpiredMessage(platform) + `\n\n${connectHint()}`,
