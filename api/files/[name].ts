@@ -29,5 +29,9 @@ export default function handler(
 
   res.setHeader("Content-Type", contentType);
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Vercel-CDN-Cache-Control", "no-store");
   res.status(200).send(fs.readFileSync(filePath));
 }

@@ -134,6 +134,10 @@ export async function createApp(
     version: "0.4.0",
     platform: config.deploymentMode,
     auth: "session",
+    commit:
+      process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ??
+      process.env.VERCEL_DEPLOYMENT_ID?.slice(0, 8) ??
+      null,
   }));
 
   app.post("/api/auth/signup", async (request, reply) => {
