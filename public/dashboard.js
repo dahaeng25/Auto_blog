@@ -15,6 +15,9 @@ let lastStatus = null;
 let currentUser = null;
 let authMode = "login";
 let envLoginAvailable = { naver: false, tistory: false };
+let connectFeatures = { headedManualLogin: false, loginPreview: false };
+let activeConnectRequest = { platform: null, username: "", password: "" };
+const CONNECT_FALLBACK_MS = 45_000;
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
