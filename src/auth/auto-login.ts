@@ -7,9 +7,10 @@ import {
   isTistoryLoggedIn,
 } from "./login-check.js";
 import {
+  captureConnectScreenshot,
+  describeLoginPage,
   fillFieldByEvaluate,
-  isManualAuthScreen,
-  waitForManualAuth,
+  waitForLoginComplete,
 } from "./auth-wait.js";
 import {
   navigateToWritePage,
@@ -24,10 +25,19 @@ export type PlatformCredentials = {
   password: string;
 };
 
-/** 서버리스에서는 대기 시간을 줄여 함수 타임아웃 여유를 확보 */
-function loginPause(ms: number): Promise<void> {
-  const scaled = config.isVercel ? Math.min(ms, Math.round(ms * 0.55)) : ms;
-  return humanPause(Math.max(400, scaled));
+/** 서버리스: 입력 단계만 짧게, 인증 대기는 축소하지 않음 */
+function loginPause(ms: number, phase: "input" | "wait" = "input"): Promise<void> {
+  const scaled =
+    config.isVercel && phase === "input"
+      ? Math.min(ms, Math.round(ms * 0.6))
+      : ms;
+  return humanPause(Math.max(phase === "wait" ? 1500 : 400, scaled));
+}
+
+function loginWaitBudgetMs(): number {
+  return config.isVercel
+    ? Math.max(config.auth2faWaitMs, 180_000)
+    : Math.max(config.auth2faWaitMs, 120_000);
 }
 
 /** 네이버 ID/PW 자동 로그인 */
@@ -45,22 +55,25 @@ export async function autoLoginNaver(
   }
 
   console.log("[자동 로그인] 네이버 로그인 시도...");
-  await reportConnectProgress("로그인 페이지를 여는 중…");
+  await reportConnectProgress("네이버 로그인 페이지를 여는 중…");
   await page.goto(PLATFORMS.naver.loginUrl, {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
   await loginPause(1500);
+  await reportConnectProgress(`네이버 ${await describeLoginPage(page)}`);
+  await captureConnectScreenshot(page);
 
-  await reportConnectProgress("아이디를 입력하는 중…");
+  await reportConnectProgress("네이버 아이디를 입력하는 중…");
   await fillFieldByEvaluate(page, "#id", naverId);
-  await reportConnectProgress("비밀번호를 입력하는 중…");
+  await reportConnectProgress("네이버 비밀번호를 입력하는 중…");
   await fillFieldByEvaluate(page, "#pw", naverPassword);
 
   const keepLogin = page.locator("#keep").first();
   try {
     if ((await keepLogin.count()) > 0 && !(await keepLogin.isChecked())) {
       await humanClick(keepLogin);
+      await reportConnectProgress("로그인 상태 유지를 선택했습니다.");
     }
   } catch {
     // ignore
@@ -69,35 +82,27 @@ export async function autoLoginNaver(
   const loginBtn = page
     .locator('#log\\.login, button.btn_login, input.btn_global[type="submit"]')
     .first();
-  await reportConnectProgress("로그인 버튼을 누르는 중…");
+  await reportConnectProgress("네이버 로그인 버튼을 누르는 중…");
   await humanClick(loginBtn);
-  await loginPause(3000);
-  await reportConnectProgress("로그인 결과를 확인하는 중…");
+  await loginPause(3000, "wait");
+  await reportConnectProgress("네이버 로그인 요청을 보냈습니다. 인증 여부를 확인하는 중…");
+  await captureConnectScreenshot(page, "로그인 결과를 확인하는 중…");
 
-  for (let i = 0; i < 30; i++) {
-    if (await isNaverLoggedIn(page.context())) {
-      console.log("[자동 로그인] 네이버 로그인 성공");
-      return;
-    }
+  const loggedIn = await waitForLoginComplete(
+    page,
+    () => isNaverLoggedIn(page.context()),
+    "네이버",
+    { maxWaitMs: loginWaitBudgetMs() },
+  );
 
-    if (await isManualAuthScreen(page)) {
-      await reportConnectProgress("추가 인증 화면을 확인하는 중…");
-      const completed = await waitForManualAuth(
-        page,
-        () => isNaverLoggedIn(page.context()),
-        "네이버",
-      );
-      if (completed) return;
-      throw new Error(
-        "네이버 추가 인증(2단계·보안문자)이 필요해 자동 로그인에 실패했습니다. 잠시 후 다시 연결해 주세요.",
-      );
-    }
-
-    await loginPause(1000);
+  if (loggedIn) {
+    console.log("[자동 로그인] 네이버 로그인 성공");
+    return;
   }
 
+  const screen = await describeLoginPage(page);
   throw new Error(
-    "네이버 로그인에 실패했습니다. 아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
+    `네이버 로그인에 실패했습니다. (${screen}) 아이디·비밀번호를 확인하거나, 휴대폰 네이버 앱에서 승인한 뒤 다시 연결해 주세요.`,
   );
 }
 
@@ -116,7 +121,7 @@ async function clickKakaoLoginOnTistory(page: Page): Promise<void> {
     try {
       if ((await btn.count()) > 0 && (await btn.isVisible())) {
         await humanClick(btn);
-        await loginPause(3000);
+        await loginPause(3000, "wait");
         return;
       }
     } catch {
@@ -189,7 +194,7 @@ async function fillKakaoLoginForm(
     try {
       if ((await btn.count()) > 0 && (await btn.isVisible())) {
         await humanClick(btn);
-        await loginPause(3000);
+        await loginPause(3000, "wait");
         return;
       }
     } catch {
@@ -224,8 +229,9 @@ async function handleKakaoPostLogin(page: Page): Promise<void> {
       const btn = page.locator(sel).first();
       try {
         if ((await btn.count()) > 0 && (await btn.isVisible())) {
+          await reportConnectProgress("카카오 연결 동의를 진행하는 중…");
           await humanClick(btn);
-          await loginPause(2000);
+          await loginPause(2000, "wait");
           break;
         }
       } catch {
@@ -233,7 +239,7 @@ async function handleKakaoPostLogin(page: Page): Promise<void> {
       }
     }
 
-    await loginPause(1500);
+    await loginPause(1500, "wait");
   }
 }
 
@@ -260,6 +266,8 @@ export async function autoLoginTistory(
     timeout: 60_000,
   });
   await loginPause(2000);
+  await reportConnectProgress(`티스토리 ${await describeLoginPage(page)}`);
+  await captureConnectScreenshot(page);
 
   await reportConnectProgress("카카오 로그인으로 이동하는 중…");
   await clickKakaoLoginOnTistory(page);
@@ -276,38 +284,32 @@ export async function autoLoginTistory(
       { waitUntil: "domcontentloaded", timeout: 60_000 },
     );
     await loginPause(2000);
+    await reportConnectProgress(`카카오 ${await describeLoginPage(page)}`);
+    await captureConnectScreenshot(page);
   }
 
-  await reportConnectProgress("카카오 아이디·비밀번호를 입력하는 중…");
+  await reportConnectProgress("카카오 아이디를 입력하는 중…");
   await fillKakaoLoginForm(page, kakaoId, kakaoPassword);
+  await reportConnectProgress("카카오 로그인 버튼을 누르는 중…");
   await handleKakaoPostLogin(page);
-  await reportConnectProgress("로그인 결과를 확인하는 중…");
+  await reportConnectProgress("카카오 로그인 요청을 보냈습니다. 인증 여부를 확인하는 중…");
+  await captureConnectScreenshot(page, "로그인 결과를 확인하는 중…");
 
-  for (let i = 0; i < 40; i++) {
-    if (await isTistoryLoggedIn(page.context())) {
-      console.log("[자동 로그인] 티스토리 로그인 성공");
-      return;
-    }
+  const loggedIn = await waitForLoginComplete(
+    page,
+    () => isTistoryLoggedIn(page.context()),
+    "티스토리",
+    { maxWaitMs: loginWaitBudgetMs() },
+  );
 
-    if (await isManualAuthScreen(page)) {
-      await reportConnectProgress("추가 인증 화면을 확인하는 중…");
-      const completed = await waitForManualAuth(
-        page,
-        () => isTistoryLoggedIn(page.context()),
-        "티스토리(카카오)",
-      );
-      if (completed) return;
-      throw new Error(
-        "티스토리/카카오 추가 인증이 필요해 자동 로그인에 실패했습니다. 잠시 후 다시 연결해 주세요.",
-      );
-    }
-
-    await handleKakaoPostLogin(page);
-    await loginPause(1000);
+  if (loggedIn) {
+    console.log("[자동 로그인] 티스토리 로그인 성공");
+    return;
   }
 
+  const screen = await describeLoginPage(page);
   throw new Error(
-    "티스토리 로그인에 실패했습니다. 카카오 아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
+    `티스토리 로그인에 실패했습니다. (${screen}) 카카오 계정을 확인하거나, 휴대폰 카카오톡에서 승인한 뒤 다시 연결해 주세요.`,
   );
 }
 

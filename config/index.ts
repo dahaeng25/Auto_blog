@@ -108,8 +108,8 @@ export const config = {
   authAutoLogin: process.env.AUTH_AUTO_LOGIN !== "false",
   /** 자동 로그인 시 브라우저 표시 (봇 차단 완화, 기본 false=창 보임) */
   authLoginHeadless: process.env.AUTH_LOGIN_HEADLESS === "true",
-  /** 2단계 인증 수동 완료 대기(ms). 0이면 대기 안 함. headless=false 일 때만 */
-  auth2faWaitMs: Number(process.env.AUTH_2FA_WAIT_MS ?? "180000"),
+  /** 2단계 인증·앱 승인 대기(ms). Vercel headless에서도 푸시 승인을 기다림 */
+  auth2faWaitMs: Number(process.env.AUTH_2FA_WAIT_MS ?? "240000"),
   naverId: process.env.NAVER_ID ?? "",
   naverPassword: process.env.NAVER_PASSWORD ?? "",
   kakaoId: process.env.KAKAO_ID ?? "",

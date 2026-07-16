@@ -545,12 +545,21 @@ body {
 
 .connect-progress-log {
   margin: 0;
-  padding: 0;
+  padding: 0.5rem 0.75rem;
   list-style: none;
-  max-height: 140px;
+  max-height: 200px;
   overflow-y: auto;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border-radius: 8px;
+}
+
+.connect-log-time {
+  color: var(--text-muted, #888);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.35rem;
 }
 
 .connect-progress-log li {

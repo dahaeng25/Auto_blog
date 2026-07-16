@@ -169,8 +169,21 @@ function renderConnectProgress(job, scope = getConnectUiScope()) {
 
   const logs = Array.isArray(job.stepLogs) ? job.stepLogs : [];
   logEl.innerHTML = logs
-    .map((entry) => `<li>${escapeHtml(entry.message)}</li>`)
+    .map((entry) => {
+      const time = entry.at
+        ? new Date(entry.at).toLocaleTimeString("ko-KR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        : "";
+      const timeHtml = time
+        ? `<span class="connect-log-time">${escapeHtml(time)}</span> `
+        : "";
+      return `<li>${timeHtml}${escapeHtml(entry.message)}</li>`;
+    })
     .join("");
+  logEl.scrollTop = logEl.scrollHeight;
 
   if (shot && job.screenshotBase64) {
     shot.src = `data:image/jpeg;base64,${job.screenshotBase64}`;
@@ -181,7 +194,7 @@ function renderConnectProgress(job, scope = getConnectUiScope()) {
 /** 계정 연결 비동기 작업이 끝날 때까지 /api/status 폴링 */
 async function pollConnectJob(
   platform,
-  { timeoutMs = 280_000, intervalMs = 2500, scope = getConnectUiScope() } = {},
+  { timeoutMs = 310_000, intervalMs = 2000, scope = getConnectUiScope() } = {},
 ) {
   const deadline = Date.now() + timeoutMs;
   const fallbackAt = Date.now() + CONNECT_FALLBACK_MS;

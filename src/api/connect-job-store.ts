@@ -43,7 +43,7 @@ const MAX_STEP_LOGS = 40;
 
 /** maxDuration(300s) + 여유 — 서버리스 강제 종료 시 connecting 고착 방지 */
 const STALE_CONNECTING_MS = Number(
-  process.env.CONNECT_JOB_STALE_MS ?? String(6 * 60 * 1000),
+  process.env.CONNECT_JOB_STALE_MS ?? String(7 * 60 * 1000),
 );
 
 let schemaReady = false;

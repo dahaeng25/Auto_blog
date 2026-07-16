@@ -29,7 +29,7 @@ import {
   normalizeNaverBlogId,
   normalizeTistoryBlogName,
 } from "./write-page-nav.js";
-import { isManualAuthScreen } from "./auth-wait.js";
+import { isManualAuthScreen, captureConnectScreenshot } from "./auth-wait.js";
 
 export type EnsureSessionOptions = {
   /** 저장된 세션을 무시하고 다시 로그인 */
@@ -70,14 +70,7 @@ async function notifyAutoLoginFailure(platform: Platform): Promise<void> {
 }
 
 async function captureLoginPreview(page: Page): Promise<void> {
-  if (config.isVercel) {
-    try {
-      const shot = await page.screenshot({ type: "jpeg", quality: 52 });
-      await reportConnectProgress("로그인 화면을 확인하는 중…", shot);
-    } catch {
-      // ignore
-    }
-  }
+  await captureConnectScreenshot(page, "로그인 화면을 확인하는 중…");
 }
 
 async function finalizeLoginSession(
@@ -215,8 +208,9 @@ async function performManualLogin(
       );
     }
 
-    const deadline = Date.now() + (headed ? 5 * 60_000 : 3 * 60_000);
+    const deadline = Date.now() + (headed ? 5 * 60_000 : config.auth2faWaitMs);
     let previewAt = 0;
+    let progressAt = 0;
 
     while (Date.now() < deadline) {
       if (await hasLoginCookies(loginSession.context, platform)) {
@@ -227,15 +221,19 @@ async function performManualLogin(
         await reportConnectProgress(
           headed
             ? "추가 인증 화면입니다. 브라우저 창에서 인증을 완료해 주세요."
-            : "추가 인증(캡차·2단계)이 필요합니다. 잠시 후 다시 시도해 주세요.",
+            : "추가 인증이 필요합니다. 휴대폰 앱·알림에서 승인해 주세요.",
         );
         await captureLoginPreview(page);
       } else if (headed) {
-        await reportConnectProgress("브라우저 창에서 로그인을 기다리는 중…");
-      } else if (Date.now() - previewAt > 4000) {
+        if (Date.now() - progressAt > 8000) {
+          progressAt = Date.now();
+          await reportConnectProgress("브라우저 창에서 로그인을 기다리는 중…");
+        }
+      } else if (Date.now() - previewAt > 8000) {
         previewAt = Date.now();
         await captureLoginPreview(page);
-        await reportConnectProgress("로그인 진행을 확인하는 중…");
+        const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        await reportConnectProgress(`로그인 진행을 확인하는 중… (${remaining}초 남음)`);
       }
 
       await humanPause(2000);
