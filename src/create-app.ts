@@ -43,6 +43,14 @@ import { logger } from "./monitoring/logger.js";
 import { isPipelineRunning, runOrchestration, runPipelineStep } from "./pipeline.js";
 import type { PipelineStep } from "./pipeline.js";
 import { saveStoredSession } from "./storage/session-store.js";
+import {
+  clearThumbnailBackground,
+  getThumbnailBackgroundStatus,
+  getUploadedBackgroundBuffer,
+  listSampleBackgrounds,
+  saveSampleThumbnailBackground,
+  saveUploadedThumbnailBackground,
+} from "./storage/thumbnail-background-store.js";
 
 export interface CreateAppOptions {
   /** 정적 대시보드 서빙 (Docker/로컬) */
@@ -123,7 +131,11 @@ export async function createApp(
   options: CreateAppOptions = {},
 ): Promise<FastifyInstance> {
   const { serveStatic = true } = options;
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    /** 썸네일 배경 업로드(base64 JSON)용 — 기본 1MB보다 크게 */
+    bodyLimit: 3 * 1024 * 1024,
+  });
 
   await ensureSchema().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -135,8 +147,9 @@ export async function createApp(
     );
   });
 
-  // callback + runWithUser(done) — enterWith 는 Fastify/Vercel inject 에서
-  // 라우트 핸들러까지 ALS 가 끊겨 requireUserId() 가 실패할 수 있음
+  // resolve 후 run(user, done) — done 자체를 ALS 콜백으로 넘겨
+  // Fastify 이후 훅/핸들러가 같은 async context 를 이어받게 함.
+  // (enterWith 및 run(() => done()) 은 Vercel inject 에서 끊길 수 있음)
   app.addHook("onRequest", (request, reply, done) => {
     void (async () => {
       try {
@@ -148,8 +161,7 @@ export async function createApp(
             username: sessionUser.username,
           };
           request.authUser = user;
-          // 공개·보호 경로 모두 ALS 유지 (/api/auth/me, /api/status 등)
-          runWithUser(user, () => done());
+          runWithUser(user, done);
           return;
         }
 
@@ -674,6 +686,152 @@ export async function createApp(
       return reply.status(500).send({
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  });
+
+  app.get("/api/thumbnail-background", async (request, reply) => {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+    try {
+      return await runWithUser(user, async () => ({
+        ok: true,
+        preference: await getThumbnailBackgroundStatus(),
+        samples: listSampleBackgrounds(),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({ error: "로그인이 필요합니다." });
+      }
+      if (isLikelyDbConnectionError(message)) {
+        return reply.status(503).send({
+          error:
+            "배경 설정 조회 실패. Vercel에 TURSO_DATABASE_URL / TURSO_AUTH_TOKEN 을 확인하세요.",
+          detail: message,
+        });
+      }
+      return reply.status(500).send({ error: message });
+    }
+  });
+
+  app.get("/api/thumbnail-background/image", async (request, reply) => {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+    try {
+      return await runWithUser(user, async () => {
+        const uploaded = await getUploadedBackgroundBuffer();
+        if (!uploaded) {
+          return reply.status(404).send({
+            error: "업로드된 배경 이미지가 없습니다.",
+          });
+        }
+        return reply
+          .type(uploaded.mimeType)
+          .header("Cache-Control", "no-store")
+          .send(uploaded.buffer);
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({ error: "로그인이 필요합니다." });
+      }
+      return reply.status(500).send({ error: message });
+    }
+  });
+
+  app.post("/api/thumbnail-background", async (request, reply) => {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+
+    const body = (request.body ?? {}) as {
+      action?: string;
+      sampleId?: string;
+      imageBase64?: string;
+      mimeType?: string;
+    };
+
+    try {
+      return await runWithUser(user, async () => {
+        if (body.action === "sample") {
+          const sampleId = body.sampleId?.trim();
+          if (!sampleId) {
+            return reply.status(400).send({
+              error: "sampleId가 필요합니다.",
+            });
+          }
+          const preference = await saveSampleThumbnailBackground(sampleId);
+          logger.info(
+            `썸네일 샘플 배경 선택: ${sampleId} (user=${user.id})`,
+          );
+          return { ok: true, preference };
+        }
+
+        if (body.action === "upload") {
+          const imageBase64 = body.imageBase64?.trim();
+          if (!imageBase64) {
+            return reply.status(400).send({
+              error: "imageBase64가 필요합니다.",
+            });
+          }
+          const preference = await saveUploadedThumbnailBackground(
+            imageBase64,
+            body.mimeType?.trim() || "image/png",
+          );
+          logger.info(`썸네일 배경 업로드 완료 (user=${user.id})`);
+          return { ok: true, preference };
+        }
+
+        return reply.status(400).send({
+          error:
+            'action은 "upload" 또는 "sample" 이어야 합니다.',
+        });
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({ error: "로그인이 필요합니다." });
+      }
+      if (isLikelyDbConnectionError(message)) {
+        return reply.status(503).send({
+          error:
+            "배경 저장 실패. Vercel에 TURSO_DATABASE_URL / TURSO_AUTH_TOKEN 을 확인하세요.",
+          detail: message,
+        });
+      }
+      if (
+        /PNG|JPEG|WebP|2MB|빈 이미지|읽을 수 없|알 수 없는 샘플/i.test(
+          message,
+        )
+      ) {
+        return reply.status(400).send({ error: message });
+      }
+      return reply.status(500).send({ error: message });
+    }
+  });
+
+  app.delete("/api/thumbnail-background", async (request, reply) => {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+    try {
+      return await runWithUser(user, async () => {
+        const preference = await clearThumbnailBackground();
+        logger.info(`썸네일 배경 설정 삭제 (user=${user.id})`);
+        return { ok: true, preference };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({ error: "로그인이 필요합니다." });
+      }
+      return reply.status(500).send({ error: message });
     }
   });
 

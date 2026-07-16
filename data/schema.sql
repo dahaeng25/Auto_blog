@@ -81,3 +81,13 @@ CREATE TABLE IF NOT EXISTS platform_sessions (
   updated_at  TEXT    NOT NULL,
   PRIMARY KEY (user_id, platform)
 );
+
+-- 사용자별 썸네일 배경 (업로드 이미지 또는 샘플 그라데이션)
+CREATE TABLE IF NOT EXISTS user_thumbnail_backgrounds (
+  user_id      INTEGER PRIMARY KEY,
+  source       TEXT    NOT NULL,
+  sample_id    TEXT,
+  image_base64 TEXT,
+  mime_type    TEXT,
+  updated_at   TEXT    NOT NULL
+);

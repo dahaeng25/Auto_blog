@@ -522,6 +522,117 @@ body {
   min-height: 1.25em;
 }
 
+/* Thumbnail background */
+.thumb-bg-section {
+  margin-bottom: 16px;
+}
+
+.thumb-bg-layout {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.thumb-bg-upload {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.thumb-bg-samples-wrap {
+  flex: 1.4;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.thumb-bg-preview-wrap {
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 220px;
+  aspect-ratio: 1;
+  background: var(--surface-2);
+}
+
+.thumb-bg-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb-bg-samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.thumb-bg-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.thumb-bg-sample:hover {
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.thumb-bg-sample.selected {
+  border-color: var(--primary);
+}
+
+.thumb-bg-sample-swatch {
+  height: 72px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.thumb-bg-sample-swatch::after {
+  content: "제목 예시";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.thumb-bg-sample-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+.thumb-bg-sample-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  padding: 0 2px;
+  margin: 0;
+}
+
 /* Logs */
 .logs {
   background: #0a0c10;
@@ -1049,6 +1160,17 @@ body.modal-open {
   .upload-row {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .thumb-bg-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .thumb-bg-upload,
+  .thumb-bg-samples-wrap {
+    min-width: 0;
+    width: 100%;
   }
 
   .upload-item {

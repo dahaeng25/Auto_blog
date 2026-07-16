@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=22" />
+  <link rel="stylesheet" href="/styles.css?v=23" />
 </head>
 <body>
   <div id="auth-screen" class="auth-screen">
@@ -120,6 +120,60 @@
         </div>
       </div>
       <p id="upload-message" class="upload-message"></p>
+    </section>
+
+    <section class="card thumb-bg-section">
+      <div class="card-header">
+        <h2>썸네일 배경</h2>
+        <p class="hint">
+          배경 이미지가 있으면 업로드하세요. 없으면 아래 샘플 중 하나를 고르면
+          해당 계정 발행에 사용됩니다. (계정별로 저장)
+        </p>
+      </div>
+      <div class="thumb-bg-layout">
+        <div class="thumb-bg-upload">
+          <div class="upload-item-header">
+            <span class="upload-platform-name">내 배경 이미지</span>
+            <span id="thumb-bg-status" class="badge idle upload-status">미설정</span>
+          </div>
+          <p id="thumb-bg-hint" class="upload-hint">
+            배경이 설정되지 않았습니다. 이미지를 업로드하거나 샘플을 선택하세요.
+          </p>
+          <div class="upload-controls">
+            <label class="upload-file-label">
+              <span class="sr-only">썸네일 배경 파일</span>
+              <input
+                type="file"
+                id="upload-thumb-bg"
+                accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+              />
+            </label>
+            <button
+              type="button"
+              id="thumb-bg-clear-btn"
+              class="btn btn-secondary btn-sm"
+            >
+              선택 해제
+            </button>
+          </div>
+          <p class="topic-hint">PNG · JPEG · WebP · 최대 2MB</p>
+          <div id="thumb-bg-preview-wrap" class="thumb-bg-preview-wrap hidden">
+            <img
+              id="thumb-bg-preview"
+              class="thumb-bg-preview"
+              alt="업로드한 썸네일 배경 미리보기"
+            />
+          </div>
+        </div>
+        <div class="thumb-bg-samples-wrap">
+          <span class="upload-platform-name">샘플 배경</span>
+          <p class="upload-hint">배경이 없을 때 골라 쓰는 미리 만든 그라데이션입니다.</p>
+          <div id="thumb-bg-samples" class="thumb-bg-samples">
+            <p class="empty">샘플을 불러오는 중…</p>
+          </div>
+        </div>
+      </div>
+      <p id="thumb-bg-message" class="upload-message"></p>
     </section>
 
     <section class="actions-bar">

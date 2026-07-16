@@ -17,6 +17,7 @@ import {
   applyThumbnailTemplate,
   injectThumbnailTemplateText,
 } from "./thumbnail-page-scripts.js";
+import { tryResolveUserThumbnailBackground } from "../storage/thumbnail-background-store.js";
 
 const DEFAULT_FALLBACK_GRADIENT =
   "linear-gradient(145deg, #1a3a5c 0%, #2d6a9f 48%, #1e4d73 100%)";
@@ -79,7 +80,29 @@ export class ThumbnailRenderer {
 
   async render(options: ThumbnailRenderOptions): Promise<string> {
     const brand = loadThumbnailBrand();
-    const { brand: renderBrand, baseImagePath } = resolveRenderBrand(brand);
+    const userBg = await tryResolveUserThumbnailBackground();
+
+    let renderBrand: ThumbnailBrandConfig;
+    let baseImagePath: string | null;
+
+    if (userBg?.kind === "image") {
+      renderBrand = {
+        ...brand,
+        background: { type: "image", image: userBg.absolutePath },
+      };
+      baseImagePath = userBg.absolutePath;
+      console.log(`[Thumbnail] 사용자 업로드 배경 사용: ${baseImagePath}`);
+    } else if (userBg?.kind === "gradient") {
+      renderBrand = {
+        ...brand,
+        background: { type: "gradient", gradient: userBg.gradient },
+      };
+      baseImagePath = null;
+      console.log("[Thumbnail] 사용자 선택 샘플 그라데이션 배경 사용");
+    } else {
+      ({ brand: renderBrand, baseImagePath } = resolveRenderBrand(brand));
+    }
+
     const filename = options.outputFilename ?? "thumbnail_최종.png";
     const outputPath = path.join(config.thumbnailsDir, filename);
 
@@ -89,7 +112,7 @@ export class ThumbnailRenderer {
       renderBrand.background.type !== "color"
     ) {
       throw new Error(
-        "썸네일 배경 파일이 없습니다. assets/thumbnail/bg.png 를 확인하세요.",
+        "썸네일 배경이 없습니다. 대시보드에서 배경을 업로드·선택하거나 assets/thumbnail/bg.png 를 확인하세요.",
       );
     }
 

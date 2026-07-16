@@ -731,6 +731,7 @@ async function refreshAll() {
     loadStats(),
     ...(status?.isRunning ? [] : [loadPublishedPosts()]),
     loadInputHistory(),
+    loadThumbnailBackground(),
   ]);
 }
 
@@ -1093,6 +1094,210 @@ async function refreshSession(platform) {
   }
 }
 
+function applyThumbnailBgPreference(preference) {
+  const statusEl = document.getElementById("thumb-bg-status");
+  const hintEl = document.getElementById("thumb-bg-hint");
+  const previewWrap = document.getElementById("thumb-bg-preview-wrap");
+  const previewImg = document.getElementById("thumb-bg-preview");
+
+  if (!statusEl || !hintEl) return;
+
+  hintEl.textContent =
+    preference?.message ??
+    "배경이 설정되지 않았습니다. 이미지를 업로드하거나 샘플을 선택하세요.";
+
+  if (preference?.source === "upload") {
+    statusEl.textContent = "업로드됨";
+    statusEl.className = "badge upload-status success";
+    if (previewWrap && previewImg) {
+      previewWrap.classList.remove("hidden");
+      previewImg.src = `/api/thumbnail-background/image?ts=${Date.now()}`;
+    }
+  } else if (preference?.source === "sample") {
+    statusEl.textContent = preference.sampleName
+      ? `샘플 · ${preference.sampleName}`
+      : "샘플 선택됨";
+    statusEl.className = "badge upload-status success";
+    previewWrap?.classList.add("hidden");
+    if (previewImg) previewImg.removeAttribute("src");
+  } else {
+    statusEl.textContent = "미설정";
+    statusEl.className = "badge upload-status idle";
+    previewWrap?.classList.add("hidden");
+    if (previewImg) previewImg.removeAttribute("src");
+  }
+
+  document.querySelectorAll(".thumb-bg-sample").forEach((btn) => {
+    const selected =
+      preference?.source === "sample" &&
+      btn.dataset.sampleId === preference.sampleId;
+    btn.classList.toggle("selected", selected);
+  });
+}
+
+function renderThumbnailSamples(samples, preference) {
+  const container = document.getElementById("thumb-bg-samples");
+  if (!container) return;
+
+  if (!samples?.length) {
+    container.innerHTML =
+      '<p class="empty">표시할 샘플 배경이 없습니다.</p>';
+    return;
+  }
+
+  container.innerHTML = samples
+    .map((sample) => {
+      const selected =
+        preference?.source === "sample" && preference.sampleId === sample.id
+          ? " selected"
+          : "";
+      return `<button type="button" class="thumb-bg-sample${selected}" data-sample-id="${escapeHtml(sample.id)}" title="${escapeHtml(sample.name)}">
+        <span class="thumb-bg-sample-swatch" style="background:${escapeHtml(sample.gradient)}"></span>
+        <span class="thumb-bg-sample-name">${escapeHtml(sample.name)}</span>
+        <p class="thumb-bg-sample-desc">${escapeHtml(sample.description)}</p>
+      </button>`;
+    })
+    .join("");
+
+  container.querySelectorAll(".thumb-bg-sample").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.sampleId;
+      if (id) void selectThumbnailSample(id);
+    });
+  });
+}
+
+async function loadThumbnailBackground() {
+  const msgEl = document.getElementById("thumb-bg-message");
+  try {
+    const data = await api("/api/thumbnail-background");
+    renderThumbnailSamples(data.samples ?? [], data.preference);
+    applyThumbnailBgPreference(data.preference);
+  } catch (err) {
+    const error = normalizeError(err);
+    const container = document.getElementById("thumb-bg-samples");
+    if (container && !container.querySelector(".thumb-bg-sample")) {
+      container.innerHTML =
+        '<p class="empty">샘플을 불러오지 못했습니다. 새로고침해 주세요.</p>';
+    }
+    if (msgEl) {
+      msgEl.textContent = error.message;
+      msgEl.style.color = "var(--error)";
+    }
+  }
+}
+
+async function uploadThumbnailBackground(file) {
+  const msgEl = document.getElementById("thumb-bg-message");
+  if (!msgEl) return;
+
+  msgEl.style.color = "var(--text-muted)";
+  msgEl.textContent = "배경 이미지 업로드 중…";
+
+  try {
+    if (!file.type.startsWith("image/")) {
+      throw {
+        message: "이미지 파일만 업로드할 수 있습니다.",
+        stage: "썸네일",
+        hint: "PNG, JPEG, WebP 파일을 선택하세요.",
+      };
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      throw {
+        message: "이미지 크기는 2MB 이하여야 합니다.",
+        stage: "썸네일",
+      };
+    }
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("파일을 읽을 수 없습니다."));
+      reader.readAsDataURL(file);
+    });
+
+    const result = await api("/api/thumbnail-background", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "upload",
+        imageBase64: dataUrl,
+        mimeType: file.type || "image/png",
+      }),
+    });
+
+    applyThumbnailBgPreference(result.preference);
+    document.querySelectorAll(".thumb-bg-sample").forEach((btn) => {
+      btn.classList.remove("selected");
+    });
+    msgEl.textContent = "배경 이미지 업로드 완료 — 이후 썸네일 생성에 사용됩니다.";
+    msgEl.style.color = "var(--success)";
+  } catch (err) {
+    const error = normalizeError(err);
+    const hint =
+      /404|실패 \(404\)/.test(error.message)
+        ? "배포가 최신 코드가 아닐 수 있습니다. Vercel Redeploy 후 다시 시도하세요."
+        : error.hint;
+    msgEl.textContent = `${error.message}${hint ? ` — ${hint}` : ""}`;
+    msgEl.style.color = "var(--error)";
+  } finally {
+    const input = document.getElementById("upload-thumb-bg");
+    if (input) input.value = "";
+  }
+}
+
+async function selectThumbnailSample(sampleId) {
+  const msgEl = document.getElementById("thumb-bg-message");
+  if (msgEl) {
+    msgEl.style.color = "var(--text-muted)";
+    msgEl.textContent = "샘플 배경 적용 중…";
+  }
+  try {
+    const result = await api("/api/thumbnail-background", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sample", sampleId }),
+    });
+    applyThumbnailBgPreference(result.preference);
+    if (msgEl) {
+      msgEl.textContent =
+        result.preference?.message ?? "샘플 배경이 적용되었습니다.";
+      msgEl.style.color = "var(--success)";
+    }
+  } catch (err) {
+    const error = normalizeError(err);
+    if (msgEl) {
+      msgEl.textContent = error.message;
+      msgEl.style.color = "var(--error)";
+    }
+  }
+}
+
+async function clearThumbnailBackground() {
+  const msgEl = document.getElementById("thumb-bg-message");
+  if (msgEl) {
+    msgEl.style.color = "var(--text-muted)";
+    msgEl.textContent = "배경 설정 해제 중…";
+  }
+  try {
+    const result = await api("/api/thumbnail-background", {
+      method: "DELETE",
+    });
+    applyThumbnailBgPreference(result.preference);
+    if (msgEl) {
+      msgEl.textContent =
+        "배경 설정을 해제했습니다. 기본(bg.png 또는 그라데이션)을 사용합니다.";
+      msgEl.style.color = "var(--success)";
+    }
+  } catch (err) {
+    const error = normalizeError(err);
+    if (msgEl) {
+      msgEl.textContent = error.message;
+      msgEl.style.color = "var(--error)";
+    }
+  }
+}
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -1264,6 +1469,13 @@ async function init() {
   document.getElementById("upload-tistory")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) uploadSession("tistory", file);
+  });
+  document.getElementById("upload-thumb-bg")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (file) void uploadThumbnailBackground(file);
+  });
+  document.getElementById("thumb-bg-clear-btn")?.addEventListener("click", () => {
+    void clearThumbnailBackground();
   });
 
   document.querySelectorAll(".paste-upload-btn").forEach((btn) => {
