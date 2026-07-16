@@ -77,57 +77,194 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isDesktopClient() {
+  return (
+    window.matchMedia("(min-width: 768px)").matches &&
+    !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  );
+}
+
+function getConnectUiScope() {
+  const screen = document.getElementById("platform-login-screen");
+  return screen && !screen.classList.contains("hidden") ? "modal" : "page";
+}
+
+function connectProgressIds(scope) {
+  if (scope === "modal") {
+    return {
+      wrap: "platform-login-progress-wrap",
+      current: "platform-login-progress-current",
+      log: "platform-login-progress-log",
+      screenshot: "platform-login-screenshot",
+      fallback: "platform-login-fallback",
+      manualBtn: "platform-login-manual-btn",
+      previewBtn: "platform-login-preview-btn",
+      retryBtn: "platform-login-retry-btn",
+    };
+  }
+  return {
+    wrap: "connect-progress-wrap",
+    current: "connect-progress-current",
+    log: "connect-progress-log",
+    screenshot: "connect-progress-screenshot",
+    fallback: "connect-fallback-panel",
+    manualBtn: "connect-manual-btn",
+    previewBtn: "connect-preview-btn",
+    retryBtn: "connect-retry-btn",
+  };
+}
+
+function resetConnectProgressUI(scope = getConnectUiScope()) {
+  const ids = connectProgressIds(scope);
+  document.getElementById(ids.wrap)?.classList.add("hidden");
+  document.getElementById(ids.fallback)?.classList.add("hidden");
+  const logEl = document.getElementById(ids.log);
+  if (logEl) logEl.innerHTML = "";
+  const currentEl = document.getElementById(ids.current);
+  if (currentEl) currentEl.textContent = "";
+  const shot = document.getElementById(ids.screenshot);
+  if (shot) {
+    shot.classList.add("hidden");
+    shot.removeAttribute("src");
+  }
+}
+
+function updateConnectFallbackButtons(scope, features = connectFeatures) {
+  const ids = connectProgressIds(scope);
+  const manualBtn = document.getElementById(ids.manualBtn);
+  const previewBtn = document.getElementById(ids.previewBtn);
+  if (manualBtn) {
+    manualBtn.classList.toggle("hidden", !features.headedManualLogin);
+  }
+  if (previewBtn) {
+    previewBtn.classList.toggle("hidden", !features.loginPreview);
+  }
+}
+
+function showConnectFallback(scope = getConnectUiScope(), visible = true) {
+  const ids = connectProgressIds(scope);
+  const panel = document.getElementById(ids.fallback);
+  if (!panel) return;
+  if (visible) {
+    panel.classList.remove("hidden");
+    updateConnectFallbackButtons(scope);
+  } else {
+    panel.classList.add("hidden");
+  }
+}
+
+function renderConnectProgress(job, scope = getConnectUiScope()) {
+  if (!job) return;
+  const ids = connectProgressIds(scope);
+  const wrap = document.getElementById(ids.wrap);
+  const currentEl = document.getElementById(ids.current);
+  const logEl = document.getElementById(ids.log);
+  const shot = document.getElementById(ids.screenshot);
+  if (!wrap || !currentEl || !logEl) return;
+
+  wrap.classList.remove("hidden");
+
+  const current = job.currentStep || (job.status === "connecting" ? "연결 중…" : "");
+  currentEl.textContent = current;
+
+  const logs = Array.isArray(job.stepLogs) ? job.stepLogs : [];
+  logEl.innerHTML = logs
+    .map((entry) => `<li>${escapeHtml(entry.message)}</li>`)
+    .join("");
+
+  if (shot && job.screenshotBase64) {
+    shot.src = `data:image/jpeg;base64,${job.screenshotBase64}`;
+    shot.classList.remove("hidden");
+  }
+}
+
 /** 계정 연결 비동기 작업이 끝날 때까지 /api/status 폴링 */
-async function pollConnectJob(platform, { timeoutMs = 280_000, intervalMs = 2500 } = {}) {
+async function pollConnectJob(
+  platform,
+  { timeoutMs = 280_000, intervalMs = 2500, scope = getConnectUiScope() } = {},
+) {
   const deadline = Date.now() + timeoutMs;
+  const fallbackAt = Date.now() + CONNECT_FALLBACK_MS;
   let lastError = null;
+  let fallbackShown = false;
 
   while (Date.now() < deadline) {
     await sleep(intervalMs);
     try {
       const data = await api("/api/status");
       lastStatus = data;
+      if (data.config?.connectFeatures) {
+        connectFeatures = {
+          headedManualLogin: Boolean(data.config.connectFeatures.headedManualLogin),
+          loginPreview: Boolean(data.config.connectFeatures.loginPreview),
+        };
+      }
       updateConnectPanelStatus(data.sessionDetails, data.connectJobs);
       const job = data.connectJobs?.[platform];
       if (!job) continue;
 
+      renderConnectProgress(job, scope);
+
+      if (
+        !fallbackShown &&
+        isDesktopClient() &&
+        job.status === "connecting" &&
+        Date.now() >= fallbackAt
+      ) {
+        fallbackShown = true;
+        showConnectFallback(scope, true);
+      }
+
       if (job.status === "connected") {
+        showConnectFallback(scope, false);
         return { ok: true, job, data };
       }
       if (job.status === "failed") {
+        showConnectFallback(scope, true);
         throw {
           message: job.lastError || "연결에 실패했습니다.",
           stage: "계정 연결",
           hint: "아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
         };
       }
-      // connecting / idle → 계속 대기
     } catch (err) {
       if (err && typeof err === "object" && err.stage === "계정 연결") throw err;
       lastError = err;
     }
   }
 
+  showConnectFallback(scope, true);
   throw {
     message:
       lastError?.message ||
       "연결 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
     stage: "계정 연결",
+    timedOut: true,
     hint: "추가 인증(캡차·2단계)이 있거나 서버 시간이 부족할 수 있습니다.",
   };
 }
 
-async function connectPlatform(platform, { username = "", password = "" } = {}) {
+async function connectPlatform(
+  platform,
+  { username = "", password = "", manual = false } = {},
+) {
   const label = PLATFORM_LABELS[platform] ?? platform;
+  const scope = getConnectUiScope();
   const msgEl = document.getElementById("connect-message");
   const statusEl = document.getElementById("platform-login-status");
   const submit = document.getElementById("platform-login-submit");
   const envBtn = document.getElementById("platform-login-env-btn");
 
+  activeConnectRequest = { platform, username, password };
+
   const setBusy = (busy) => {
     if (submit) {
       submit.disabled = busy;
-      submit.textContent = busy ? "연결 중…" : "로그인하고 연결";
+      submit.textContent = busy
+        ? manual
+          ? "직접 로그인 준비 중…"
+          : "연결 중…"
+        : "로그인하고 연결";
     }
     if (envBtn) envBtn.disabled = busy;
     document.querySelectorAll(".btn-connect").forEach((btn) => {
@@ -135,32 +272,42 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
     });
   };
 
+  resetConnectProgressUI(scope);
+  showConnectFallback(scope, false);
   setBusy(true);
   if (msgEl) {
     msgEl.style.color = "var(--text-muted)";
-    msgEl.textContent = `${label} 연결 중… 잠시만 기다려 주세요.`;
+    msgEl.textContent = manual
+      ? `${label} 직접 로그인을 준비하는 중…`
+      : `${label} 연결 중… 잠시만 기다려 주세요.`;
   }
   if (statusEl) {
     statusEl.className = "platform-login-status";
-    statusEl.textContent = "로그인 중입니다. 최대 1~2분 걸릴 수 있어요.";
+    statusEl.textContent = manual
+      ? connectFeatures.headedManualLogin
+        ? "브라우저 창이 열리면 직접 로그인해 주세요."
+        : "로그인 화면을 준비하는 중입니다."
+      : "로그인 중입니다. 아래 진행 로그를 확인해 주세요.";
   }
   clearErrorCard();
 
   try {
-    const body = { force: true, phase: "start" };
+    const body = { force: true, phase: "start", manual: manual || undefined };
     if (username && password) {
       body.username = username;
       body.password = password;
     }
 
-    // 202 즉시 수락 — Playwright는 phase=run(또는 로컬 백그라운드)에서 실행
     const start = await api(`/api/sessions/${platform}/refresh`, {
       method: "POST",
       body: JSON.stringify(body),
     });
 
+    if (start?.connectJob) {
+      renderConnectProgress(start.connectJob, scope);
+    }
+
     if (start?.needsClientRun) {
-      // Vercel: 긴 로그인은 별도 요청(전용 라우트 maxDuration). HTML 타임아웃은 무시하고 폴링이 판정.
       void fetch(`/api/sessions/${platform}/refresh`, {
         method: "POST",
         credentials: "include",
@@ -170,10 +317,7 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
     }
 
     if (start?.status !== "connected") {
-      if (statusEl) {
-        statusEl.textContent = "연결 중… 상태를 확인하는 중입니다.";
-      }
-      await pollConnectJob(platform);
+      await pollConnectJob(platform, { scope });
     }
 
     if (statusEl) {
@@ -184,6 +328,7 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
       msgEl.style.color = "var(--success)";
       msgEl.textContent = `${label} 연결 완료`;
     }
+    resetConnectProgressUI(scope);
     await refreshAll();
     closePlatformLogin();
   } catch (err) {
@@ -192,7 +337,7 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
     if (/2단계|캡차|CAPTCHA|추가 인증|보안문자/.test(error.message)) {
       hint =
         hint ??
-        "추가 인증이 필요할 수 있습니다. 잠시 후 다시 시도해 주세요.";
+        "추가 인증이 필요할 수 있습니다. 「브라우저에서 직접 로그인」 또는 잠시 후 다시 시도해 주세요.";
     }
     if (/404|실패 \(404\)/.test(error.message)) {
       hint =
@@ -200,9 +345,8 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
         "배포가 최신이 아닐 수 있습니다. 재배포 후 다시 시도해 주세요.";
     }
     if (/FUNCTION_INVOCATION_TIMEOUT|An error occurred with your deployment/i.test(error.message)) {
-      hint =
-        "서버 처리 시간이 초과되었습니다. 잠시 후 다시 연결해 주세요.";
-      error.message = "연결 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.";
+      hint = "서버 처리 시간이 초과되었습니다. 아래 버튼으로 다시 시도해 주세요.";
+      error.message = "연결 시간이 초과되었습니다. 다시 시도해 주세요.";
     }
     if (statusEl) {
       statusEl.className = "platform-login-status error";
@@ -212,6 +356,7 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
       msgEl.style.color = "var(--error)";
       msgEl.textContent = error.message;
     }
+    showConnectFallback(scope, true);
     showErrorCard(
       error.message,
       "계정 연결",
@@ -221,6 +366,18 @@ async function connectPlatform(platform, { username = "", password = "" } = {}) 
   } finally {
     setBusy(false);
   }
+}
+
+function handleConnectRetry() {
+  const { platform, username, password } = activeConnectRequest;
+  if (!platform) return;
+  void connectPlatform(platform, { username, password, manual: false });
+}
+
+function handleConnectManual() {
+  const { platform, username, password } = activeConnectRequest;
+  if (!platform) return;
+  void connectPlatform(platform, { username, password, manual: true });
 }
 
 function renderSessionDetails(sessionDetails, enabledPlatforms) {
@@ -293,7 +450,10 @@ function updateConnectPanelStatus(sessionDetails, connectJobs) {
     if (connectJob?.status === "connecting") {
       badge.className = "badge connect-status idle";
       badge.textContent = "연결 중…";
-      if (hint) hint.textContent = "로그인 진행 중입니다. 잠시만 기다려 주세요.";
+      const step = connectJob.currentStep;
+      if (hint) {
+        hint.textContent = step || "로그인 진행 중입니다. 잠시만 기다려 주세요.";
+      }
       if (btn) {
         btn.disabled = true;
         btn.textContent = "연결 중…";
@@ -759,6 +919,12 @@ async function loadStatus(options = {}) {
     envLoginAvailable = {
       naver: Boolean(data.config.envLoginAvailable.naver),
       tistory: Boolean(data.config.envLoginAvailable.tistory),
+    };
+  }
+  if (data.config?.connectFeatures) {
+    connectFeatures = {
+      headedManualLogin: Boolean(data.config.connectFeatures.headedManualLogin),
+      loginPreview: Boolean(data.config.connectFeatures.loginPreview),
     };
   }
   document.getElementById("run-btn").disabled = data.isRunning;
@@ -1627,6 +1793,15 @@ async function init() {
       const platform = document.getElementById("platform-login-platform")?.value;
       if (platform) void connectPlatform(platform);
     });
+
+  for (const [retryId, manualId, previewId] of [
+    ["connect-retry-btn", "connect-manual-btn", "connect-preview-btn"],
+    ["platform-login-retry-btn", "platform-login-manual-btn", "platform-login-preview-btn"],
+  ]) {
+    document.getElementById(retryId)?.addEventListener("click", handleConnectRetry);
+    document.getElementById(manualId)?.addEventListener("click", handleConnectManual);
+    document.getElementById(previewId)?.addEventListener("click", handleConnectManual);
+  }
 
   const ok = await checkAuth();
   if (!ok) return;
