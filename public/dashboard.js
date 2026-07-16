@@ -64,8 +64,160 @@ function isInfraErrorText(text = "") {
   return (
     /데이터베이스 연결|TURSO_|프록시 오류|서버 프록시|상태 조회 실패|세션 저장 실패/i.test(
       t,
-    ) || /로그인이 필요/i.test(t)
+    ) ||
+    /로그인이 필요/i.test(t) ||
+    /FUNCTION_INVOCATION_TIMEOUT|An error occurred with your deployment/i.test(t)
   );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 계정 연결 비동기 작업이 끝날 때까지 /api/status 폴링 */
+async function pollConnectJob(platform, { timeoutMs = 280_000, intervalMs = 2500 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    await sleep(intervalMs);
+    try {
+      const data = await api("/api/status");
+      lastStatus = data;
+      updateConnectPanelStatus(data.sessionDetails, data.connectJobs);
+      const job = data.connectJobs?.[platform];
+      if (!job) continue;
+
+      if (job.status === "connected") {
+        return { ok: true, job, data };
+      }
+      if (job.status === "failed") {
+        throw {
+          message: job.lastError || "연결에 실패했습니다.",
+          stage: "계정 연결",
+          hint: "아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
+        };
+      }
+      // connecting / idle → 계속 대기
+    } catch (err) {
+      if (err && typeof err === "object" && err.stage === "계정 연결") throw err;
+      lastError = err;
+    }
+  }
+
+  throw {
+    message:
+      lastError?.message ||
+      "연결 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+    stage: "계정 연결",
+    hint: "추가 인증(캡차·2단계)이 있거나 서버 시간이 부족할 수 있습니다.",
+  };
+}
+
+async function connectPlatform(platform, { username = "", password = "" } = {}) {
+  const label = PLATFORM_LABELS[platform] ?? platform;
+  const msgEl = document.getElementById("connect-message");
+  const statusEl = document.getElementById("platform-login-status");
+  const submit = document.getElementById("platform-login-submit");
+  const envBtn = document.getElementById("platform-login-env-btn");
+
+  const setBusy = (busy) => {
+    if (submit) {
+      submit.disabled = busy;
+      submit.textContent = busy ? "연결 중…" : "로그인하고 연결";
+    }
+    if (envBtn) envBtn.disabled = busy;
+    document.querySelectorAll(".btn-connect").forEach((btn) => {
+      btn.disabled = busy;
+    });
+  };
+
+  setBusy(true);
+  if (msgEl) {
+    msgEl.style.color = "var(--text-muted)";
+    msgEl.textContent = `${label} 연결 중… 잠시만 기다려 주세요.`;
+  }
+  if (statusEl) {
+    statusEl.className = "platform-login-status";
+    statusEl.textContent = "로그인 중입니다. 최대 1~2분 걸릴 수 있어요.";
+  }
+  clearErrorCard();
+
+  try {
+    const body = { force: true, phase: "start" };
+    if (username && password) {
+      body.username = username;
+      body.password = password;
+    }
+
+    // 202 즉시 수락 — Playwright는 phase=run(또는 로컬 백그라운드)에서 실행
+    const start = await api(`/api/sessions/${platform}/refresh`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    if (start?.needsClientRun) {
+      // Vercel: 긴 로그인은 별도 요청(전용 라우트 maxDuration). HTML 타임아웃은 무시하고 폴링이 판정.
+      void fetch(`/api/sessions/${platform}/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, phase: "run" }),
+      }).catch(() => {});
+    }
+
+    if (start?.status !== "connected") {
+      if (statusEl) {
+        statusEl.textContent = "연결 중… 상태를 확인하는 중입니다.";
+      }
+      await pollConnectJob(platform);
+    }
+
+    if (statusEl) {
+      statusEl.className = "platform-login-status success";
+      statusEl.textContent = "연결되었습니다.";
+    }
+    if (msgEl) {
+      msgEl.style.color = "var(--success)";
+      msgEl.textContent = `${label} 연결 완료`;
+    }
+    await refreshAll();
+    closePlatformLogin();
+  } catch (err) {
+    const error = normalizeError(err);
+    let hint = error.hint;
+    if (/2단계|캡차|CAPTCHA|추가 인증|보안문자/.test(error.message)) {
+      hint =
+        hint ??
+        "추가 인증이 필요할 수 있습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    if (/404|실패 \(404\)/.test(error.message)) {
+      hint =
+        hint ??
+        "배포가 최신이 아닐 수 있습니다. 재배포 후 다시 시도해 주세요.";
+    }
+    if (/FUNCTION_INVOCATION_TIMEOUT|An error occurred with your deployment/i.test(error.message)) {
+      hint =
+        "서버 처리 시간이 초과되었습니다. 잠시 후 다시 연결해 주세요.";
+      error.message = "연결 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    if (statusEl) {
+      statusEl.className = "platform-login-status error";
+      statusEl.textContent = error.message;
+    }
+    if (msgEl) {
+      msgEl.style.color = "var(--error)";
+      msgEl.textContent = error.message;
+    }
+    showErrorCard(
+      error.message,
+      "계정 연결",
+      hint ?? "아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
+    );
+    await refreshAll();
+  } finally {
+    setBusy(false);
+  }
 }
 
 function renderSessionDetails(sessionDetails, enabledPlatforms) {
@@ -127,12 +279,24 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
     .join("");
 }
 
-function updateConnectPanelStatus(sessionDetails) {
+function updateConnectPanelStatus(sessionDetails, connectJobs) {
   for (const p of DASHBOARD_PLATFORMS) {
     const badge = document.getElementById(`connect-status-${p}`);
     const hint = document.getElementById(`connect-hint-${p}`);
     const btn = document.querySelector(`.btn-connect[data-platform="${p}"]`);
     if (!badge) continue;
+
+    const connectJob = connectJobs?.[p];
+    if (connectJob?.status === "connecting") {
+      badge.className = "badge connect-status idle";
+      badge.textContent = "연결 중…";
+      if (hint) hint.textContent = "로그인 진행 중입니다. 잠시만 기다려 주세요.";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "연결 중…";
+      }
+      continue;
+    }
 
     const info = sessionDetails?.[p];
     const hasSession = Boolean(info?.hasSession);
@@ -144,20 +308,37 @@ function updateConnectPanelStatus(sessionDetails) {
 
     if (!hasSession) {
       badge.textContent = "연결 안 됨";
-      if (hint) hint.textContent = "아직 연결되지 않았습니다.";
-      if (btn) btn.textContent = `${PLATFORM_LABELS[p] ?? p} 연결`;
+      if (hint) {
+        hint.textContent =
+          connectJob?.status === "failed" && connectJob.lastError
+            ? connectJob.lastError
+            : "아직 연결되지 않았습니다.";
+      }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `${PLATFORM_LABELS[p] ?? p} 연결`;
+      }
       continue;
     }
 
     if (valid === "ok") {
       badge.textContent = "연결됨";
-      if (btn) btn.textContent = "다시 연결";
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "다시 연결";
+      }
     } else if (valid === "expired") {
       badge.textContent = "다시 연결 필요";
-      if (btn) btn.textContent = "다시 연결";
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "다시 연결";
+      }
     } else {
       badge.textContent = "연결됨";
-      if (btn) btn.textContent = "다시 연결";
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "다시 연결";
+      }
     }
 
     if (hint) {
@@ -570,7 +751,7 @@ async function loadStatus(options = {}) {
       sessionEl.textContent = "—";
     }
   }
-  updateConnectPanelStatus(data.sessionDetails);
+  updateConnectPanelStatus(data.sessionDetails, data.connectJobs);
   if (data.config?.envLoginAvailable) {
     envLoginAvailable = {
       naver: Boolean(data.config.envLoginAvailable.naver),
@@ -1016,89 +1197,6 @@ function closePlatformLogin() {
     submit.textContent = "로그인하고 연결";
   }
   if (envBtn) envBtn.disabled = false;
-}
-
-async function connectPlatform(platform, { username = "", password = "" } = {}) {
-  const label = PLATFORM_LABELS[platform] ?? platform;
-  const msgEl = document.getElementById("connect-message");
-  const statusEl = document.getElementById("platform-login-status");
-  const submit = document.getElementById("platform-login-submit");
-  const envBtn = document.getElementById("platform-login-env-btn");
-
-  const setBusy = (busy) => {
-    if (submit) {
-      submit.disabled = busy;
-      submit.textContent = busy ? "연결 중…" : "로그인하고 연결";
-    }
-    if (envBtn) envBtn.disabled = busy;
-    document.querySelectorAll(".btn-connect").forEach((btn) => {
-      btn.disabled = busy;
-    });
-  };
-
-  setBusy(true);
-  if (msgEl) {
-    msgEl.style.color = "var(--text-muted)";
-    msgEl.textContent = `${label} 연결 중… 잠시만 기다려 주세요.`;
-  }
-  if (statusEl) {
-    statusEl.className = "platform-login-status";
-    statusEl.textContent = "로그인 중입니다. 최대 1~2분 걸릴 수 있어요.";
-  }
-  clearErrorCard();
-
-  try {
-    const body = { force: true };
-    if (username && password) {
-      body.username = username;
-      body.password = password;
-    }
-
-    await api(`/api/sessions/${platform}/refresh`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-
-    if (statusEl) {
-      statusEl.className = "platform-login-status success";
-      statusEl.textContent = "연결되었습니다.";
-    }
-    if (msgEl) {
-      msgEl.style.color = "var(--success)";
-      msgEl.textContent = `${label} 연결 완료`;
-    }
-    await refreshAll();
-    closePlatformLogin();
-  } catch (err) {
-    const error = normalizeError(err);
-    let hint = error.hint;
-    if (/2단계|캡차|CAPTCHA|추가 인증|보안문자/.test(error.message)) {
-      hint =
-        hint ??
-        "추가 인증이 필요할 수 있습니다. 잠시 후 다시 시도해 주세요.";
-    }
-    if (/404|실패 \(404\)/.test(error.message)) {
-      hint =
-        hint ??
-        "배포가 최신이 아닐 수 있습니다. 재배포 후 다시 시도해 주세요.";
-    }
-    if (statusEl) {
-      statusEl.className = "platform-login-status error";
-      statusEl.textContent = error.message;
-    }
-    if (msgEl) {
-      msgEl.style.color = "var(--error)";
-      msgEl.textContent = error.message;
-    }
-    showErrorCard(
-      error.message,
-      "계정 연결",
-      hint ?? "아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
-    );
-    await refreshAll();
-  } finally {
-    setBusy(false);
-  }
 }
 
 async function handlePlatformLoginSubmit(event) {

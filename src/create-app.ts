@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
 import { config, getEnabledPlatforms } from "../config/index.js";
 import { PLATFORMS, type Platform } from "../config/platforms.js";
+import { connectJobStore } from "./api/connect-job-store.js";
 import { jobStore } from "./api/job-store.js";
 import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
@@ -12,7 +13,6 @@ import {
   getAllSessionInfo,
   getSessionInfo,
   markSessionVerified,
-  markSessionVerificationFailed,
   validateStorageState,
   verifySessionQuick,
 } from "./auth/session-info.js";
@@ -283,6 +283,7 @@ export async function createApp(
         },
         sessions: await getAllSessionStatus(),
         sessionDetails: await getAllSessionDetails(),
+        connectJobs: await connectJobStore.getMany(["naver", "tistory"]),
       };
     };
 
@@ -579,7 +580,10 @@ export async function createApp(
     if (!user) {
       return reply.status(401).send({ error: "로그인이 필요합니다." });
     }
-    return runWithUser(user, () => getAllSessionDetails());
+    return runWithUser(user, async () => ({
+      sessionDetails: await getAllSessionDetails(),
+      connectJobs: await connectJobStore.getMany(["naver", "tistory"]),
+    }));
   });
 
   app.post("/api/sessions/:platform", async (request, reply) => {
@@ -665,6 +669,8 @@ export async function createApp(
             username?: string;
             password?: string;
             force?: boolean;
+            /** start: 작업 등록만 / run: Playwright 로그인 실행 */
+            phase?: "start" | "run";
           }
         | undefined) ?? {};
 
@@ -674,6 +680,7 @@ export async function createApp(
     const credentials = hasFormCreds
       ? { id: username, password }
       : undefined;
+    const phase = body.phase === "run" ? "run" : "start";
 
     if (!hasFormCreds && !hasEnvCredentials(platform as Platform)) {
       return reply.status(400).send({
@@ -682,47 +689,74 @@ export async function createApp(
       });
     }
 
-    try {
-      return await runWithUser(user, async () => {
+    const target = platform as Platform;
+
+    const runConnect = async () => {
+      try {
         const { ensureValidSession } = await import("./auth/ensure-session.js");
-        await ensureValidSession(platform as Platform, {
+        await ensureValidSession(target, {
           forceRelogin: body.force === true || hasFormCreds,
           credentials,
         });
+        // ensureValidSession(강제 로그인)이 이미 글쓰기 화면까지 확인함 — 추가 Chromium 검증 생략
+        markSessionVerified(target);
+        const session = await getSessionInfo(target);
+        await connectJobStore.markConnected(target);
+        return { ok: true as const, platform: target, session };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await connectJobStore.markFailed(target, message);
+        throw error;
+      }
+    };
 
-        // 네이버/티스토리는 “정확한 로그인 유효성”을 위해 글쓰기 화면 접근까지 추가 검증합니다.
-        if (platform === "naver" && config.naverBlogId) {
-          const { verifyPlatformSession } = await import("./auth/session-verify.js");
-          const result = await verifyPlatformSession(
-            "naver",
-            config.authLoginHeadless,
-          );
-          if (!result.valid) {
-            markSessionVerificationFailed("naver", result.detail);
-            return reply.status(409).send({ error: result.detail });
+    try {
+      if (phase === "start") {
+        return await runWithUser(user, async () => {
+          await connectJobStore.markConnecting(target);
+
+          // 로컬: 백그라운드 실행 후 즉시 202
+          // Vercel: refresh.ts 핸들러가 waitUntil 로 phase=run 을 이어서 실행
+          if (!config.isVercel) {
+            void runWithUser(user, runConnect).catch((error) => {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              logger.error(`계정 연결 실패 (${target}): ${message}`);
+            });
           }
-          markSessionVerified("naver");
-        }
 
-        if (platform === "tistory" && config.tistoryBlogName) {
-          const { verifyPlatformSession } = await import("./auth/session-verify.js");
-          const result = await verifyPlatformSession(
-            "tistory",
-            config.authLoginHeadless,
-          );
-          if (!result.valid) {
-            markSessionVerificationFailed("tistory", result.detail);
-            return reply.status(409).send({ error: result.detail });
-          }
-          markSessionVerified("tistory");
-        }
+          return reply.status(202).send({
+            ok: true,
+            accepted: true,
+            status: "connecting",
+            platform: target,
+            message: "연결을 시작했습니다.",
+            /** Vercel은 응답 후 백그라운드 불가 → 클라이언트가 phase=run 호출 */
+            needsClientRun: config.isVercel,
+            connectJob: await connectJobStore.get(target),
+          });
+        });
+      }
 
-        const session = await getSessionInfo(platform as Platform);
-        return { ok: true, platform, session };
+      // phase === "run"
+      return await runWithUser(user, async () => {
+        const current = await connectJobStore.get(target);
+        if (current.status !== "connecting") {
+          await connectJobStore.markConnecting(target);
+        }
+        const result = await runConnect();
+        return {
+          ...result,
+          status: "connected" as const,
+          connectJob: await connectJobStore.get(target),
+        };
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       return reply.status(500).send({
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
+        status: "failed",
+        platform: target,
       });
     }
   });

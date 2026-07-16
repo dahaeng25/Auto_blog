@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS platform_sessions (
   PRIMARY KEY (user_id, platform)
 );
 
+-- 계정 연결(자동 로그인) 비동기 작업 상태 (네이버·티스토리)
+CREATE TABLE IF NOT EXISTS platform_connect_jobs (
+  user_id     INTEGER NOT NULL,
+  platform    TEXT    NOT NULL,
+  status      TEXT    NOT NULL DEFAULT 'idle',
+  started_at  TEXT,
+  finished_at TEXT,
+  last_error  TEXT,
+  PRIMARY KEY (user_id, platform)
+);
+
 -- 사용자별 썸네일 배경 (업로드 이미지 또는 샘플 그라데이션)
 CREATE TABLE IF NOT EXISTS user_thumbnail_backgrounds (
   user_id      INTEGER PRIMARY KEY,

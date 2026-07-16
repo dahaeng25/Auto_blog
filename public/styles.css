@@ -77,9 +77,15 @@ body {
   flex-wrap: wrap;
 }
 
+.header-brand {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .header h1 {
   font-size: 1.75rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
@@ -97,6 +103,8 @@ body {
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
@@ -116,7 +124,16 @@ body {
   gap: 12px;
 }
 
-.card-header h2 {
+.card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.card-header h2,
+.card-heading h2 {
   font-size: 1.1rem;
   font-weight: 600;
 }
@@ -124,7 +141,8 @@ body {
 .hint {
   color: var(--text-muted);
   font-size: 0.85rem;
-  margin-top: 4px;
+  margin-top: 0;
+  line-height: 1.45;
 }
 
 /* Status grid */

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=23" />
+  <link rel="stylesheet" href="/styles.css?v=25" />
 </head>
 <body>
   <div id="auth-screen" class="auth-screen">
@@ -21,11 +21,11 @@
       <form id="auth-form" class="auth-form" autocomplete="on">
         <label class="auth-field">
           <span>사용자명</span>
-          <input id="auth-username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
+          <input id="auth-username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" enterkeyhint="next" />
         </label>
         <label class="auth-field">
           <span>비밀번호</span>
-          <input id="auth-password" name="password" type="password" required minlength="6" autocomplete="current-password" />
+          <input id="auth-password" name="password" type="password" required minlength="6" autocomplete="current-password" enterkeyhint="done" />
         </label>
         <button id="auth-submit" type="submit" class="btn btn-primary auth-submit">로그인</button>
         <p id="auth-message" class="auth-message" role="status"></p>
@@ -35,7 +35,7 @@
 
   <div id="app" class="app hidden">
     <header class="header">
-      <div>
+      <div class="header-brand">
         <h1>Blog Orchestrator</h1>
         <p class="subtitle">클라우드 블로그 자동화 대시보드 <span id="deploy-stamp" class="deploy-stamp"></span></p>
       </div>
@@ -71,8 +71,10 @@
 
     <section class="card account-connect">
       <div class="card-header">
-        <h2>계정 연결</h2>
-        <p class="hint">네이버 · 티스토리에 한 번만 로그인하면 됩니다.</p>
+        <div class="card-heading">
+          <h2>계정 연결</h2>
+          <p class="hint">네이버 · 티스토리에 한 번만 로그인하면 됩니다.</p>
+        </div>
       </div>
       <div class="connect-row">
         <div class="connect-item" data-connect-platform="naver">
@@ -101,11 +103,13 @@
 
     <section class="card thumb-bg-section">
       <div class="card-header">
-        <h2>썸네일 배경</h2>
-        <p class="hint">
-          배경 이미지가 있으면 업로드하세요. 없으면 아래 샘플 중 하나를 고르면
-          해당 계정 발행에 사용됩니다. (계정별로 저장)
-        </p>
+        <div class="card-heading">
+          <h2>썸네일 배경</h2>
+          <p class="hint">
+            배경 이미지가 있으면 업로드하세요. 없으면 아래 샘플 중 하나를 고르면
+            해당 계정 발행에 사용됩니다. (계정별로 저장)
+          </p>
+        </div>
       </div>
       <div class="thumb-bg-layout">
         <div class="thumb-bg-upload">
@@ -153,7 +157,11 @@
       <p id="thumb-bg-message" class="upload-message"></p>
     </section>
 
-    <section class="actions-bar">
+    <section class="actions-bar card">
+      <div class="card-heading actions-heading">
+        <h2>발행 실행</h2>
+        <p class="hint">주제와 지역을 입력한 뒤 실행하세요.</p>
+      </div>
       <label class="topic-field" for="blog-topic">
         <span class="topic-label">블로그 주제</span>
         <input
@@ -162,9 +170,10 @@
           placeholder="예: E-7-4R 비자변경, 행정사"
           autocomplete="off"
           list="keyword-history"
+          enterkeyhint="next"
         />
         <datalist id="keyword-history"></datalist>
-        <span class="topic-hint">gems 모드 — 비우면 Vercel의 BLOG_TOPIC 환경 변수 사용</span>
+        <span class="topic-hint">비우면 서버 BLOG_TOPIC 기본값을 사용합니다.</span>
       </label>
       <div class="region-field-wrap">
         <label class="topic-field" for="blog-region">
@@ -175,9 +184,10 @@
             placeholder="예: 전라북도"
             autocomplete="off"
             list="region-history"
+            enterkeyhint="go"
           />
           <datalist id="region-history"></datalist>
-          <span class="topic-hint">비우면 .env BLOG_REGION / blog-region.txt 기본값을 사용합니다.</span>
+          <span class="topic-hint">비우면 서버 기본 지역을 사용합니다.</span>
         </label>
       </div>
       <button id="run-btn" class="btn btn-primary btn-lg">
@@ -307,6 +317,6 @@
     </div>
   </div>
 
-  <script src="/dashboard.js?v=23" type="module"></script>
+  <script src="/dashboard.js?v=24" type="module"></script>
 </body>
 </html>
