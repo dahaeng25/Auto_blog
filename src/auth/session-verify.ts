@@ -52,7 +52,7 @@ async function verifyNaverEditor(page: Page): Promise<string | null> {
     await humanPause(500);
   }
 
-  return "제목 입력란(.se-documentTitle) 없음 — npm run auth:setup 필요";
+  return "글쓰기 화면을 열 수 없습니다. 「계정 연결」에서 다시 로그인해 주세요.";
 }
 
 async function verifyTistoryEditor(page: Page): Promise<string | null> {
@@ -77,7 +77,7 @@ async function verifyTistoryEditor(page: Page): Promise<string | null> {
     await humanPause(500);
   }
 
-  return "제목 입력란(#post-title-inp) 없음 — npm run auth:setup 필요";
+  return "글쓰기 화면을 열 수 없습니다. 「계정 연결」에서 다시 로그인해 주세요.";
 }
 
 /** 단일 플랫폼 세션 검증 (글쓰기 페이지까지 확인) */
