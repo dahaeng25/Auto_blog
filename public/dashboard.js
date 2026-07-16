@@ -966,10 +966,10 @@ function openPlatformLogin(platform) {
   platformInput.value = platform;
   title.textContent = `${label} 연결`;
   if (platform === "tistory") {
-    desc.textContent = "카카오 아이디와 비밀번호로 티스토리를 연결합니다.";
+    desc.textContent = "카카오 아이디와 비밀번호로 연결합니다.";
     idLabel.textContent = "카카오 아이디";
   } else {
-    desc.textContent = "네이버 아이디와 비밀번호를 입력하세요.";
+    desc.textContent = "네이버 아이디와 비밀번호를 입력해 주세요.";
     idLabel.textContent = "네이버 아이디";
   }
 
@@ -983,7 +983,7 @@ function openPlatformLogin(platform) {
     if (envOk) {
       envHint.classList.remove("hidden");
       envHint.textContent =
-        "서버에 계정이 설정되어 있으면, 아래 버튼만으로도 연결할 수 있습니다.";
+        "이미 등록된 계정이 있으면, 아래 버튼만으로도 연결할 수 있습니다.";
       envBtn.classList.remove("hidden");
       username.required = false;
       password.required = false;
