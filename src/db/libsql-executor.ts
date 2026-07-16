@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../../config/index.js";
 import type { DbExecutor, SqlResult } from "./types.js";
-import { loadSchemaStatements } from "./schema-loader.js";
+import { runSchemaMigration } from "./run-schema-migration.js";
 
 let libsqlModule: typeof import("@libsql/client") | null = null;
 
@@ -14,43 +14,45 @@ async function loadLibsql(): Promise<typeof import("@libsql/client")> {
 }
 let client: import("@libsql/client").Client | null = null;
 let migrated = false;
+let migratePromise: Promise<void> | null = null;
 
 async function migrateLibsql(
   db: import("@libsql/client").Client,
 ): Promise<void> {
   if (migrated) return;
-
-  if (config.databaseUrl.startsWith("file:")) {
-    const dbPath = config.databaseUrl.replace(/^file:/, "");
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  if (migratePromise) {
+    await migratePromise;
+    return;
   }
 
-  const statements = loadSchemaStatements();
-
-  for (const sql of statements) {
-    try {
-      await db.execute({ sql, args: [] });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/already exists/i.test(message)) throw error;
+  migratePromise = (async () => {
+    if (config.databaseUrl.startsWith("file:")) {
+      const dbPath = config.databaseUrl.replace(/^file:/, "");
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     }
+
+    const adapter: DbExecutor = {
+      execute: async (sql, args = []) => {
+        const result = await db.execute({ sql, args: args as never[] });
+        return {
+          rows: result.rows as Record<string, unknown>[],
+          lastInsertRowid: result.lastInsertRowid,
+        };
+      },
+      batch: async () => {
+        throw new Error("batch not used during migrate");
+      },
+    };
+
+    await runSchemaMigration(adapter);
+    migrated = true;
+  })();
+
+  try {
+    await migratePromise;
+  } finally {
+    migratePromise = null;
   }
-
-  const { migrateUserScopedSchema } = await import("./migrate-user-scope.js");
-  await migrateUserScopedSchema({
-    execute: async (sql, args = []) => {
-      const result = await db.execute({ sql, args: args as never[] });
-      return {
-        rows: result.rows as Record<string, unknown>[],
-        lastInsertRowid: result.lastInsertRowid,
-      };
-    },
-    batch: async () => {
-      throw new Error("batch not used during migrate");
-    },
-  });
-
-  migrated = true;
 }
 
 async function getClient(): Promise<import("@libsql/client").Client> {

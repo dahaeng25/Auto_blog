@@ -1,12 +1,22 @@
 import type { DbExecutor } from "./types.js";
 
+function columnNameFromRow(row: Record<string, unknown>): string {
+  if (row.name != null) return String(row.name);
+  // libsql/Turso 가 배열형 Row 를 주는 경우 PRAGMA table_info 의 name 은 index 1
+  if (row[1] != null) return String(row[1]);
+  if (row.NAME != null) return String(row.NAME);
+  return "";
+}
+
 async function tableColumns(
   db: DbExecutor,
   table: string,
 ): Promise<Set<string>> {
   const result = await db.execute(`PRAGMA table_info(${table})`);
   return new Set(
-    result.rows.map((row) => String((row as Record<string, unknown>).name)),
+    result.rows
+      .map((row) => columnNameFromRow(row as Record<string, unknown>))
+      .filter(Boolean),
   );
 }
 
@@ -16,6 +26,18 @@ async function tableExists(db: DbExecutor, table: string): Promise<boolean> {
     [table],
   );
   return result.rows.length > 0;
+}
+
+async function addColumnIfMissing(
+  db: DbExecutor,
+  table: string,
+  column: string,
+  ddl: string,
+): Promise<boolean> {
+  const cols = await tableColumns(db, table);
+  if (cols.has(column)) return false;
+  await db.execute(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  return true;
 }
 
 /** 기존 DB에 user_id / 복합키 스키마를 점진 적용 */
@@ -44,6 +66,7 @@ export async function migrateUserScopedSchema(db: DbExecutor): Promise<void> {
   if (await tableExists(db, "topics")) {
     const cols = await tableColumns(db, "topics");
     if (!cols.has("user_id")) {
+      await db.execute(`DROP TABLE IF EXISTS topics_v2`);
       await db.execute(`
         CREATE TABLE topics_v2 (
           id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,11 +95,13 @@ export async function migrateUserScopedSchema(db: DbExecutor): Promise<void> {
   }
 
   if (await tableExists(db, "articles")) {
-    const cols = await tableColumns(db, "articles");
-    if (!cols.has("user_id")) {
-      await db.execute(
-        `ALTER TABLE articles ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0`,
-      );
+    const added = await addColumnIfMissing(
+      db,
+      "articles",
+      "user_id",
+      "user_id INTEGER NOT NULL DEFAULT 0",
+    );
+    if (added) {
       await db.execute(
         `CREATE INDEX IF NOT EXISTS idx_articles_user ON articles(user_id)`,
       );
@@ -84,11 +109,13 @@ export async function migrateUserScopedSchema(db: DbExecutor): Promise<void> {
   }
 
   if (await tableExists(db, "published_posts")) {
-    const cols = await tableColumns(db, "published_posts");
-    if (!cols.has("user_id")) {
-      await db.execute(
-        `ALTER TABLE published_posts ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0`,
-      );
+    const added = await addColumnIfMissing(
+      db,
+      "published_posts",
+      "user_id",
+      "user_id INTEGER NOT NULL DEFAULT 0",
+    );
+    if (added) {
       await db.execute(
         `CREATE INDEX IF NOT EXISTS idx_published_posts_user ON published_posts(user_id)`,
       );
@@ -98,6 +125,7 @@ export async function migrateUserScopedSchema(db: DbExecutor): Promise<void> {
   if (await tableExists(db, "platform_sessions")) {
     const cols = await tableColumns(db, "platform_sessions");
     if (!cols.has("user_id")) {
+      await db.execute(`DROP TABLE IF EXISTS platform_sessions_v2`);
       await db.execute(`
         CREATE TABLE platform_sessions_v2 (
           user_id     INTEGER NOT NULL,
@@ -121,6 +149,7 @@ export async function migrateUserScopedSchema(db: DbExecutor): Promise<void> {
   if (await tableExists(db, "job_state")) {
     const cols = await tableColumns(db, "job_state");
     if (!cols.has("user_id")) {
+      await db.execute(`DROP TABLE IF EXISTS job_state_v2`);
       await db.execute(`
         CREATE TABLE job_state_v2 (
           user_id             INTEGER PRIMARY KEY,

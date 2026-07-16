@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Database as SqliteDatabase } from "better-sqlite3";
 import { config } from "../../config/index.js";
 import type { DbExecutor, SqlResult } from "./types.js";
-import { loadSchemaStatements } from "./schema-loader.js";
+import { runSchemaMigration } from "./run-schema-migration.js";
 
 let db: SqliteDatabase | null = null;
 let migrated = false;
@@ -19,12 +19,6 @@ async function ensureSqlite(): Promise<SqliteDatabase> {
   database.pragma("journal_mode = WAL");
 
   if (!migrated) {
-    const statements = loadSchemaStatements();
-    for (const sql of statements) {
-      database.exec(sql);
-    }
-
-    const { migrateUserScopedSchema } = await import("./migrate-user-scope.js");
     const adapter: DbExecutor = {
       execute: async (sql, args = []) => {
         const stmt = database.prepare(sql);
@@ -39,7 +33,7 @@ async function ensureSqlite(): Promise<SqliteDatabase> {
         throw new Error("batch not used during migrate");
       },
     };
-    await migrateUserScopedSchema(adapter);
+    await runSchemaMigration(adapter);
     migrated = true;
   }
 
