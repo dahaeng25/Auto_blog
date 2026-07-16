@@ -29,8 +29,19 @@ async function api(path, options = {}) {
     throw { message: "로그인이 필요합니다.", stage: "인증", hint: "다시 로그인해 주세요." };
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const error = body.error ?? body.message ?? `요청 실패 (${res.status})`;
+    const text = await res.text().catch(() => "");
+    let body = {};
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      /* HTML/빈 본문 등 */
+    }
+    const error =
+      body.error ??
+      body.message ??
+      (typeof text === "string" && text.trim()
+        ? text.trim().slice(0, 300)
+        : `요청 실패 (${res.status})`);
     const stage = body.stage ?? inferStageFromText(error);
     const hint =
       body.hint ??

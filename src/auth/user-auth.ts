@@ -54,16 +54,29 @@ export async function signupUser(
 
   const passwordHash = await hashPassword(password);
   const createdAt = new Date().toISOString();
-  const result = await db.execute(
+  await db.execute(
     `INSERT INTO users (username, password_hash, created_at)
      VALUES (?, ?, ?)`,
     [normalized, passwordHash, createdAt],
   );
 
-  const id = Number(result.lastInsertRowid);
+  const inserted = await db.execute(
+    "SELECT id, username FROM users WHERE username = ?",
+    [normalized],
+  );
+  if (inserted.rows.length === 0) {
+    return { error: "회원가입에 실패했습니다. 잠시 후 다시 시도하세요." };
+  }
+
+  const row = inserted.rows[0] as Record<string, unknown>;
+  const id = Number(row.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { error: "회원가입에 실패했습니다. DB 설정을 확인하세요." };
+  }
+
   await ensureJobStateRow(id);
 
-  return { user: { id, username: normalized } };
+  return { user: { id, username: String(row.username) } };
 }
 
 export async function loginUser(
@@ -97,12 +110,22 @@ export async function loginUser(
 
 async function ensureJobStateRow(userId: number): Promise<void> {
   const db = await getDb();
-  await db.execute(
-    `INSERT INTO job_state (user_id, status)
-     VALUES (?, 'idle')
-     ON CONFLICT(user_id) DO NOTHING`,
-    [userId],
-  );
+  try {
+    await db.execute(
+      `INSERT INTO job_state (user_id, status)
+       VALUES (?, 'idle')
+       ON CONFLICT(user_id) DO NOTHING`,
+      [userId],
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // 구 스키마(id PK)면 마이그레이션 전 — 회원가입은 통과시키고 이후 ensureSchema 가 정리
+    if (/no such column:\s*user_id|ON CONFLICT/i.test(message)) {
+      console.warn(`[auth] job_state 사용자 행 생성 생략: ${message}`);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function createSession(

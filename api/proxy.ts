@@ -10,7 +10,15 @@ export default async function handler(
   res: VercelResponse,
 ): Promise<void> {
   const raw = req.query.p;
-  const segments = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : [];
+  // Vercel :path* → "auth/signup" 한 문자열 또는 ["auth","signup"] 배열
+  let segments: string[];
+  if (Array.isArray(raw)) {
+    segments = raw.flatMap((s) => String(s).split("/").filter(Boolean));
+  } else if (raw) {
+    segments = String(raw).split("/").filter(Boolean);
+  } else {
+    segments = [];
+  }
   const apiPath = segments.length > 0 ? `/api/${segments.join("/")}` : "/api";
 
   const parsed = new URL(req.url ?? "/", "http://localhost");
@@ -19,5 +27,16 @@ export default async function handler(
   const qs = params.toString();
   const url = qs ? `${apiPath}?${qs}` : apiPath;
 
-  await proxyToFastify(req, res, url);
+  try {
+    await proxyToFastify(req, res, url);
+  } catch (error) {
+    // proxyToFastify 가 대부분 처리하지만, 예외 누수 시에도 JSON 으로 응답
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[api/proxy]", message);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ error: `프록시 오류: ${message}` }));
+    }
+  }
 }

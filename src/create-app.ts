@@ -141,29 +141,43 @@ export async function createApp(
   }));
 
   app.post("/api/auth/signup", async (request, reply) => {
-    const body =
-      (request.body as { username?: string; password?: string } | undefined) ??
-      {};
-    const result = await signupUser(body.username ?? "", body.password ?? "");
-    if ("error" in result) {
-      return reply.status(400).send({ error: result.error });
-    }
+    try {
+      const body =
+        (request.body as { username?: string; password?: string } | undefined) ??
+        {};
+      const result = await signupUser(body.username ?? "", body.password ?? "");
+      if ("error" in result) {
+        return reply.status(400).send({ error: result.error });
+      }
 
-    const session = await createSession(result.user.id);
-    reply.header("Set-Cookie", buildSessionCookie(session.token));
-    return { ok: true, user: result.user };
+      const session = await createSession(result.user.id);
+      reply.header("Set-Cookie", buildSessionCookie(session.token));
+      return { ok: true, user: result.user };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.status(500).send({
+        error: `회원가입 처리 중 오류: ${message}`,
+      });
+    }
   });
 
   app.post("/api/auth/login", async (request, reply) => {
-    const body =
-      (request.body as { username?: string; password?: string } | undefined) ??
-      {};
-    const result = await loginUser(body.username ?? "", body.password ?? "");
-    if ("error" in result) {
-      return reply.status(401).send({ error: result.error });
+    try {
+      const body =
+        (request.body as { username?: string; password?: string } | undefined) ??
+        {};
+      const result = await loginUser(body.username ?? "", body.password ?? "");
+      if ("error" in result) {
+        return reply.status(401).send({ error: result.error });
+      }
+      reply.header("Set-Cookie", buildSessionCookie(result.token));
+      return { ok: true, user: result.user };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.status(500).send({
+        error: `로그인 처리 중 오류: ${message}`,
+      });
     }
-    reply.header("Set-Cookie", buildSessionCookie(result.token));
-    return { ok: true, user: result.user };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
