@@ -16,6 +16,7 @@ import {
   normalizeNaverBlogId,
   normalizeTistoryBlogName,
 } from "./write-page-nav.js";
+import { reportConnectProgress } from "./connect-progress.js";
 
 /** 플랫폼 로그인에 쓰는 일회성 자격증명 (저장하지 않음) */
 export type PlatformCredentials = {
@@ -44,13 +45,16 @@ export async function autoLoginNaver(
   }
 
   console.log("[자동 로그인] 네이버 로그인 시도...");
+  await reportConnectProgress("로그인 페이지를 여는 중…");
   await page.goto(PLATFORMS.naver.loginUrl, {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
   await loginPause(1500);
 
+  await reportConnectProgress("아이디를 입력하는 중…");
   await fillFieldByEvaluate(page, "#id", naverId);
+  await reportConnectProgress("비밀번호를 입력하는 중…");
   await fillFieldByEvaluate(page, "#pw", naverPassword);
 
   const keepLogin = page.locator("#keep").first();
@@ -65,8 +69,10 @@ export async function autoLoginNaver(
   const loginBtn = page
     .locator('#log\\.login, button.btn_login, input.btn_global[type="submit"]')
     .first();
+  await reportConnectProgress("로그인 버튼을 누르는 중…");
   await humanClick(loginBtn);
   await loginPause(3000);
+  await reportConnectProgress("로그인 결과를 확인하는 중…");
 
   for (let i = 0; i < 30; i++) {
     if (await isNaverLoggedIn(page.context())) {
@@ -247,12 +253,14 @@ export async function autoLoginTistory(
   }
 
   console.log("[자동 로그인] 티스토리(카카오) 로그인 시도...");
+  await reportConnectProgress("티스토리 로그인 페이지를 여는 중…");
   await page.goto(PLATFORMS.tistory.loginUrl, {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
   await loginPause(2000);
 
+  await reportConnectProgress("카카오 로그인으로 이동하는 중…");
   await clickKakaoLoginOnTistory(page);
 
   if (!page.url().includes("accounts.kakao.com")) {
@@ -261,6 +269,7 @@ export async function autoLoginTistory(
 
   if (!page.url().includes("accounts.kakao.com")) {
     console.log("[자동 로그인] 카카오 로그인 페이지로 직접 이동...");
+    await reportConnectProgress("카카오 로그인 페이지를 여는 중…");
     await page.goto(
       "https://accounts.kakao.com/login/?continue=https%3A%2F%2Fwww.tistory.com%2Fauth%2Fkakao%2Fcallback",
       { waitUntil: "domcontentloaded", timeout: 60_000 },
@@ -268,8 +277,10 @@ export async function autoLoginTistory(
     await loginPause(2000);
   }
 
+  await reportConnectProgress("카카오 아이디·비밀번호를 입력하는 중…");
   await fillKakaoLoginForm(page, kakaoId, kakaoPassword);
   await handleKakaoPostLogin(page);
+  await reportConnectProgress("로그인 결과를 확인하는 중…");
 
   for (let i = 0; i < 40; i++) {
     if (await isTistoryLoggedIn(page.context())) {
@@ -278,6 +289,7 @@ export async function autoLoginTistory(
     }
 
     if (await isManualAuthScreen(page)) {
+      await reportConnectProgress("추가 인증 화면을 확인하는 중…");
       const completed = await waitForManualAuth(
         page,
         () => isTistoryLoggedIn(page.context()),

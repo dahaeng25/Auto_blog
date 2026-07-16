@@ -280,6 +280,10 @@ export async function createApp(
             naver: hasEnvCredentials("naver"),
             tistory: hasEnvCredentials("tistory"),
           },
+          connectFeatures: {
+            headedManualLogin: !config.isVercel,
+            loginPreview: config.isVercel,
+          },
         },
         sessions: await getAllSessionStatus(),
         sessionDetails: await getAllSessionDetails(),
@@ -669,6 +673,7 @@ export async function createApp(
             username?: string;
             password?: string;
             force?: boolean;
+            manual?: boolean;
             /** start: 작업 등록만 / run: Playwright 로그인 실행 */
             phase?: "start" | "run";
           }
@@ -681,8 +686,9 @@ export async function createApp(
       ? { id: username, password }
       : undefined;
     const phase = body.phase === "run" ? "run" : "start";
+    const manual = body.manual === true;
 
-    if (!hasFormCreds && !hasEnvCredentials(platform as Platform)) {
+    if (!hasFormCreds && !hasEnvCredentials(platform as Platform) && !manual) {
       return reply.status(400).send({
         error:
           "아이디와 비밀번호를 입력해 주세요. (또는 서버에 계정 환경변수를 설정하세요)",
@@ -695,8 +701,9 @@ export async function createApp(
       try {
         const { ensureValidSession } = await import("./auth/ensure-session.js");
         await ensureValidSession(target, {
-          forceRelogin: body.force === true || hasFormCreds,
+          forceRelogin: body.force === true || hasFormCreds || manual,
           credentials,
+          manual,
         });
         // ensureValidSession(강제 로그인)이 이미 글쓰기 화면까지 확인함 — 추가 Chromium 검증 생략
         markSessionVerified(target);

@@ -8,6 +8,11 @@ import {
   type PlatformCredentials,
 } from "./auto-login.js";
 import {
+  bindConnectProgress,
+  reportConnectProgress,
+  unbindConnectProgress,
+} from "./connect-progress.js";
+import {
   hasEnvCredentials,
   resolveCredentials,
 } from "./platform-credentials.js";
@@ -24,12 +29,15 @@ import {
   normalizeNaverBlogId,
   normalizeTistoryBlogName,
 } from "./write-page-nav.js";
+import { isManualAuthScreen } from "./auth-wait.js";
 
 export type EnsureSessionOptions = {
   /** 저장된 세션을 무시하고 다시 로그인 */
   forceRelogin?: boolean;
   /** 일회성 자격증명 (요청에만 사용, DB에 저장하지 않음) */
   credentials?: PlatformCredentials;
+  /** 직접 로그인(브라우저 창 또는 화면 미리보기) */
+  manual?: boolean;
 };
 
 export { hasEnvCredentials } from "./platform-credentials.js";
@@ -43,10 +51,6 @@ function canLogin(
   return hasEnvCredentials(platform);
 }
 
-/**
- * Vercel·수동 세션 환경에서는 브라우저 검증을 생략하고 저장된 세션을 신뢰합니다.
- * (서버리스 Chromium 검증이 flaky 하고, 자격증명 없이는 폴백 불가)
- */
 function shouldTrustStoredSession(platform: Platform): boolean {
   return config.isVercel || !canLogin(platform);
 }
@@ -65,7 +69,56 @@ async function notifyAutoLoginFailure(platform: Platform): Promise<void> {
   });
 }
 
-/** 글쓰기 URL 접근으로 세션 유효성 확인 */
+async function captureLoginPreview(page: Page): Promise<void> {
+  if (config.isVercel) {
+    try {
+      const shot = await page.screenshot({ type: "jpeg", quality: 52 });
+      await reportConnectProgress("로그인 화면을 확인하는 중…", shot);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function finalizeLoginSession(
+  platform: Platform,
+  loginSession: Awaited<ReturnType<typeof createBrowserSession>>,
+  page: Page,
+): Promise<string> {
+  await reportConnectProgress("로그인 상태를 확인하는 중…");
+
+  const ok = await hasLoginCookies(loginSession.context, platform);
+  if (!ok) {
+    await notifyAutoLoginFailure(platform);
+    throw new Error(
+      `[${PLATFORMS[platform].name}] 로그인 후에도 연결 상태를 확인할 수 없습니다.`,
+    );
+  }
+
+  if (platform === "naver" && config.naverBlogId) {
+    await reportConnectProgress("글쓰기 화면을 확인하는 중…");
+    await navigateToWritePage(
+      page,
+      "naver",
+      normalizeNaverBlogId(config.naverBlogId),
+    );
+  } else if (platform === "tistory" && config.tistoryBlogName) {
+    await reportConnectProgress("글쓰기 화면을 확인하는 중…");
+    await navigateToWritePage(
+      page,
+      "tistory",
+      normalizeTistoryBlogName(config.tistoryBlogName),
+    );
+  }
+
+  await reportConnectProgress("연결 정보를 저장하는 중…");
+  const saved = await saveSession(platform, loginSession.context);
+  console.log(
+    `[${PLATFORMS[platform].name}] 로그인 → 세션 저장: ${saved}`,
+  );
+  return saved;
+}
+
 async function isWritePageAccessible(
   page: Page,
   platform: Platform,
@@ -115,10 +168,98 @@ async function isWritePageAccessible(
   return false;
 }
 
+/** 로컬: headed 창에서 사용자가 직접 로그인 / Vercel: 화면 미리보기 + 대기 */
+async function performManualLogin(
+  platform: Platform,
+  credentials?: PlatformCredentials,
+): Promise<string> {
+  const headed = !config.isVercel;
+  bindConnectProgress(platform);
+
+  const loginSession = await createBrowserSession({
+    headless: headed ? false : config.authLoginHeadless,
+  });
+  const page = await getSessionPage(loginSession);
+
+  try {
+    if (headed) {
+      await reportConnectProgress(
+        "브라우저 창을 여는 중… 열린 창에서 직접 로그인해 주세요.",
+      );
+    } else {
+      await reportConnectProgress(
+        "로그인 화면을 준비하는 중… 아래 미리보기를 확인해 주세요.",
+      );
+    }
+
+    const loginUrl = PLATFORMS[platform].loginUrl;
+    await page.goto(loginUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await humanPause(1500);
+    await captureLoginPreview(page);
+
+    // Vercel: 자격증명이 있으면 자동 입력까지 시도(캡차는 사용자가 재시도)
+    if (!headed && credentials?.id && credentials.password) {
+      await reportConnectProgress("아이디·비밀번호를 입력하는 중…");
+      if (platform === "naver") {
+        await autoLoginNaver(page, credentials);
+      } else if (platform === "tistory") {
+        await autoLoginTistory(page, credentials);
+      }
+      await captureLoginPreview(page);
+    } else if (headed) {
+      await reportConnectProgress(
+        "브라우저 창에서 로그인을 완료해 주세요. 완료되면 자동으로 연결됩니다.",
+      );
+    }
+
+    const deadline = Date.now() + (headed ? 5 * 60_000 : 3 * 60_000);
+    let previewAt = 0;
+
+    while (Date.now() < deadline) {
+      if (await hasLoginCookies(loginSession.context, platform)) {
+        return await finalizeLoginSession(platform, loginSession, page);
+      }
+
+      if (await isManualAuthScreen(page)) {
+        await reportConnectProgress(
+          headed
+            ? "추가 인증 화면입니다. 브라우저 창에서 인증을 완료해 주세요."
+            : "추가 인증(캡차·2단계)이 필요합니다. 잠시 후 다시 시도해 주세요.",
+        );
+        await captureLoginPreview(page);
+      } else if (headed) {
+        await reportConnectProgress("브라우저 창에서 로그인을 기다리는 중…");
+      } else if (Date.now() - previewAt > 4000) {
+        previewAt = Date.now();
+        await captureLoginPreview(page);
+        await reportConnectProgress("로그인 진행을 확인하는 중…");
+      }
+
+      await humanPause(2000);
+    }
+
+    throw new Error(
+      headed
+        ? "직접 로그인 시간이 초과되었습니다. 브라우저 창에서 로그인한 뒤 다시 시도해 주세요."
+        : "로그인 확인 시간이 초과되었습니다. 캡차·2단계 인증이 있으면 잠시 후 다시 시도하거나, 로컬 서버에서는 「브라우저에서 직접 로그인」을 이용해 주세요.",
+    );
+  } finally {
+    await page.close();
+    await loginSession.close();
+    unbindConnectProgress();
+  }
+}
+
 async function performAutoLogin(
   platform: Platform,
   credentials: PlatformCredentials,
 ): Promise<string> {
+  bindConnectProgress(platform);
+
+  await reportConnectProgress("브라우저를 준비하는 중…");
   const loginSession = await createBrowserSession({
     headless: config.authLoginHeadless,
   });
@@ -128,6 +269,7 @@ async function performAutoLogin(
     if (platform === "naver") {
       await autoLoginNaver(page, credentials);
       if (config.naverBlogId) {
+        await reportConnectProgress("글쓰기 화면을 확인하는 중…");
         await navigateToWritePage(
           page,
           "naver",
@@ -137,6 +279,7 @@ async function performAutoLogin(
     } else if (platform === "tistory") {
       await autoLoginTistory(page, credentials);
       if (config.tistoryBlogName) {
+        await reportConnectProgress("글쓰기 화면을 확인하는 중…");
         await navigateToWritePage(
           page,
           "tistory",
@@ -150,29 +293,14 @@ async function performAutoLogin(
       );
     }
 
-    const ok = await hasLoginCookies(loginSession.context, platform);
-    if (!ok) {
-      await notifyAutoLoginFailure(platform);
-      throw new Error(
-        `[${PLATFORMS[platform].name}] 로그인 후에도 연결 상태를 확인할 수 없습니다.`,
-      );
-    }
-
-    const saved = await saveSession(platform, loginSession.context);
-    console.log(
-      `[${PLATFORMS[platform].name}] 자동 로그인 → 세션 저장: ${saved}`,
-    );
-    return saved;
+    return await finalizeLoginSession(platform, loginSession, page);
   } finally {
     await page.close();
     await loginSession.close();
+    unbindConnectProgress();
   }
 }
 
-/**
- * 세션이 유효한지 확인하고, 만료 시 계정으로 자동 로그인 후 세션 저장.
- * @returns storage_state 파일 경로
- */
 export async function ensureValidSession(
   platform: Platform,
   options: EnsureSessionOptions = {},
@@ -181,7 +309,11 @@ export async function ensureValidSession(
   const force =
     Boolean(options.forceRelogin) || Boolean(options.credentials?.id);
 
-  // 1) 기존 세션 (강제 재로그인 아닐 때)
+  if (options.manual) {
+    const credentials = resolveCredentials(platform, options.credentials);
+    return performManualLogin(platform, credentials ?? undefined);
+  }
+
   if (!force && (await hasSession(platform))) {
     const statePath = await requireSession(platform);
 
@@ -190,6 +322,8 @@ export async function ensureValidSession(
       return statePath;
     }
 
+    bindConnectProgress(platform);
+    await reportConnectProgress("저장된 연결을 확인하는 중…");
     const session = await createBrowserSession({
       headless,
       storageStatePath: statePath,
@@ -211,6 +345,7 @@ export async function ensureValidSession(
     } finally {
       await page.close();
       await session.close();
+      unbindConnectProgress();
     }
   } else if (force) {
     console.log(
@@ -222,7 +357,6 @@ export async function ensureValidSession(
     );
   }
 
-  // 2) 자동 로그인
   const credentials = resolveCredentials(platform, options.credentials);
   if (!credentials) {
     if (platform === "google") {
@@ -237,8 +371,6 @@ export async function ensureValidSession(
     );
   }
 
-  // 발행 중 자동 폴백은 AUTH_AUTO_LOGIN이 켜져 있을 때만.
-  // 대시보드 「계정 연결」(force) 또는 폼 자격증명은 항상 허용.
   const userInitiated =
     force || Boolean(options.credentials?.id && options.credentials.password);
   if (!userInitiated && !config.authAutoLogin) {

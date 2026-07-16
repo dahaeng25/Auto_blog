@@ -84,12 +84,16 @@ CREATE TABLE IF NOT EXISTS platform_sessions (
 
 -- 계정 연결(자동 로그인) 비동기 작업 상태 (네이버·티스토리)
 CREATE TABLE IF NOT EXISTS platform_connect_jobs (
-  user_id     INTEGER NOT NULL,
-  platform    TEXT    NOT NULL,
-  status      TEXT    NOT NULL DEFAULT 'idle',
-  started_at  TEXT,
-  finished_at TEXT,
-  last_error  TEXT,
+  user_id            INTEGER NOT NULL,
+  platform           TEXT    NOT NULL,
+  status             TEXT    NOT NULL DEFAULT 'idle',
+  mode               TEXT    NOT NULL DEFAULT 'auto',
+  current_step       TEXT,
+  step_logs_json     TEXT,
+  screenshot_base64  TEXT,
+  started_at         TEXT,
+  finished_at        TEXT,
+  last_error         TEXT,
   PRIMARY KEY (user_id, platform)
 );
 
