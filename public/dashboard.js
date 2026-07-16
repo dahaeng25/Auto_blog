@@ -42,13 +42,29 @@ async function api(path, options = {}) {
       (typeof text === "string" && text.trim()
         ? text.trim().slice(0, 300)
         : `요청 실패 (${res.status})`);
-    const stage = body.stage ?? inferStageFromText(error);
+    const detail = body.detail ? String(body.detail) : "";
+    const stage =
+      body.stage ??
+      (isInfraErrorText(error) ? "연결" : inferStageFromText(error));
     const hint =
       body.hint ??
-      "실행 로그를 확인한 뒤, 해당 단계 버튼부터 다시 실행해 주세요.";
-    throw { message: error, stage, hint };
+      (detail && detail !== error
+        ? detail.slice(0, 240)
+        : isInfraErrorText(error)
+          ? "Vercel 환경 변수·배포·로그인을 확인한 뒤 새로고침하세요."
+          : "실행 로그를 확인한 뒤, 해당 단계 버튼부터 다시 실행해 주세요.");
+    throw { message: error, stage, hint, detail };
   }
   return res.json();
+}
+
+function isInfraErrorText(text = "") {
+  const t = String(text);
+  return (
+    /데이터베이스 연결|TURSO_|프록시 오류|서버 프록시|상태 조회 실패|세션 저장 실패/i.test(
+      t,
+    ) || /로그인이 필요/i.test(t)
+  );
 }
 
 function renderSessionDetails(sessionDetails, enabledPlatforms) {
@@ -452,8 +468,15 @@ function renderProgress(job, logs, statusConfig = {}) {
 function showErrorCard(errorText, stage, hint) {
   const card = document.getElementById("error-card");
   const body = document.getElementById("error-card-body");
+  const stageLabel = stage === "연결" || stage === "인증" || stage === "세션"
+    ? stage
+    : `${stage} 단계`;
+  const summary =
+    stage === "연결" || stage === "인증" || stage === "세션"
+      ? `[${stageLabel}]에서 문제가 발생했습니다.`
+      : `[${stageLabel}]에서 실패했습니다.`;
   body.innerHTML = `
-    <p class="error-summary">[${stage}] 단계에서 실패했습니다.</p>
+    <p class="error-summary">${escapeHtml(summary)}</p>
     <p>${escapeHtml(errorText)}</p>
     <p class="error-hint">${escapeHtml(hint)}</p>
   `;
@@ -1266,10 +1289,20 @@ async function init() {
     await refreshAll();
   } catch (err) {
     const error = normalizeError(err);
+    if (/로그인이 필요|인증된 사용자/i.test(error.message)) {
+      showAuthScreen();
+      return;
+    }
     const msgEl = document.getElementById("run-message");
     msgEl.textContent = error.message;
     msgEl.className = "run-message error";
-    showErrorCard(error.message, error.stage, error.hint);
+    const stage = isInfraErrorText(error.message) ? "연결" : error.stage;
+    showErrorCard(
+      error.message,
+      stage,
+      error.hint ??
+        "상단 세션 업로드·로그인 상태를 확인한 뒤 새로고침하세요.",
+    );
   }
 }
 
