@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=13" />
+  <link rel="stylesheet" href="/styles.css?v=14" />
 </head>
 <body>
   <div id="app" class="app">
@@ -40,8 +40,38 @@
       <div class="card status-card">
         <span class="label">세션</span>
         <div id="session-status" class="session-details">—</div>
-        <span class="meta">네이버 · 티스토리 · Google (재로그인 버튼으로 검증)</span>
+        <span class="meta">네이버 · 티스토리 (재로그인 버튼으로 검증)</span>
       </div>
+    </section>
+
+    <section class="card session-upload">
+      <div class="card-header">
+        <h2>세션 업로드</h2>
+        <p class="hint">호스트에서 npm run auth:setup 실행 후 생성된 auth/*_state.json 을 업로드하세요. (Docker는 ./auth 폴더 마운트 시 생략 가능) 세션 만료 시 <strong>자동 재로그인 시도</strong> 버튼으로 즉시 갱신을 시도할 수 있습니다.</p>
+      </div>
+      <div class="upload-row">
+        <div class="upload-item">
+          <span class="upload-platform-name">네이버 세션</span>
+          <div class="upload-controls">
+            <label class="upload-file-label">
+              <span class="sr-only">네이버 세션 파일</span>
+              <input type="file" id="upload-naver" accept=".json" />
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="naver">자동 재로그인 시도</button>
+          </div>
+        </div>
+        <div class="upload-item">
+          <span class="upload-platform-name">티스토리 세션</span>
+          <div class="upload-controls">
+            <label class="upload-file-label">
+              <span class="sr-only">티스토리 세션 파일</span>
+              <input type="file" id="upload-tistory" accept=".json" />
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="tistory">자동 재로그인 시도</button>
+          </div>
+        </div>
+      </div>
+      <p id="upload-message" class="upload-message"></p>
     </section>
 
     <section class="actions-bar">
@@ -122,46 +152,6 @@
       </section>
     </div>
 
-    <section class="card session-upload">
-      <div class="card-header">
-        <h2>세션 업로드</h2>
-        <p class="hint">호스트에서 npm run auth:setup 실행 후 생성된 auth/*_state.json 을 업로드하세요. (Docker는 ./auth 폴더 마운트 시 생략 가능) 세션 만료 시 <strong>자동 재로그인 시도</strong> 버튼으로 즉시 갱신을 시도할 수 있습니다.</p>
-      </div>
-      <div class="upload-row">
-        <div class="upload-item">
-          <span class="upload-platform-name">네이버 세션</span>
-          <div class="upload-controls">
-            <label class="upload-file-label">
-              <span class="sr-only">네이버 세션 파일</span>
-              <input type="file" id="upload-naver" accept=".json" />
-            </label>
-            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="naver">자동 재로그인 시도</button>
-          </div>
-        </div>
-        <div class="upload-item">
-          <span class="upload-platform-name">티스토리 세션</span>
-          <div class="upload-controls">
-            <label class="upload-file-label">
-              <span class="sr-only">티스토리 세션 파일</span>
-              <input type="file" id="upload-tistory" accept=".json" />
-            </label>
-            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="tistory">자동 재로그인 시도</button>
-          </div>
-        </div>
-        <div class="upload-item">
-          <span class="upload-platform-name">Google Blogger 세션</span>
-          <div class="upload-controls">
-            <label class="upload-file-label">
-              <span class="sr-only">Google Blogger 세션 파일</span>
-              <input type="file" id="upload-google" accept=".json" />
-            </label>
-            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="google">자동 재로그인 시도</button>
-          </div>
-        </div>
-      </div>
-      <p id="upload-message" class="upload-message"></p>
-    </section>
-
     <section class="card">
       <div class="card-header">
         <h2>실행 로그</h2>
@@ -203,6 +193,6 @@
     document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
     purgeLegacyLogin();
   </script>
-  <script src="/dashboard.js?v=16" type="module"></script>
+  <script src="/dashboard.js?v=17" type="module"></script>
 </body>
 </html>

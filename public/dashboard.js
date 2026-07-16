@@ -4,6 +4,9 @@ const PLATFORM_LABELS = {
   google: "Google",
 };
 
+/** 대시보드 세션 관리 대상 (Google 세션 UI 제외) */
+const DASHBOARD_PLATFORMS = ["naver", "tistory"];
+
 const STEP_LABELS = ["수집", "생성", "썸네일", "발행"];
 const STEP_KEYS = ["collect", "content", "thumbnail", "publish"];
 let pollTimer = null;
@@ -27,8 +30,8 @@ async function api(path, options = {}) {
 function renderSessionDetails(sessionDetails, enabledPlatforms) {
   const platforms =
     enabledPlatforms?.length > 0
-      ? enabledPlatforms
-      : Object.keys(PLATFORM_LABELS);
+      ? enabledPlatforms.filter((p) => DASHBOARD_PLATFORMS.includes(p))
+      : DASHBOARD_PLATFORMS;
 
   return platforms
     .map((p) => {
@@ -61,22 +64,13 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
       const loginSource =
         info?.accountIdSource === "env"
           ? " (설정 기준)"
-          : info?.accountIdSource === "unknown"
-            ? ""
-            : info?.accountIdSource === "session"
-              ? ""
-              : "";
+          : "";
 
       const blogSource =
         info?.blogIdSource === "env" ? " (설정 기준)" : "";
 
       const lastVerified =
         info?.verifiedAt ? `마지막 검증: ${escapeHtml(formatDate(info.verifiedAt))}` : "";
-
-      const googleNote =
-        p === "google"
-          ? `<div class="session-row-note">Google은 자동 재로그인 미지원 — 세션 파일만 사용</div>`
-          : "";
 
       const title = info?.message ? escapeHtml(info.message) : "";
 
@@ -90,7 +84,6 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
           <div class="session-row-line">블로그: ${escapeHtml(blogId)}${escapeHtml(blogSource)}</div>
           <div class="session-row-line session-row-status">상태: ${escapeHtml(statusText)}${escapeHtml(verification)}</div>
           ${lastVerified ? `<div class="session-row-note">${lastVerified}</div>` : ""}
-          ${googleNote}
         </div>
       `;
     })
@@ -571,7 +564,9 @@ async function runPipelineStep(step) {
       step === "publish" &&
       !status.config.publishDryRun
     ) {
-      const enabled = status.config.enabledPlatforms ?? ["naver", "tistory"];
+      const enabled = (status.config.enabledPlatforms ?? DASHBOARD_PLATFORMS).filter(
+        (p) => DASHBOARD_PLATFORMS.includes(p),
+      );
       const details = status.sessionDetails;
       const missing = enabled.filter((p) =>
         details ? details[p]?.valid !== "ok" : !status.sessions[p],
@@ -581,7 +576,7 @@ async function runPipelineStep(step) {
         throw {
           message: `${labels} 세션이 없습니다.`,
           stage: "발행",
-          hint: "하단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
+          hint: "상단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
         };
       }
     }
@@ -636,7 +631,9 @@ async function runPipeline() {
     }
 
     if (!status.config.publishDryRun) {
-      const enabled = status.config.enabledPlatforms ?? ["naver", "tistory"];
+      const enabled = (status.config.enabledPlatforms ?? DASHBOARD_PLATFORMS).filter(
+        (p) => DASHBOARD_PLATFORMS.includes(p),
+      );
       const details = status.sessionDetails;
       const missing = enabled.filter((p) =>
         details ? details[p]?.valid !== "ok" : !status.sessions[p],
@@ -646,7 +643,7 @@ async function runPipeline() {
         throw {
           message: `${labels} 세션이 없습니다.`,
           stage: "발행",
-          hint: "하단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
+          hint: "상단 세션 업로드에서 auth/*_state.json 을 업로드하세요.",
         };
       }
     }
@@ -903,10 +900,6 @@ async function init() {
   document.getElementById("upload-tistory")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) uploadSession("tistory", file);
-  });
-  document.getElementById("upload-google")?.addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) uploadSession("google", file);
   });
 
   document.querySelectorAll(".session-refresh-btn").forEach((btn) => {
