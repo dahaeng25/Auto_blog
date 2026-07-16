@@ -353,7 +353,7 @@ export async function getSessionInfo(platform: Platform): Promise<SessionInfo> {
       platform,
       hasSession: false,
       valid: "unknown",
-      message: `${PLATFORMS[platform].name} 세션 파일이 없습니다.`,
+      message: `${PLATFORMS[platform].name} 세션이 없습니다. 대시보드에서 업로드하세요.`,
       checkedAt,
       verifiedAt,
       verifiedValid,

@@ -174,9 +174,12 @@ export async function runAuthSetup(): Promise<void> {
 
     console.log("\n🎉 모든 플랫폼 인증이 완료되었습니다.");
     for (const platform of platforms) {
-      console.log(`   auth/${platform}_state.json`);
+      console.log(`   auth/${platform}_state.json (및 DB)`);
     }
-    console.log("\n다음: npm run auth:verify");
+    console.log(
+      "\nVercel 배포 시: 대시보드「세션 업로드」에서 위 JSON을 한 번 업로드하세요.",
+    );
+    console.log("다음: npm run auth:verify");
   } finally {
     await session.close();
   }
