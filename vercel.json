@@ -5,18 +5,32 @@
   "framework": null,
   "functions": {
     "api/[[...path]].ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "api/run.ts": {
       "maxDuration": 300,
       "memory": 2048,
       "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
-    "api/sessions/[platform].ts": {
-      "maxDuration": 30,
-      "memory": 1024
+    "api/run/step.ts": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
+    },
+    "api/cron.ts": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/sessions/[platform]/refresh.ts": {
       "maxDuration": 300,
       "memory": 2048,
       "includeFiles": "{node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
+    },
+    "api/sessions/[platform].ts": {
+      "maxDuration": 30,
+      "memory": 1024
     },
     "api/articles/[id].ts": {
       "maxDuration": 30,
@@ -45,16 +59,6 @@
     "api/auth/me.ts": {
       "maxDuration": 10,
       "memory": 512
-    },
-    "api/run/step.ts": {
-      "maxDuration": 300,
-      "memory": 2048,
-      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
-    },
-    "api/cron.ts": {
-      "maxDuration": 300,
-      "memory": 2048,
-      "includeFiles": "{assets/thumbnail/**,src/thumbnail/**,assets/images/**,config/blog-style.json,config/image-manifest.json,node_modules/@sparticuz/chromium/**,node_modules/puppeteer-core/**}"
     },
     "api/dashboard.ts": {
       "maxDuration": 10,
