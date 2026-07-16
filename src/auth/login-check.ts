@@ -5,12 +5,8 @@ import { PLATFORMS, type Platform } from "../../config/platforms.js";
 export function sessionExpiredMessage(platform: Platform): string {
   const name = PLATFORMS[platform].name;
   return (
-    `[${name}] 로그인 세션이 만료되었거나 유효하지 않습니다.\n` +
-    `글쓰기 화면 대신 로그인 페이지가 열렸을 수 있습니다.\n\n` +
-    `해결 방법:\n` +
-    `  1. npm run auth:setup  (브라우저에서 다시 로그인)\n` +
-    `  2. .env 에 PUBLISH_HEADLESS=false 설정 후 재시도\n` +
-    `  3. npm run auth:verify 로 세션 상태 확인`
+    `[${name}] 로그인이 만료되었거나 없습니다.\n` +
+    `대시보드 「계정 연결」에서 다시 로그인해 주세요.`
   );
 }
 

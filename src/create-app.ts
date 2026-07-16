@@ -42,7 +42,8 @@ import { readLocalizedTextFileSync } from "./fs/read-localized-text-file.js";
 import { logger } from "./monitoring/logger.js";
 import { isPipelineRunning, runOrchestration, runPipelineStep } from "./pipeline.js";
 import type { PipelineStep } from "./pipeline.js";
-import { saveStoredSession } from "./storage/session-store.js";
+import { saveStoredSession, deleteStoredSession } from "./storage/session-store.js";
+import { hasEnvCredentials } from "./auth/platform-credentials.js";
 import {
   clearThumbnailBackground,
   getThumbnailBackgroundStatus,
@@ -275,6 +276,10 @@ export async function createApp(
           rssFeedCount: config.rssFeedUrls.length,
           isVercel: config.isVercel,
           minPlainTextChars: loadBlogStyle().structure.minPlainTextChars ?? 3500,
+          envLoginAvailable: {
+            naver: hasEnvCredentials("naver"),
+            tistory: hasEnvCredentials("tistory"),
+          },
         },
         sessions: await getAllSessionStatus(),
         sessionDetails: await getAllSessionDetails(),
@@ -605,7 +610,7 @@ export async function createApp(
     const quick = verifySessionQuick(platform, validated.state);
     if (quick.valid === "expired") {
       return reply.status(400).send({
-        error: `${quick.message}. 로컬에서 다시 로그인한 뒤 storageState JSON을 업로드하세요.`,
+        error: `${quick.message}. 대시보드 「계정 연결」에서 다시 로그인해 주세요.`,
       });
     }
 
@@ -645,13 +650,45 @@ export async function createApp(
     if (!user) {
       return reply.status(401).send({ error: "로그인이 필요합니다." });
     }
+    if (platform !== "naver" && platform !== "tistory") {
+      return reply.status(400).send({
+        error: "네이버·티스토리만 웹에서 연결할 수 있습니다.",
+      });
+    }
     if (!(platform in PLATFORMS)) {
       return reply.status(400).send({ error: "지원하지 않는 플랫폼입니다." });
     }
+
+    const body =
+      (request.body as
+        | {
+            username?: string;
+            password?: string;
+            force?: boolean;
+          }
+        | undefined) ?? {};
+
+    const username = typeof body.username === "string" ? body.username.trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const hasFormCreds = Boolean(username && password);
+    const credentials = hasFormCreds
+      ? { id: username, password }
+      : undefined;
+
+    if (!hasFormCreds && !hasEnvCredentials(platform as Platform)) {
+      return reply.status(400).send({
+        error:
+          "아이디와 비밀번호를 입력해 주세요. (또는 서버에 계정 환경변수를 설정하세요)",
+      });
+    }
+
     try {
       return await runWithUser(user, async () => {
         const { ensureValidSession } = await import("./auth/ensure-session.js");
-        await ensureValidSession(platform as Platform);
+        await ensureValidSession(platform as Platform, {
+          forceRelogin: body.force === true || hasFormCreds,
+          credentials,
+        });
 
         // 네이버/티스토리는 “정확한 로그인 유효성”을 위해 글쓰기 화면 접근까지 추가 검증합니다.
         if (platform === "naver" && config.naverBlogId) {
@@ -680,12 +717,36 @@ export async function createApp(
           markSessionVerified("tistory");
         }
 
-        return { ok: true, platform };
+        const session = await getSessionInfo(platform as Platform);
+        return { ok: true, platform, session };
       });
     } catch (error) {
       return reply.status(500).send({
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  });
+
+  app.delete("/api/sessions/:platform", async (request, reply) => {
+    const { platform } = request.params as { platform: string };
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+    if (platform !== "naver" && platform !== "tistory") {
+      return reply.status(400).send({
+        error: "네이버·티스토리만 연결 해제할 수 있습니다.",
+      });
+    }
+    try {
+      await runWithUser(user, () => deleteStoredSession(platform as Platform));
+      return { ok: true, platform };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({ error: "로그인이 필요합니다." });
+      }
+      return reply.status(500).send({ error: message });
     }
   });
 

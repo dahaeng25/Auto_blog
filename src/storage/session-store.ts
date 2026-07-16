@@ -103,8 +103,28 @@ export async function resolveSessionPath(platform: Platform): Promise<string> {
   }
 
   throw new Error(
-    `[${PLATFORMS[platform].name}] 세션이 없습니다. 대시보드에서 세션 JSON을 업로드하세요.`,
+    `[${PLATFORMS[platform].name}] 연결이 없습니다. 대시보드에서 「계정 연결」로 로그인해 주세요.`,
   );
+}
+
+/** 사용자별 저장된 플랫폼 세션 삭제 */
+export async function deleteStoredSession(platform: Platform): Promise<void> {
+  const userId = requireUserId();
+  const db = await getDb();
+  await db.execute(
+    "DELETE FROM platform_sessions WHERE user_id = ? AND platform = ?",
+    [userId, platform],
+  );
+
+  if (config.isVercel) return;
+  const { default: fs } = await import("node:fs/promises");
+  for (const p of [localStatePath(platform, userId), legacyStatePath(platform)]) {
+    try {
+      await fs.unlink(p);
+    } catch {
+      /* ignore missing */
+    }
+  }
 }
 
 /**

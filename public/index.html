@@ -65,61 +65,38 @@
       <div class="card status-card">
         <span class="label">세션</span>
         <div id="session-status" class="session-details">—</div>
-        <span class="meta">네이버 · 티스토리 (재로그인 버튼으로 검증)</span>
+        <span class="meta">네이버 · 티스토리</span>
       </div>
     </section>
 
-    <section class="card session-upload">
+    <section class="card account-connect">
       <div class="card-header">
-        <h2>세션 업로드</h2>
-        <p class="hint">
-          최초 1회만 필요합니다. 로컬에서 <code>npm run auth:setup</code>으로 만든
-          <code>auth/naver_state.json</code> · <code>auth/tistory_state.json</code>
-          (Playwright storageState)을 업로드하면, 이후 클라우드에서 해당 계정 세션으로 발행합니다.
-          만료 시 파일을 다시 올려 주세요. (Google 세션은 지원하지 않습니다)
-        </p>
+        <h2>계정 연결</h2>
+        <p class="hint">네이버 · 티스토리에 한 번만 로그인하면 됩니다.</p>
       </div>
-      <div class="upload-row">
-        <div class="upload-item" data-upload-platform="naver">
-          <div class="upload-item-header">
-            <span class="upload-platform-name">네이버 세션</span>
-            <span id="upload-status-naver" class="badge idle upload-status">미등록</span>
+      <div class="connect-row">
+        <div class="connect-item" data-connect-platform="naver">
+          <div class="connect-item-header">
+            <span class="connect-platform-name">네이버</span>
+            <span id="connect-status-naver" class="badge idle connect-status">연결 안 됨</span>
           </div>
-          <p id="upload-hint-naver" class="upload-hint">세션 파일을 선택하거나 JSON을 붙여넣으세요.</p>
-          <div class="upload-controls">
-            <label class="upload-file-label">
-              <span class="sr-only">네이버 세션 파일</span>
-              <input type="file" id="upload-naver" accept=".json,application/json" />
-            </label>
-            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="naver">자동 재로그인 시도</button>
-          </div>
-          <details class="upload-paste">
-            <summary>JSON 붙여넣기</summary>
-            <textarea id="paste-naver" class="upload-paste-area" rows="4" placeholder='{"cookies":[...],"origins":[...]}' spellcheck="false"></textarea>
-            <button type="button" class="btn btn-secondary btn-sm paste-upload-btn" data-platform="naver">붙여넣은 JSON 업로드</button>
-          </details>
+          <p id="connect-hint-naver" class="connect-hint">아직 연결되지 않았습니다.</p>
+          <button type="button" class="btn btn-primary btn-connect" data-platform="naver">
+            네이버 연결
+          </button>
         </div>
-        <div class="upload-item" data-upload-platform="tistory">
-          <div class="upload-item-header">
-            <span class="upload-platform-name">티스토리 세션</span>
-            <span id="upload-status-tistory" class="badge idle upload-status">미등록</span>
+        <div class="connect-item" data-connect-platform="tistory">
+          <div class="connect-item-header">
+            <span class="connect-platform-name">티스토리</span>
+            <span id="connect-status-tistory" class="badge idle connect-status">연결 안 됨</span>
           </div>
-          <p id="upload-hint-tistory" class="upload-hint">세션 파일을 선택하거나 JSON을 붙여넣으세요.</p>
-          <div class="upload-controls">
-            <label class="upload-file-label">
-              <span class="sr-only">티스토리 세션 파일</span>
-              <input type="file" id="upload-tistory" accept=".json,application/json" />
-            </label>
-            <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="tistory">자동 재로그인 시도</button>
-          </div>
-          <details class="upload-paste">
-            <summary>JSON 붙여넣기</summary>
-            <textarea id="paste-tistory" class="upload-paste-area" rows="4" placeholder='{"cookies":[...],"origins":[...]}' spellcheck="false"></textarea>
-            <button type="button" class="btn btn-secondary btn-sm paste-upload-btn" data-platform="tistory">붙여넣은 JSON 업로드</button>
-          </details>
+          <p id="connect-hint-tistory" class="connect-hint">아직 연결되지 않았습니다.</p>
+          <button type="button" class="btn btn-primary btn-connect" data-platform="tistory">
+            티스토리 연결
+          </button>
         </div>
       </div>
-      <p id="upload-message" class="upload-message"></p>
+      <p id="connect-message" class="connect-message" aria-live="polite"></p>
     </section>
 
     <section class="card thumb-bg-section">
@@ -276,6 +253,48 @@
     </section>
   </div>
 
+  <div id="platform-login-screen" class="platform-login-screen hidden" role="dialog" aria-modal="true" aria-labelledby="platform-login-title">
+    <div class="platform-login-panel">
+      <button type="button" id="platform-login-back" class="btn btn-ghost btn-sm platform-login-back">← 뒤로</button>
+      <h2 id="platform-login-title">계정 연결</h2>
+      <p id="platform-login-desc" class="platform-login-desc">아이디와 비밀번호를 입력하면 서버에서 로그인합니다.</p>
+      <form id="platform-login-form" class="platform-login-form" autocomplete="on">
+        <input type="hidden" id="platform-login-platform" name="platform" value="" />
+        <label class="platform-login-field">
+          <span id="platform-login-id-label">아이디</span>
+          <input
+            type="text"
+            id="platform-login-username"
+            name="username"
+            inputmode="email"
+            autocomplete="username"
+            required
+            enterkeyhint="next"
+          />
+        </label>
+        <label class="platform-login-field">
+          <span>비밀번호</span>
+          <input
+            type="password"
+            id="platform-login-password"
+            name="password"
+            autocomplete="current-password"
+            required
+            enterkeyhint="done"
+          />
+        </label>
+        <p id="platform-login-env-hint" class="platform-login-env-hint hidden"></p>
+        <button type="submit" id="platform-login-submit" class="btn btn-primary btn-lg platform-login-submit">
+          로그인하고 연결
+        </button>
+        <button type="button" id="platform-login-env-btn" class="btn btn-secondary btn-lg platform-login-env-btn hidden">
+          서버 계정으로 연결
+        </button>
+      </form>
+      <p id="platform-login-status" class="platform-login-status" aria-live="polite"></p>
+    </div>
+  </div>
+
   <div id="article-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-backdrop"></div>
     <div class="modal-content card">
@@ -288,6 +307,6 @@
     </div>
   </div>
 
-  <script src="/dashboard.js?v=22" type="module"></script>
+  <script src="/dashboard.js?v=23" type="module"></script>
 </body>
 </html>

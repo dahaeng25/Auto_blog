@@ -17,11 +17,23 @@ import {
   normalizeTistoryBlogName,
 } from "./write-page-nav.js";
 
+/** 플랫폼 로그인에 쓰는 일회성 자격증명 (저장하지 않음) */
+export type PlatformCredentials = {
+  id: string;
+  password: string;
+};
+
 /** 네이버 ID/PW 자동 로그인 */
-export async function autoLoginNaver(page: Page): Promise<void> {
-  if (!config.naverId || !config.naverPassword) {
+export async function autoLoginNaver(
+  page: Page,
+  credentials?: PlatformCredentials,
+): Promise<void> {
+  const naverId = credentials?.id?.trim() || config.naverId;
+  const naverPassword = credentials?.password || config.naverPassword;
+
+  if (!naverId || !naverPassword) {
     throw new Error(
-      "네이버 자동 로그인에 NAVER_ID, NAVER_PASSWORD 가 필요합니다.",
+      "네이버 로그인을 위해 아이디와 비밀번호가 필요합니다.",
     );
   }
 
@@ -32,8 +44,8 @@ export async function autoLoginNaver(page: Page): Promise<void> {
   });
   await humanPause(1500);
 
-  await fillFieldByEvaluate(page, "#id", config.naverId);
-  await fillFieldByEvaluate(page, "#pw", config.naverPassword);
+  await fillFieldByEvaluate(page, "#id", naverId);
+  await fillFieldByEvaluate(page, "#pw", naverPassword);
 
   const keepLogin = page.locator("#keep").first();
   try {
@@ -64,9 +76,7 @@ export async function autoLoginNaver(page: Page): Promise<void> {
       );
       if (completed) return;
       throw new Error(
-        "네이버 2단계 인증 시간 초과.\n" +
-          "  • npm run auth:setup 으로 한 번 수동 로그인 후 세션을 저장하세요.\n" +
-          "  • .env 에 AUTH_LOGIN_HEADLESS=false 로 브라우저를 띄운 뒤 재시도하세요.",
+        "네이버 추가 인증(2단계·보안문자)이 필요해 자동 로그인에 실패했습니다. 잠시 후 다시 연결해 주세요.",
       );
     }
 
@@ -74,7 +84,7 @@ export async function autoLoginNaver(page: Page): Promise<void> {
   }
 
   throw new Error(
-    "네이버 자동 로그인 실패 — ID/PW를 확인하거나 npm run auth:setup 으로 수동 로그인하세요.",
+    "네이버 로그인에 실패했습니다. 아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
   );
 }
 
@@ -215,13 +225,18 @@ async function handleKakaoPostLogin(page: Page): Promise<void> {
 }
 
 /** 티스토리(카카오) 자동 로그인 */
-export async function autoLoginTistory(page: Page): Promise<void> {
-  const kakaoId = config.kakaoId || config.tistoryId;
-  const kakaoPassword = config.kakaoPassword || config.tistoryPassword;
+export async function autoLoginTistory(
+  page: Page,
+  credentials?: PlatformCredentials,
+): Promise<void> {
+  const kakaoId =
+    credentials?.id?.trim() || config.kakaoId || config.tistoryId;
+  const kakaoPassword =
+    credentials?.password || config.kakaoPassword || config.tistoryPassword;
 
   if (!kakaoId || !kakaoPassword) {
     throw new Error(
-      "티스토리 자동 로그인에 KAKAO_ID, KAKAO_PASSWORD (또는 TISTORY_ID/PASSWORD) 가 필요합니다.",
+      "티스토리(카카오) 로그인을 위해 아이디와 비밀번호가 필요합니다.",
     );
   }
 
@@ -264,8 +279,7 @@ export async function autoLoginTistory(page: Page): Promise<void> {
       );
       if (completed) return;
       throw new Error(
-        "티스토리/카카오 2단계 인증 시간 초과.\n" +
-          "  • npm run auth:setup 으로 한 번 수동 로그인 후 세션을 저장하세요.",
+        "티스토리/카카오 추가 인증이 필요해 자동 로그인에 실패했습니다. 잠시 후 다시 연결해 주세요.",
       );
     }
 
@@ -274,9 +288,7 @@ export async function autoLoginTistory(page: Page): Promise<void> {
   }
 
   throw new Error(
-    "티스토리 자동 로그인 실패 — 카카오 계정을 확인하거나 npm run auth:setup 을 사용하세요.\n" +
-      "  • KAKAO_ID는 카카오 로그인 이메일/전화번호여야 합니다.\n" +
-      "  • TISTORY_BLOG_NAME이 블로그 주소와 일치하는지 확인하세요. (예: kanghaeng1345)",
+    "티스토리 로그인에 실패했습니다. 카카오 아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
   );
 }
 

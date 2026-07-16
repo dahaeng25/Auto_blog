@@ -5,8 +5,12 @@ import { createBrowserSession, getSessionPage } from "./browser-factory.js";
 import {
   autoLoginNaver,
   autoLoginTistory,
-  visitWritePageForSession,
+  type PlatformCredentials,
 } from "./auto-login.js";
+import {
+  hasEnvCredentials,
+  resolveCredentials,
+} from "./platform-credentials.js";
 import { hasLoginCookies, sessionExpiredMessage } from "./login-check.js";
 import {
   hasSession,
@@ -16,28 +20,27 @@ import {
 import { notifyError } from "../monitoring/discord-notifier.js";
 import { humanPause } from "../publishing/utils/human-input.js";
 import {
-  isWriteEditorVisible,
   navigateToWritePage,
   normalizeNaverBlogId,
   normalizeTistoryBlogName,
 } from "./write-page-nav.js";
 
-function hasCredentials(platform: Platform): boolean {
-  if (platform === "naver") {
-    return Boolean(config.naverId && config.naverPassword);
-  }
-  if (platform === "google") {
-    return false;
-  }
-  const id = config.kakaoId || config.tistoryId;
-  const pw = config.kakaoPassword || config.tistoryPassword;
-  return Boolean(id && pw);
-}
+export type EnsureSessionOptions = {
+  /** 저장된 세션을 무시하고 다시 로그인 */
+  forceRelogin?: boolean;
+  /** 일회성 자격증명 (요청에만 사용, DB에 저장하지 않음) */
+  credentials?: PlatformCredentials;
+};
 
-/** .env 계정으로 자동 로그인 가능 여부 */
-function canAutoLogin(platform: Platform): boolean {
+export { hasEnvCredentials } from "./platform-credentials.js";
+
+function canLogin(
+  platform: Platform,
+  credentials?: PlatformCredentials,
+): boolean {
+  if (credentials?.id?.trim() && credentials.password) return true;
   if (!config.authAutoLogin) return false;
-  return hasCredentials(platform);
+  return hasEnvCredentials(platform);
 }
 
 /**
@@ -45,11 +48,15 @@ function canAutoLogin(platform: Platform): boolean {
  * (서버리스 Chromium 검증이 flaky 하고, 자격증명 없이는 폴백 불가)
  */
 function shouldTrustStoredSession(platform: Platform): boolean {
-  return config.isVercel || !canAutoLogin(platform);
+  return config.isVercel || !canLogin(platform);
+}
+
+function connectHint(): string {
+  return "대시보드에서 「계정 연결」로 다시 로그인해 주세요.";
 }
 
 function autoLoginFailureMessage(platform: Platform): string {
-  return `${PLATFORMS[platform].name} 세션 만료 + 자동 로그인 실패 — 수동 재업로드 필요`;
+  return `${PLATFORMS[platform].name} 연결 만료 + 자동 로그인 실패 — ${connectHint()}`;
 }
 
 async function notifyAutoLoginFailure(platform: Platform): Promise<void> {
@@ -108,15 +115,74 @@ async function isWritePageAccessible(
   return false;
 }
 
+async function performAutoLogin(
+  platform: Platform,
+  credentials: PlatformCredentials,
+): Promise<string> {
+  const loginSession = await createBrowserSession({
+    headless: config.authLoginHeadless,
+  });
+  const page = await getSessionPage(loginSession);
+
+  try {
+    if (platform === "naver") {
+      await autoLoginNaver(page, credentials);
+      if (config.naverBlogId) {
+        await navigateToWritePage(
+          page,
+          "naver",
+          normalizeNaverBlogId(config.naverBlogId),
+        );
+      }
+    } else if (platform === "tistory") {
+      await autoLoginTistory(page, credentials);
+      if (config.tistoryBlogName) {
+        await navigateToWritePage(
+          page,
+          "tistory",
+          normalizeTistoryBlogName(config.tistoryBlogName),
+        );
+      }
+    } else {
+      await notifyAutoLoginFailure(platform);
+      throw new Error(
+        `[${PLATFORMS[platform].name}] 웹 로그인을 지원하지 않습니다.`,
+      );
+    }
+
+    const ok = await hasLoginCookies(loginSession.context, platform);
+    if (!ok) {
+      await notifyAutoLoginFailure(platform);
+      throw new Error(
+        `[${PLATFORMS[platform].name}] 로그인 후에도 연결 상태를 확인할 수 없습니다.`,
+      );
+    }
+
+    const saved = await saveSession(platform, loginSession.context);
+    console.log(
+      `[${PLATFORMS[platform].name}] 자동 로그인 → 세션 저장: ${saved}`,
+    );
+    return saved;
+  } finally {
+    await page.close();
+    await loginSession.close();
+  }
+}
+
 /**
- * 세션이 유효한지 확인하고, 만료 시 .env 계정으로 자동 로그인 후 세션 저장.
+ * 세션이 유효한지 확인하고, 만료 시 계정으로 자동 로그인 후 세션 저장.
  * @returns storage_state 파일 경로
  */
-export async function ensureValidSession(platform: Platform): Promise<string> {
+export async function ensureValidSession(
+  platform: Platform,
+  options: EnsureSessionOptions = {},
+): Promise<string> {
   const headless = config.authLoginHeadless;
+  const force =
+    Boolean(options.forceRelogin) || Boolean(options.credentials?.id);
 
-  // 1) 기존 세션
-  if (await hasSession(platform)) {
+  // 1) 기존 세션 (강제 재로그인 아닐 때)
+  if (!force && (await hasSession(platform))) {
     const statePath = await requireSession(platform);
 
     if (shouldTrustStoredSession(platform)) {
@@ -146,87 +212,37 @@ export async function ensureValidSession(platform: Platform): Promise<string> {
       await page.close();
       await session.close();
     }
+  } else if (force) {
+    console.log(
+      `[${PLATFORMS[platform].name}] 강제 재로그인 — 웹에서 계정 연결`,
+    );
   } else {
     console.log(
-      `[${PLATFORMS[platform].name}] 세션 파일 없음 — 자동 로그인 시도`,
+      `[${PLATFORMS[platform].name}] 세션 없음 — 자동 로그인 시도`,
     );
   }
 
   // 2) 자동 로그인
-  if (!canAutoLogin(platform)) {
+  const credentials = resolveCredentials(platform, options.credentials);
+  if (!credentials || (!options.credentials && !config.authAutoLogin)) {
     if (platform === "google") {
       await notifyAutoLoginFailure(platform);
       throw new Error(
-        `[${PLATFORMS[platform].name}] Google은 자동 로그인을 지원하지 않습니다.\n` +
-          "  npm run auth:setup 으로 브라우저에서 수동 로그인 후 세션을 저장하세요.",
+        `[${PLATFORMS[platform].name}] Google은 웹 자동 로그인을 지원하지 않습니다.`,
       );
     }
     await notifyAutoLoginFailure(platform);
     throw new Error(
-      sessionExpiredMessage(platform) +
-        (config.isVercel
-          ? "\n\n대시보드에서 세션 JSON을 업로드하세요."
-          : "\n\n대시보드에서 세션 JSON을 업로드하거나 npm run auth:setup 으로 세션을 저장하세요."),
+      sessionExpiredMessage(platform) + `\n\n${connectHint()}`,
     );
   }
 
-  const loginSession = await createBrowserSession({
-    headless: config.authLoginHeadless,
-  });
-  const page = await getSessionPage(loginSession);
-
-  try {
-    if (platform === "naver") {
-      await autoLoginNaver(page);
-      if (config.naverBlogId) {
-        await navigateToWritePage(
-          page,
-          "naver",
-          normalizeNaverBlogId(config.naverBlogId),
-        );
-      }
-    } else if (platform === "tistory") {
-      await autoLoginTistory(page);
-      if (config.tistoryBlogName) {
-        await navigateToWritePage(
-          page,
-          "tistory",
-          normalizeTistoryBlogName(config.tistoryBlogName),
-        );
-      }
-    } else {
-      await notifyAutoLoginFailure(platform);
-      throw new Error(
-        `[${PLATFORMS[platform].name}] 자동 로그인 미지원 — npm run auth:setup 사용`,
-      );
-    }
-
-    const ok = await hasLoginCookies(loginSession.context, platform);
-    if (!ok) {
-      await notifyAutoLoginFailure(platform);
-      throw new Error(
-        `[${PLATFORMS[platform].name}] 자동 로그인 후에도 세션 확인 실패`,
-      );
-    }
-
-    const saved = await saveSession(platform, loginSession.context);
-    console.log(`[${PLATFORMS[platform].name}] 자동 로그인 → 세션 저장: ${saved}`);
-    return saved;
-  } finally {
-    await page.close();
-    await loginSession.close();
+  if (!canLogin(platform, options.credentials)) {
+    await notifyAutoLoginFailure(platform);
+    throw new Error(
+      sessionExpiredMessage(platform) + `\n\n${connectHint()}`,
+    );
   }
-}
 
-/** 활성화된 플랫폼 세션 일괄 갱신 */
-export async function ensureAllSessions(): Promise<void> {
-  const { getEnabledPlatforms, platformBlogIdConfigured } = await import(
-    "../../config/publish-platforms.js"
-  );
-
-  for (const platform of getEnabledPlatforms()) {
-    if (platformBlogIdConfigured(platform)) {
-      await ensureValidSession(platform);
-    }
-  }
+  return performAutoLogin(platform, credentials);
 }

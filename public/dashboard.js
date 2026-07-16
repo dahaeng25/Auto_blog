@@ -130,35 +130,37 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
     .join("");
 }
 
-function updateUploadPanelStatus(sessionDetails) {
+function updateConnectPanelStatus(sessionDetails) {
   for (const p of DASHBOARD_PLATFORMS) {
-    const badge = document.getElementById(`upload-status-${p}`);
-    const hint = document.getElementById(`upload-hint-${p}`);
+    const badge = document.getElementById(`connect-status-${p}`);
+    const hint = document.getElementById(`connect-hint-${p}`);
+    const btn = document.querySelector(`.btn-connect[data-platform="${p}"]`);
     if (!badge) continue;
 
     const info = sessionDetails?.[p];
     const hasSession = Boolean(info?.hasSession);
     const valid = info?.valid ?? (hasSession ? "unknown" : "expired");
 
-    badge.className = `badge upload-status ${
+    badge.className = `badge connect-status ${
       valid === "ok" ? "success" : valid === "expired" ? "error" : "idle"
     }`;
 
     if (!hasSession) {
-      badge.textContent = "미등록";
-      if (hint) {
-        hint.textContent =
-          "아직 세션이 없습니다. storageState JSON을 업로드하세요.";
-      }
+      badge.textContent = "연결 안 됨";
+      if (hint) hint.textContent = "아직 연결되지 않았습니다.";
+      if (btn) btn.textContent = `${PLATFORM_LABELS[p] ?? p} 연결`;
       continue;
     }
 
     if (valid === "ok") {
-      badge.textContent = "인증됨";
+      badge.textContent = "연결됨";
+      if (btn) btn.textContent = "다시 연결";
     } else if (valid === "expired") {
-      badge.textContent = "만료/무효";
+      badge.textContent = "다시 연결 필요";
+      if (btn) btn.textContent = "다시 연결";
     } else {
-      badge.textContent = "등록됨";
+      badge.textContent = "연결됨";
+      if (btn) btn.textContent = "다시 연결";
     }
 
     if (hint) {
@@ -169,14 +171,12 @@ function updateUploadPanelStatus(sessionDetails) {
       if (info?.blogId && info.blogId !== "—") {
         parts.push(`블로그: ${info.blogId}`);
       }
-      if (info?.message) parts.push(info.message);
       hint.textContent =
-        parts.length > 0
-          ? parts.join(" · ")
-          : "세션이 저장되어 있습니다.";
+        parts.length > 0 ? parts.join(" · ") : "연결이 저장되어 있습니다.";
     }
   }
 }
+
 
 function statusBadgeClass(status) {
   return `badge ${status ?? "idle"}`;
@@ -573,7 +573,7 @@ async function loadStatus(options = {}) {
       sessionEl.textContent = "—";
     }
   }
-  updateUploadPanelStatus(data.sessionDetails);
+  updateConnectPanelStatus(data.sessionDetails);
   document.getElementById("run-btn").disabled = data.isRunning;
 
   renderProgress(job, lastLogs, {
@@ -945,153 +945,183 @@ function closeModal() {
   if (body) body.replaceChildren();
 }
 
-async function uploadSessionJson(platform, json) {
+let envLoginAvailable = { naver: false, tistory: false };
+
+function openPlatformLogin(platform) {
+  const screen = document.getElementById("platform-login-screen");
+  const title = document.getElementById("platform-login-title");
+  const desc = document.getElementById("platform-login-desc");
+  const idLabel = document.getElementById("platform-login-id-label");
+  const platformInput = document.getElementById("platform-login-platform");
+  const username = document.getElementById("platform-login-username");
+  const password = document.getElementById("platform-login-password");
+  const statusEl = document.getElementById("platform-login-status");
+  const envHint = document.getElementById("platform-login-env-hint");
+  const envBtn = document.getElementById("platform-login-env-btn");
   const label = PLATFORM_LABELS[platform] ?? platform;
-  const msgEl = document.getElementById("upload-message");
-  msgEl.style.color = "var(--text-muted)";
-  msgEl.textContent = `${label} 세션 업로드 중...`;
 
-  try {
-    if (!json || typeof json !== "object" || Array.isArray(json)) {
-      throw {
-        message: "Playwright storageState JSON 객체가 필요합니다.",
-        stage: "세션",
-        hint: "cookies 배열이 포함된 auth/*_state.json 을 업로드하세요.",
-      };
-    }
-    if (!Array.isArray(json.cookies)) {
-      throw {
-        message: "storageState 형식이 아닙니다 (cookies 배열 없음).",
-        stage: "세션",
-        hint: "npm run auth:setup 으로 생성된 JSON을 사용하세요.",
-      };
-    }
+  if (!screen) return;
 
-    const result = await api(`/api/sessions/${platform}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(json),
-    });
+  platformInput.value = platform;
+  title.textContent = `${label} 연결`;
+  if (platform === "tistory") {
+    desc.textContent = "카카오 아이디와 비밀번호로 티스토리를 연결합니다.";
+    idLabel.textContent = "카카오 아이디";
+  } else {
+    desc.textContent = "네이버 아이디와 비밀번호를 입력하세요.";
+    idLabel.textContent = "네이버 아이디";
+  }
 
-    const session = result?.session;
-    if (session?.valid === "ok") {
-      msgEl.textContent = `${label} 세션 업로드 완료 — 인증됨`;
-    } else if (session?.hasSession) {
-      msgEl.textContent = `${label} 세션 업로드 완료 — ${session.message ?? "등록됨"}`;
+  username.value = "";
+  password.value = "";
+  statusEl.textContent = "";
+  statusEl.className = "platform-login-status";
+
+  const envOk = Boolean(envLoginAvailable?.[platform]);
+  if (envHint && envBtn) {
+    if (envOk) {
+      envHint.classList.remove("hidden");
+      envHint.textContent =
+        "서버에 계정이 설정되어 있으면, 아래 버튼만으로도 연결할 수 있습니다.";
+      envBtn.classList.remove("hidden");
+      username.required = false;
+      password.required = false;
     } else {
-      msgEl.textContent = `${label} 세션 업로드 완료`;
+      envHint.classList.add("hidden");
+      envBtn.classList.add("hidden");
+      username.required = true;
+      password.required = true;
     }
-    msgEl.style.color = "var(--success)";
-    await loadStatus();
-  } catch (err) {
-    const error = normalizeError(err);
-    const hint =
-      /404|실패 \(404\)/.test(error.message)
-        ? "배포가 최신 코드가 아닐 수 있습니다. Vercel Redeploy 후 다시 시도하세요."
-        : error.hint;
-    msgEl.textContent = `${error.message}${hint ? ` — ${hint}` : ""}`;
-    msgEl.style.color = "var(--error)";
   }
+
+  screen.classList.remove("hidden");
+  document.body.classList.add("platform-login-open");
+  username.focus();
 }
 
-async function uploadSession(platform, file) {
-  const msgEl = document.getElementById("upload-message");
-  try {
-    let json;
-    try {
-      json = JSON.parse(await file.text());
-    } catch {
-      throw {
-        message: "JSON 파일이 아닙니다. auth/*_state.json 을 선택하세요.",
-        stage: "세션",
-        hint: "npm run auth:setup 으로 생성된 파일을 업로드하세요.",
-      };
-    }
-    await uploadSessionJson(platform, json);
-  } catch (err) {
-    const error = normalizeError(err);
-    msgEl.textContent = error.message;
-    msgEl.style.color = "var(--error)";
-  } finally {
-    const input = document.getElementById(`upload-${platform}`);
-    if (input) input.value = "";
+function closePlatformLogin() {
+  const screen = document.getElementById("platform-login-screen");
+  screen?.classList.add("hidden");
+  document.body.classList.remove("platform-login-open");
+  const statusEl = document.getElementById("platform-login-status");
+  if (statusEl) {
+    statusEl.textContent = "";
+    statusEl.className = "platform-login-status";
   }
+  const submit = document.getElementById("platform-login-submit");
+  const envBtn = document.getElementById("platform-login-env-btn");
+  if (submit) {
+    submit.disabled = false;
+    submit.textContent = "로그인하고 연결";
+  }
+  if (envBtn) envBtn.disabled = false;
 }
 
-async function uploadPastedSession(platform) {
-  const textarea = document.getElementById(`paste-${platform}`);
-  const raw = textarea?.value?.trim() ?? "";
-  const msgEl = document.getElementById("upload-message");
-  if (!raw) {
-    msgEl.textContent = "붙여넣을 JSON이 비어 있습니다.";
-    msgEl.style.color = "var(--error)";
-    return;
-  }
-  try {
-    const json = JSON.parse(raw);
-    await uploadSessionJson(platform, json);
-    if (textarea) textarea.value = "";
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      msgEl.textContent = "JSON 파싱에 실패했습니다. 형식을 확인하세요.";
-      msgEl.style.color = "var(--error)";
-      return;
-    }
-    const error = normalizeError(err);
-    msgEl.textContent = error.message;
-    msgEl.style.color = "var(--error)";
-  }
-}
-
-async function refreshSession(platform) {
-  const btn = document.querySelector(
-    `.session-refresh-btn[data-platform="${platform}"]`,
-  );
-  const msgEl = document.getElementById("upload-message");
-  const originalText = btn?.textContent ?? "자동 재로그인 시도";
+async function connectPlatform(platform, { username = "", password = "" } = {}) {
   const label = PLATFORM_LABELS[platform] ?? platform;
+  const msgEl = document.getElementById("connect-message");
+  const statusEl = document.getElementById("platform-login-status");
+  const submit = document.getElementById("platform-login-submit");
+  const envBtn = document.getElementById("platform-login-env-btn");
 
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "재로그인 시도 중…";
+  const setBusy = (busy) => {
+    if (submit) {
+      submit.disabled = busy;
+      submit.textContent = busy ? "연결 중…" : "로그인하고 연결";
+    }
+    if (envBtn) envBtn.disabled = busy;
+    document.querySelectorAll(".btn-connect").forEach((btn) => {
+      btn.disabled = busy;
+    });
+  };
+
+  setBusy(true);
+  if (msgEl) {
+    msgEl.style.color = "var(--text-muted)";
+    msgEl.textContent = `${label} 연결 중… 잠시만 기다려 주세요.`;
   }
-  msgEl.style.color = "var(--text-muted)";
-  msgEl.textContent = `${label} 세션 갱신 시도 중...`;
+  if (statusEl) {
+    statusEl.className = "platform-login-status";
+    statusEl.textContent = "로그인 중입니다. 최대 1~2분 걸릴 수 있어요.";
+  }
   clearErrorCard();
 
   try {
-    await api(`/api/sessions/${platform}/refresh`, { method: "POST" });
-    msgEl.textContent = "✓ 세션 갱신 완료";
-    msgEl.style.color = "var(--success)";
+    const body = { force: true };
+    if (username && password) {
+      body.username = username;
+      body.password = password;
+    }
+
+    await api(`/api/sessions/${platform}/refresh`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    if (statusEl) {
+      statusEl.className = "platform-login-status success";
+      statusEl.textContent = "연결되었습니다.";
+    }
+    if (msgEl) {
+      msgEl.style.color = "var(--success)";
+      msgEl.textContent = `${label} 연결 완료`;
+    }
     await refreshAll();
+    closePlatformLogin();
   } catch (err) {
     const error = normalizeError(err);
     let hint = error.hint;
-    if (/2단계|캡차|CAPTCHA|자동 로그인|미지원/.test(error.message)) {
+    if (/2단계|캡차|CAPTCHA|추가 인증|보안문자/.test(error.message)) {
       hint =
         hint ??
-        "2단계 인증 또는 보안문자가 필요할 수 있습니다 — auth:setup으로 세션 파일을 생성한 뒤 업로드하세요.";
+        "추가 인증이 필요할 수 있습니다. 잠시 후 다시 시도해 주세요.";
     }
     if (/404|실패 \(404\)/.test(error.message)) {
       hint =
         hint ??
-        "배포가 최신 코드가 아닐 수 있습니다. Vercel Redeploy 후 다시 시도하세요.";
+        "배포가 최신이 아닐 수 있습니다. 재배포 후 다시 시도해 주세요.";
     }
-    msgEl.textContent = error.message;
-    msgEl.style.color = "var(--error)";
+    if (statusEl) {
+      statusEl.className = "platform-login-status error";
+      statusEl.textContent = error.message;
+    }
+    if (msgEl) {
+      msgEl.style.color = "var(--error)";
+      msgEl.textContent = error.message;
+    }
     showErrorCard(
       error.message,
-      "세션",
-      hint ??
-        "대시보드에서 세션 JSON을 업로드하거나 Vercel 환경변수(NAVER_ID 등)를 확인하세요.",
+      "계정 연결",
+      hint ?? "아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
     );
     await refreshAll();
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }
+    setBusy(false);
   }
+}
+
+async function handlePlatformLoginSubmit(event) {
+  event.preventDefault();
+  const platform = document.getElementById("platform-login-platform")?.value;
+  if (!platform) return;
+  const username = document.getElementById("platform-login-username")?.value?.trim() ?? "";
+  const password = document.getElementById("platform-login-password")?.value ?? "";
+  const envOk = Boolean(envLoginAvailable?.[platform]);
+
+  if (!username || !password) {
+    if (envOk) {
+      await connectPlatform(platform);
+      return;
+    }
+    const statusEl = document.getElementById("platform-login-status");
+    if (statusEl) {
+      statusEl.className = "platform-login-status error";
+      statusEl.textContent = "아이디와 비밀번호를 입력해 주세요.";
+    }
+    return;
+  }
+
+  await connectPlatform(platform, { username, password });
 }
 
 function applyThumbnailBgPreference(preference) {
