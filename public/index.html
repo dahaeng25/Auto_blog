@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=20" />
+  <link rel="stylesheet" href="/styles.css?v=21" />
 </head>
 <body>
   <div id="auth-screen" class="auth-screen">
@@ -72,28 +72,51 @@
     <section class="card session-upload">
       <div class="card-header">
         <h2>세션 업로드</h2>
-        <p class="hint">호스트에서 npm run auth:setup 실행 후 생성된 auth/*_state.json 을 업로드하세요. (Docker는 ./auth 폴더 마운트 시 생략 가능) 세션 만료 시 <strong>자동 재로그인 시도</strong> 버튼으로 즉시 갱신을 시도할 수 있습니다.</p>
+        <p class="hint">
+          최초 1회만 필요합니다. 로컬에서 <code>npm run auth:setup</code>으로 만든
+          <code>auth/naver_state.json</code> · <code>auth/tistory_state.json</code>
+          (Playwright storageState)을 업로드하면, 이후 클라우드에서 해당 계정 세션으로 발행합니다.
+          만료 시 파일을 다시 올려 주세요. (Google 세션은 지원하지 않습니다)
+        </p>
       </div>
       <div class="upload-row">
-        <div class="upload-item">
-          <span class="upload-platform-name">네이버 세션</span>
+        <div class="upload-item" data-upload-platform="naver">
+          <div class="upload-item-header">
+            <span class="upload-platform-name">네이버 세션</span>
+            <span id="upload-status-naver" class="badge idle upload-status">미등록</span>
+          </div>
+          <p id="upload-hint-naver" class="upload-hint">세션 파일을 선택하거나 JSON을 붙여넣으세요.</p>
           <div class="upload-controls">
             <label class="upload-file-label">
               <span class="sr-only">네이버 세션 파일</span>
-              <input type="file" id="upload-naver" accept=".json" />
+              <input type="file" id="upload-naver" accept=".json,application/json" />
             </label>
             <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="naver">자동 재로그인 시도</button>
           </div>
+          <details class="upload-paste">
+            <summary>JSON 붙여넣기</summary>
+            <textarea id="paste-naver" class="upload-paste-area" rows="4" placeholder='{"cookies":[...],"origins":[...]}' spellcheck="false"></textarea>
+            <button type="button" class="btn btn-secondary btn-sm paste-upload-btn" data-platform="naver">붙여넣은 JSON 업로드</button>
+          </details>
         </div>
-        <div class="upload-item">
-          <span class="upload-platform-name">티스토리 세션</span>
+        <div class="upload-item" data-upload-platform="tistory">
+          <div class="upload-item-header">
+            <span class="upload-platform-name">티스토리 세션</span>
+            <span id="upload-status-tistory" class="badge idle upload-status">미등록</span>
+          </div>
+          <p id="upload-hint-tistory" class="upload-hint">세션 파일을 선택하거나 JSON을 붙여넣으세요.</p>
           <div class="upload-controls">
             <label class="upload-file-label">
               <span class="sr-only">티스토리 세션 파일</span>
-              <input type="file" id="upload-tistory" accept=".json" />
+              <input type="file" id="upload-tistory" accept=".json,application/json" />
             </label>
             <button type="button" class="btn btn-secondary btn-sm session-refresh-btn" data-platform="tistory">자동 재로그인 시도</button>
           </div>
+          <details class="upload-paste">
+            <summary>JSON 붙여넣기</summary>
+            <textarea id="paste-tistory" class="upload-paste-area" rows="4" placeholder='{"cookies":[...],"origins":[...]}' spellcheck="false"></textarea>
+            <button type="button" class="btn btn-secondary btn-sm paste-upload-btn" data-platform="tistory">붙여넣은 JSON 업로드</button>
+          </details>
         </div>
       </div>
       <p id="upload-message" class="upload-message"></p>
@@ -211,6 +234,6 @@
     </div>
   </div>
 
-  <script src="/dashboard.js?v=20" type="module"></script>
+  <script src="/dashboard.js?v=21" type="module"></script>
 </body>
 </html>

@@ -437,10 +437,29 @@ body {
   gap: 10px;
 }
 
+.upload-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .upload-platform-name {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text);
+}
+
+.upload-status {
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.upload-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .upload-controls {
@@ -464,6 +483,36 @@ body {
 .upload-controls .session-refresh-btn {
   flex: 1 1 auto;
   white-space: nowrap;
+}
+
+.upload-paste {
+  margin-top: 2px;
+}
+
+.upload-paste summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.upload-paste[open] summary {
+  margin-bottom: 8px;
+}
+
+.upload-paste-area {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--border, #2a3142);
+  border-radius: 8px;
+  background: var(--bg-elevated, #12151c);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  resize: vertical;
 }
 
 .upload-message {

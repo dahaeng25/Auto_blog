@@ -20,7 +20,7 @@ export interface SessionInfo {
   blogIdSource?: "session" | "env" | "unknown";
 }
 
-type StorageStateLike = {
+export type StorageStateLike = {
   cookies?: Array<{
     name: string;
     value: string;
@@ -36,6 +36,60 @@ type StorageStateLike = {
     localStorage?: Array<{ name: string; value: string }>;
   }>;
 };
+
+/** Playwright storageState JSON인지 대략 검증합니다. */
+export function validateStorageState(
+  body: unknown,
+): { ok: true; state: StorageStateLike } | { ok: false; error: string } {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return {
+      ok: false,
+      error:
+        "Playwright storageState JSON 객체가 필요합니다. (cookies 배열 포함)",
+    };
+  }
+
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.cookies)) {
+    return {
+      ok: false,
+      error:
+        "storageState 형식이 아닙니다. cookies 배열이 없습니다. auth/*_state.json 을 확인하세요.",
+    };
+  }
+
+  if (record.cookies.length === 0) {
+    return {
+      ok: false,
+      error: "cookies 배열이 비어 있습니다. 로그인된 세션 파일을 업로드하세요.",
+    };
+  }
+
+  for (const cookie of record.cookies) {
+    if (!cookie || typeof cookie !== "object" || Array.isArray(cookie)) {
+      return {
+        ok: false,
+        error: "cookies 항목 형식이 올바르지 않습니다.",
+      };
+    }
+    const c = cookie as Record<string, unknown>;
+    if (typeof c.name !== "string" || typeof c.value !== "string") {
+      return {
+        ok: false,
+        error: "각 cookie는 name·value 문자열이 필요합니다.",
+      };
+    }
+  }
+
+  if (record.origins !== undefined && !Array.isArray(record.origins)) {
+    return {
+      ok: false,
+      error: "origins 필드는 배열이어야 합니다.",
+    };
+  }
+
+  return { ok: true, state: body as StorageStateLike };
+}
 
 const verificationByPlatform = new Map<
   Platform,

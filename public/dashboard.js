@@ -114,6 +114,54 @@ function renderSessionDetails(sessionDetails, enabledPlatforms) {
     .join("");
 }
 
+function updateUploadPanelStatus(sessionDetails) {
+  for (const p of DASHBOARD_PLATFORMS) {
+    const badge = document.getElementById(`upload-status-${p}`);
+    const hint = document.getElementById(`upload-hint-${p}`);
+    if (!badge) continue;
+
+    const info = sessionDetails?.[p];
+    const hasSession = Boolean(info?.hasSession);
+    const valid = info?.valid ?? (hasSession ? "unknown" : "expired");
+
+    badge.className = `badge upload-status ${
+      valid === "ok" ? "success" : valid === "expired" ? "error" : "idle"
+    }`;
+
+    if (!hasSession) {
+      badge.textContent = "미등록";
+      if (hint) {
+        hint.textContent =
+          "아직 세션이 없습니다. storageState JSON을 업로드하세요.";
+      }
+      continue;
+    }
+
+    if (valid === "ok") {
+      badge.textContent = "인증됨";
+    } else if (valid === "expired") {
+      badge.textContent = "만료/무효";
+    } else {
+      badge.textContent = "등록됨";
+    }
+
+    if (hint) {
+      const parts = [];
+      if (info?.accountId && info.accountId !== "—") {
+        parts.push(`계정: ${info.accountId}`);
+      }
+      if (info?.blogId && info.blogId !== "—") {
+        parts.push(`블로그: ${info.blogId}`);
+      }
+      if (info?.message) parts.push(info.message);
+      hint.textContent =
+        parts.length > 0
+          ? parts.join(" · ")
+          : "세션이 저장되어 있습니다.";
+    }
+  }
+}
+
 function statusBadgeClass(status) {
   return `badge ${status ?? "idle"}`;
 }
@@ -502,6 +550,7 @@ async function loadStatus(options = {}) {
       sessionEl.textContent = "—";
     }
   }
+  updateUploadPanelStatus(data.sessionDetails);
   document.getElementById("run-btn").disabled = data.isRunning;
 
   renderProgress(job, lastLogs, {
@@ -872,29 +921,42 @@ function closeModal() {
   if (body) body.replaceChildren();
 }
 
-async function uploadSession(platform, file) {
+async function uploadSessionJson(platform, json) {
+  const label = PLATFORM_LABELS[platform] ?? platform;
   const msgEl = document.getElementById("upload-message");
   msgEl.style.color = "var(--text-muted)";
-  msgEl.textContent = `${platform} 세션 업로드 중...`;
+  msgEl.textContent = `${label} 세션 업로드 중...`;
 
   try {
-    let json;
-    try {
-      json = JSON.parse(await file.text());
-    } catch {
+    if (!json || typeof json !== "object" || Array.isArray(json)) {
       throw {
-        message: "JSON 파일이 아닙니다. auth/*_state.json 을 선택하세요.",
-        stage: "발행",
-        hint: "npm run auth:setup 으로 생성된 파일을 업로드하세요.",
+        message: "Playwright storageState JSON 객체가 필요합니다.",
+        stage: "세션",
+        hint: "cookies 배열이 포함된 auth/*_state.json 을 업로드하세요.",
+      };
+    }
+    if (!Array.isArray(json.cookies)) {
+      throw {
+        message: "storageState 형식이 아닙니다 (cookies 배열 없음).",
+        stage: "세션",
+        hint: "npm run auth:setup 으로 생성된 JSON을 사용하세요.",
       };
     }
 
-    await api(`/api/sessions/${platform}`, {
+    const result = await api(`/api/sessions/${platform}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(json),
     });
-    msgEl.textContent = `${platform} 세션 업로드 완료`;
+
+    const session = result?.session;
+    if (session?.valid === "ok") {
+      msgEl.textContent = `${label} 세션 업로드 완료 — 인증됨`;
+    } else if (session?.hasSession) {
+      msgEl.textContent = `${label} 세션 업로드 완료 — ${session.message ?? "등록됨"}`;
+    } else {
+      msgEl.textContent = `${label} 세션 업로드 완료`;
+    }
     msgEl.style.color = "var(--success)";
     await loadStatus();
   } catch (err) {
@@ -904,6 +966,55 @@ async function uploadSession(platform, file) {
         ? "배포가 최신 코드가 아닐 수 있습니다. Vercel Redeploy 후 다시 시도하세요."
         : error.hint;
     msgEl.textContent = `${error.message}${hint ? ` — ${hint}` : ""}`;
+    msgEl.style.color = "var(--error)";
+  }
+}
+
+async function uploadSession(platform, file) {
+  const msgEl = document.getElementById("upload-message");
+  try {
+    let json;
+    try {
+      json = JSON.parse(await file.text());
+    } catch {
+      throw {
+        message: "JSON 파일이 아닙니다. auth/*_state.json 을 선택하세요.",
+        stage: "세션",
+        hint: "npm run auth:setup 으로 생성된 파일을 업로드하세요.",
+      };
+    }
+    await uploadSessionJson(platform, json);
+  } catch (err) {
+    const error = normalizeError(err);
+    msgEl.textContent = error.message;
+    msgEl.style.color = "var(--error)";
+  } finally {
+    const input = document.getElementById(`upload-${platform}`);
+    if (input) input.value = "";
+  }
+}
+
+async function uploadPastedSession(platform) {
+  const textarea = document.getElementById(`paste-${platform}`);
+  const raw = textarea?.value?.trim() ?? "";
+  const msgEl = document.getElementById("upload-message");
+  if (!raw) {
+    msgEl.textContent = "붙여넣을 JSON이 비어 있습니다.";
+    msgEl.style.color = "var(--error)";
+    return;
+  }
+  try {
+    const json = JSON.parse(raw);
+    await uploadSessionJson(platform, json);
+    if (textarea) textarea.value = "";
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      msgEl.textContent = "JSON 파싱에 실패했습니다. 형식을 확인하세요.";
+      msgEl.style.color = "var(--error)";
+      return;
+    }
+    const error = normalizeError(err);
+    msgEl.textContent = error.message;
     msgEl.style.color = "var(--error)";
   }
 }
@@ -1130,6 +1241,13 @@ async function init() {
   document.getElementById("upload-tistory")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) uploadSession("tistory", file);
+  });
+
+  document.querySelectorAll(".paste-upload-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const platform = btn.dataset.platform;
+      if (platform) void uploadPastedSession(platform);
+    });
   });
 
   document.querySelectorAll(".session-refresh-btn").forEach((btn) => {

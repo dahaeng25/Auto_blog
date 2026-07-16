@@ -12,6 +12,11 @@ function localStatePath(platform: Platform, userId: number): string {
   );
 }
 
+/** CLI 업로드용 — 기존 경로 auth/naver_state.json 등 */
+function legacyStatePath(platform: Platform): string {
+  return PLATFORMS[platform].stateFile;
+}
+
 async function writeTempState(
   platform: Platform,
   userId: number,
@@ -27,70 +32,90 @@ async function writeTempState(
   return tmpPath;
 }
 
+async function writeLocalFiles(
+  platform: Platform,
+  userId: number,
+  stateJson: string,
+): Promise<void> {
+  if (config.isVercel) return;
+  const { default: fs } = await import("node:fs/promises");
+  const scoped = localStatePath(platform, userId);
+  await fs.mkdir(path.dirname(scoped), { recursive: true });
+  await fs.writeFile(scoped, stateJson, "utf-8");
+  // 대시보드 업로드용으로 레거시 경로에도 복사
+  const legacy = legacyStatePath(platform);
+  await fs.mkdir(path.dirname(legacy), { recursive: true });
+  await fs.writeFile(legacy, stateJson, "utf-8");
+}
+
 export async function hasStoredSession(platform: Platform): Promise<boolean> {
   const userId = requireUserId();
-
-  if (!config.isVercel) {
-    const { default: fs } = await import("node:fs/promises");
-    try {
-      await fs.access(localStatePath(platform, userId));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   const db = await getDb();
   const result = await db.execute(
     "SELECT 1 FROM platform_sessions WHERE user_id = ? AND platform = ?",
     [userId, platform],
   );
-  return result.rows.length > 0;
+  if (result.rows.length > 0) return true;
+
+  if (config.isVercel) return false;
+
+  const { default: fs } = await import("node:fs/promises");
+  for (const p of [localStatePath(platform, userId), legacyStatePath(platform)]) {
+    try {
+      await fs.access(p);
+      return true;
+    } catch {
+      /* continue */
+    }
+  }
+  return false;
 }
 
+/**
+ * Playwright에 넘길 storageState 파일 경로.
+ * DB 세션을 우선하고, 없으면 로컬 파일을 사용합니다.
+ */
 export async function resolveSessionPath(platform: Platform): Promise<string> {
   const userId = requireUserId();
-
-  if (!config.isVercel) {
-    const statePath = localStatePath(platform, userId);
-    if (!(await hasStoredSession(platform))) {
-      throw new Error(
-        `[${PLATFORMS[platform].name}] 세션 파일이 없습니다: ${statePath}\n` +
-          `먼저 'npm run auth:setup'을 실행하거나 대시보드에서 세션을 업로드하세요.`,
-      );
-    }
-    return statePath;
-  }
-
   const db = await getDb();
   const result = await db.execute(
     "SELECT state_json FROM platform_sessions WHERE user_id = ? AND platform = ?",
     [userId, platform],
   );
 
-  if (result.rows.length === 0) {
-    throw new Error(
-      `[${PLATFORMS[platform].name}] 세션이 없습니다. 대시보드에서 세션 JSON을 업로드하세요.`,
-    );
+  if (result.rows.length > 0) {
+    return writeTempState(platform, userId, String(result.rows[0].state_json));
   }
 
-  return writeTempState(platform, userId, String(result.rows[0].state_json));
+  if (!config.isVercel) {
+    const { default: fs } = await import("node:fs/promises");
+    for (const statePath of [
+      localStatePath(platform, userId),
+      legacyStatePath(platform),
+    ]) {
+      try {
+        await fs.access(statePath);
+        return statePath;
+      } catch {
+        /* continue */
+      }
+    }
+  }
+
+  throw new Error(
+    `[${PLATFORMS[platform].name}] 세션이 없습니다. 대시보드에서 세션 JSON을 업로드하세요.`,
+  );
 }
 
+/**
+ * 로그인 사용자별로 Playwright storageState JSON을 DB에 저장.
+ * 로컬에서는 업로드용 auth/*_state.json 파일도 함께 기록합니다.
+ */
 export async function saveStoredSession(
   platform: Platform,
   stateJson: string,
 ): Promise<void> {
   const userId = requireUserId();
-
-  if (!config.isVercel) {
-    const { default: fs } = await import("node:fs/promises");
-    const statePath = localStatePath(platform, userId);
-    await fs.mkdir(path.dirname(statePath), { recursive: true });
-    await fs.writeFile(statePath, stateJson, "utf-8");
-    return;
-  }
-
   const db = await getDb();
   await db.execute(
     `INSERT INTO platform_sessions (user_id, platform, state_json, updated_at)
@@ -100,4 +125,5 @@ export async function saveStoredSession(
        updated_at = excluded.updated_at`,
     [userId, platform, stateJson, new Date().toISOString()],
   );
+  await writeLocalFiles(platform, userId, stateJson);
 }

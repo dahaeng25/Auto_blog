@@ -10,8 +10,11 @@ import { readRecentLogs } from "./api/log-reader.js";
 import { hasSession } from "./auth/session-manager.js";
 import {
   getAllSessionInfo,
+  getSessionInfo,
   markSessionVerified,
   markSessionVerificationFailed,
+  validateStorageState,
+  verifySessionQuick,
 } from "./auth/session-info.js";
 import {
   buildClearSessionCookie,
@@ -93,6 +96,29 @@ function isPublicPath(url: string): boolean {
   return false;
 }
 
+function isAuthContextError(message: string): boolean {
+  return (
+    /인증된 사용자가 없습니다/i.test(message) ||
+    /runWithUser로 userId/i.test(message) ||
+    /로그인이 필요합니다/i.test(message)
+  );
+}
+
+function isLikelyDbConnectionError(message: string): boolean {
+  return (
+    /TURSO_/i.test(message) ||
+    /libsql/i.test(message) ||
+    /DATABASE_URL/i.test(message) ||
+    /AUTH_TOKEN/i.test(message) ||
+    /Unable to connect/i.test(message) ||
+    /ECONNREFUSED/i.test(message) ||
+    /ENOTFOUND/i.test(message) ||
+    /fetch failed/i.test(message) ||
+    /SQLITE_CANTOPEN/i.test(message) ||
+    /DB 초기화 실패/i.test(message)
+  );
+}
+
 export async function createApp(
   options: CreateAppOptions = {},
 ): Promise<FastifyInstance> {
@@ -109,23 +135,37 @@ export async function createApp(
     );
   });
 
-  app.addHook("onRequest", async (request, reply) => {
-    const token = getSessionTokenFromRequest(request.headers);
-    const sessionUser = await resolveSessionUser(token);
-    if (sessionUser) {
-      const user: AuthUser = {
-        id: sessionUser.id,
-        username: sessionUser.username,
-      };
-      request.authUser = user;
-      enterUserContext(user);
-    }
+  // callback + runWithUser(done) — enterWith 는 Fastify/Vercel inject 에서
+  // 라우트 핸들러까지 ALS 가 끊겨 requireUserId() 가 실패할 수 있음
+  app.addHook("onRequest", (request, reply, done) => {
+    void (async () => {
+      try {
+        const token = getSessionTokenFromRequest(request.headers);
+        const sessionUser = await resolveSessionUser(token);
+        if (sessionUser) {
+          const user: AuthUser = {
+            id: sessionUser.id,
+            username: sessionUser.username,
+          };
+          request.authUser = user;
+          if (!isPublicPath(request.url)) {
+            runWithUser(user, () => done());
+            return;
+          }
+          // 공개 경로도 세션이 있으면 컨텍스트 유지 (/api/auth/me 등)
+          runWithUser(user, () => done());
+          return;
+        }
 
-    if (isPublicPath(request.url)) return;
-
-    if (!request.authUser) {
-      return reply.status(401).send({ error: "로그인이 필요합니다." });
-    }
+        if (!isPublicPath(request.url)) {
+          reply.status(401).send({ error: "로그인이 필요합니다." });
+          return;
+        }
+        done();
+      } catch (error) {
+        done(error instanceof Error ? error : new Error(String(error)));
+      }
+    })();
   });
 
   app.get("/health", async () => ({ ok: true }));
@@ -198,7 +238,12 @@ export async function createApp(
   });
 
   app.get("/api/status", async (request, reply) => {
-    try {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+
+    const loadStatus = async () => {
       // jobStore.get() 는 stale running 을 error 로 정리한다.
       // Vercel은 인스턴스가 달라 메모리 락이 false 여도 DB running 이면 실행 중으로 본다.
       const job = await jobStore.get();
@@ -206,7 +251,7 @@ export async function createApp(
       return {
         job,
         isRunning,
-        user: request.authUser ?? null,
+        user,
         config: {
           cronSchedule: config.cronSchedule,
           cronTimezone: config.cronTimezone,
@@ -226,12 +271,29 @@ export async function createApp(
         sessions: await getAllSessionStatus(),
         sessionDetails: await getAllSessionDetails(),
       };
+    };
+
+    try {
+      // 훅 ALS 유실 대비 — request.authUser 기준으로 한 번 더 감쌈
+      return await runWithUser(user, loadStatus);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error);
-      return reply.status(503).send({
-        error:
-          "데이터베이스 연결 실패. Vercel에 TURSO_DATABASE_URL, TURSO_AUTH_TOKEN을 설정했는지 확인하세요.",
+      if (isAuthContextError(message)) {
+        return reply.status(401).send({
+          error: "로그인이 필요합니다.",
+          detail: message,
+        });
+      }
+      if (isLikelyDbConnectionError(message)) {
+        return reply.status(503).send({
+          error:
+            "데이터베이스 연결 실패. Vercel에 TURSO_DATABASE_URL, TURSO_AUTH_TOKEN을 설정했는지 확인하세요.",
+          detail: message,
+        });
+      }
+      return reply.status(500).send({
+        error: `상태 조회 실패: ${message}`,
         detail: message,
       });
     }
@@ -492,26 +554,68 @@ export async function createApp(
     }
   });
 
-  app.get("/api/sessions", async () => getAllSessionStatus());
-  app.get("/api/sessions/status", async () => getAllSessionDetails());
+  app.get("/api/sessions", async (request, reply) => {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+    return runWithUser(user, () => getAllSessionStatus());
+  });
+  app.get("/api/sessions/status", async (request, reply) => {
+    const user = request.authUser;
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+    return runWithUser(user, () => getAllSessionDetails());
+  });
 
   app.post("/api/sessions/:platform", async (request, reply) => {
     const { platform } = request.params as { platform: string };
+    const user = request.authUser;
+
+    if (!user) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+
+    if (platform !== "naver" && platform !== "tistory") {
+      return reply.status(400).send({
+        error:
+          "대시보드 세션 업로드는 네이버·티스토리만 지원합니다.",
+      });
+    }
 
     if (!(platform in PLATFORMS)) {
       return reply.status(400).send({ error: "지원하지 않는 플랫폼입니다." });
     }
 
     const body = request.body;
-    if (!body || typeof body !== "object") {
-      return reply.status(400).send({ error: "세션 JSON이 필요합니다." });
+    const validated = validateStorageState(body);
+    if (!validated.ok) {
+      return reply.status(400).send({ error: validated.error });
     }
 
-    const json = JSON.stringify(body);
-    await saveStoredSession(platform as Platform, json);
+    const quick = verifySessionQuick(platform, validated.state);
+    if (quick.valid === "expired") {
+      return reply.status(400).send({
+        error: `${quick.message}. 로컬에서 다시 로그인한 뒤 storageState JSON을 업로드하세요.`,
+      });
+    }
 
-    logger.info(`세션 업로드 완료: ${platform} (user=${request.authUser?.id})`);
-    return { ok: true, platform };
+    const json = JSON.stringify(validated.state);
+    try {
+      await runWithUser(user, () => saveStoredSession(platform as Platform, json));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.status(500).send({
+        error: `세션 저장에 실패했습니다: ${message}`,
+      });
+    }
+
+    logger.info(`세션 업로드 완료: ${platform} (user=${user.id})`);
+    const session = await runWithUser(user, () =>
+      getSessionInfo(platform as Platform),
+    );
+    return { ok: true, platform, session };
   });
 
   app.post("/api/sessions/:platform/refresh", async (request, reply) => {

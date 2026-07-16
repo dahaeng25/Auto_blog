@@ -31,7 +31,11 @@ export function requireUserId(): number {
   return id;
 }
 
-/** Node ALS에 사용자 주입 (Fastify onRequest 훅용) */
+/**
+ * Node ALS에 사용자 주입.
+ * Fastify onRequest 에서는 enterWith 대신 runWithUser(user, done) 를 쓰세요.
+ * (Vercel inject 경로에서 enterWith 컨텍스트가 핸들러까지 전파되지 않을 수 있음)
+ */
 export function enterUserContext(user: AuthUser): void {
   storage.enterWith(user);
 }
