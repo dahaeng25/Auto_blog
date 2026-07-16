@@ -720,7 +720,10 @@ export async function createApp(
     try {
       if (phase === "start") {
         return await runWithUser(user, async () => {
-          await connectJobStore.markConnecting(target);
+          await connectJobStore.markConnecting(
+            target,
+            manual ? "manual" : "auto",
+          );
 
           // 로컬: 백그라운드 실행 후 즉시 202
           // Vercel: refresh.ts 핸들러가 waitUntil 로 phase=run 을 이어서 실행
@@ -749,7 +752,10 @@ export async function createApp(
       return await runWithUser(user, async () => {
         const current = await connectJobStore.get(target);
         if (current.status !== "connecting") {
-          await connectJobStore.markConnecting(target);
+          await connectJobStore.markConnecting(
+            target,
+            manual ? "manual" : "auto",
+          );
         }
         const result = await runConnect();
         return {
