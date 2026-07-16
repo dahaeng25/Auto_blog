@@ -482,6 +482,41 @@ async function loadArticles() {
   }
 }
 
+async function clearRecentArticles() {
+  const confirmed = window.confirm(
+    "최근 원고를 모두 삭제할까요?\n\n· articles 테이블의 원고가 삭제됩니다.\n· drafted 주제는 farmed로 복원됩니다.\n· 발행 이력(published)과 플랫폼 세션은 유지됩니다.",
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById("articles-clear-btn");
+  const msgEl = document.getElementById("run-message");
+  if (btn) btn.disabled = true;
+  if (msgEl) {
+    msgEl.textContent = "최근 원고 초기화 중...";
+    msgEl.className = "run-message";
+  }
+
+  try {
+    const result = await api("/api/articles/clear", { method: "POST" });
+    if (msgEl) {
+      msgEl.textContent =
+        result.message ??
+        `원고 ${result.deletedArticles ?? 0}건을 초기화했습니다.`;
+      msgEl.className = "run-message success";
+    }
+    await Promise.all([loadArticles(), loadStats()]);
+  } catch (err) {
+    const error = normalizeError(err);
+    if (msgEl) {
+      msgEl.textContent = error.message;
+      msgEl.className = "run-message error";
+    }
+    showErrorCard(error.message, "원고", error.hint);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadPublishedPosts() {
   const posts = await api("/api/published-posts?limit=15");
   const container = document.getElementById("published-list");
@@ -881,6 +916,9 @@ async function init() {
 
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
   document.getElementById("run-btn").addEventListener("click", runPipeline);
+  document
+    .getElementById("articles-clear-btn")
+    ?.addEventListener("click", () => void clearRecentArticles());
   document.getElementById("pipeline-progress")?.addEventListener("click", (e) => {
     const btn = e.target.closest(".step-run-btn");
     if (!btn || btn.disabled) return;

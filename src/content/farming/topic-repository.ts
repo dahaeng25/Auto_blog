@@ -175,6 +175,30 @@ export class TopicRepository {
     ]);
   }
 
+  async clearArticles(): Promise<{ deletedArticles: number; resetTopics: number }> {
+    const db = await this.db();
+    const countResult = await db.execute("SELECT COUNT(*) as count FROM articles");
+    const deletedArticles = Number(countResult.rows[0]?.count ?? 0);
+
+    const draftedResult = await db.execute(
+      "SELECT COUNT(*) as count FROM topics WHERE status = ?",
+      ["drafted"],
+    );
+    const resetTopics = Number(draftedResult.rows[0]?.count ?? 0);
+
+    // 원고만 삭제. drafted 주제는 farmed로 되돌려 재생성 가능.
+    // published 주제·발행 이력(published_posts)은 유지.
+    await db.batch([
+      { sql: "DELETE FROM articles", args: [] },
+      {
+        sql: "UPDATE topics SET status = ? WHERE status = ?",
+        args: ["farmed", "drafted"],
+      },
+    ]);
+
+    return { deletedArticles, resetTopics };
+  }
+
   async getTopicById(id: number): Promise<TopicRecord | null> {
     const db = await this.db();
     const result = await db.execute(

@@ -266,6 +266,11 @@ body {
   font-size: 0.8rem;
 }
 
+#articles-clear-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* Actions */
 .actions-bar {
   text-align: center;

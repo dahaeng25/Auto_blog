@@ -265,6 +265,21 @@ export async function createApp(
     }
   });
 
+  app.post("/api/articles/clear", async () => {
+    const repo = new TopicRepository();
+    try {
+      const result = await repo.clearArticles();
+      return {
+        ok: true,
+        deletedArticles: result.deletedArticles,
+        resetTopics: result.resetTopics,
+        message: `원고 ${result.deletedArticles}건 삭제, drafted 주제 ${result.resetTopics}건을 farmed로 복원했습니다.`,
+      };
+    } finally {
+      repo.close();
+    }
+  });
+
   app.get("/api/articles/:id/preview", async (request, reply) => {
     const { id } = request.params as { id: string };
     const articleId = Number(id);

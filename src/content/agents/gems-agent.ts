@@ -121,6 +121,7 @@ ${buildTopicPlanningInstruction(topic)}
 - 가상의 구체적 의뢰인(연령·직업·국적·상황) — '의뢰인' 호칭만 사용
 - 키워드 표기는 원문 그대로, 본문 문장 속에 3~5회 자연 삽입
 - 최소 ${MIN_CHARS}자, 6개 h2 섹션 구조
+- 법령은 실재하는 법명만 인용. HACCP·ISO·KS·식품안전관리인증 등은 산업 인증·표준이지 법령이 아님(허구 법령 창작 금지)
 - JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText)
 - thumbnailTopLabel: 핵심 키워드 1개 압축 5~10자 (나열 금지)
 - thumbnailText: 선정한 제목을 2~3줄 문장으로 압축 (\\n 줄바꿈)${buildInternalLinkInstruction(relatedPosts ?? [])}`;
@@ -135,6 +136,7 @@ ${buildTopicPlanningInstruction(topic)}
 - 수임 사례 스토리텔링(의뢰인 상황·준비과정·반려/보완·해결)을 전편에 걸쳐 전개
 - 6개 h2 섹션 + 각 섹션 본문 충분히 작성
 - 법령·심사 포인트·서류 체크리스트(8항목+)·Q&A(5문항+, 답변 상세)
+- 법령은 실재하는 법명만 인용. HACCP·ISO·KS·식품안전관리인증 등은 산업 인증·표준이지 법령이 아님(허구 법령 창작 금지)
 - 면책·해시태그·사무소 정보 포함
 사례 인물은 '의뢰인'으로만 지칭 (실명·가명 금지).
 JSON 1건만 출력 (title, htmlBody, thumbnailTopLabel, thumbnailText).
@@ -209,6 +211,64 @@ function detectBannedExpression(text: string): string[] {
   return [...new Set(hits)];
 }
 
+/**
+ * 산업 인증·표준·약어 — 법령명이 아님.
+ * 키워드 오타(HACC)와 한글 정식명도 포함해 LLM/정규식 오탐을 막는다.
+ */
+const KNOWN_CERTIFICATION_TERMS = [
+  "HACCP",
+  "HACC", // 키워드 오타 별칭
+  "ISO",
+  "KS",
+  "GMP",
+  "GAP",
+  "HALAL",
+  "FSSC",
+  "BRC",
+  "IFS",
+  "식품안전관리인증",
+  "식품안전관리인증기준",
+  "위해요소중점관리",
+  "위해요소중점관리기준",
+  "유기농인증",
+  "무항생제인증",
+  "동물복지인증",
+  "지리적표시",
+] as const;
+
+const CERTIFICATION_TERM_PATTERN = new RegExp(
+  KNOWN_CERTIFICATION_TERMS.map((t) =>
+    /[A-Za-z]/.test(t) ? `\\b${t}\\b` : t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  ).join("|"),
+  "i",
+);
+
+function mentionsKnownCertification(text: string): boolean {
+  return CERTIFICATION_TERM_PATTERN.test(text);
+}
+
+/** LLM이 인증·표준을 허구 법령으로 오인한 경우 */
+function isCertificationLegalFalsePositive(reason: string): boolean {
+  if (!reason.trim() || !mentionsKnownCertification(reason)) return false;
+
+  // 인증·표준 표기를 제거한 뒤에도 허구 법령 의심이 남으면 진짜 의심으로 유지
+  let stripped = reason;
+  for (const term of KNOWN_CERTIFICATION_TERMS) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    stripped = stripped.replace(new RegExp(escaped, "ig"), " ");
+  }
+  stripped = stripped
+    .replace(/인증|표준|규격/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const stillSuspicious =
+    /(가상의?\s*법|임의의?\s*법|예시\s*법령|허구의?\s*법령|없는\s*법령|제\s*\d+\s*조)/.test(
+      stripped,
+    );
+  return !stillSuspicious;
+}
+
 function detectSuspiciousLegalReference(text: string): boolean {
   const explicitSuspicious =
     /(가상의?\s*법|임의의?\s*법|예시\s*법령|허구의?\s*법령|없는\s*법령)/.test(text);
@@ -220,6 +280,10 @@ function detectSuspiciousLegalReference(text: string): boolean {
   for (const [, rawLawName, rawArticle] of references) {
     const lawName = rawLawName.trim();
     const article = Number(rawArticle);
+    // 인증·표준명은 법령 인용으로 보지 않음
+    if (mentionsKnownCertification(lawName) || /인증|표준|규격$/.test(lawName)) {
+      continue;
+    }
     const looksLikeLawName =
       /(법|령|규칙|규정|조례|고시|훈령)$/.test(lawName) ||
       /(시행령|시행규칙)/.test(lawName);
@@ -260,7 +324,11 @@ async function runLlmSelfReview(
    - false: ${brand.brandName}, ${brand.officeName} 등 사무소·행정사 명칭
 2) bannedExpressionViolation: 꿀팁/총정리/대박 또는 '무료상담'·'상담 받으세요' 등 **마케팅 유도 문구**일 때만 true
    ('대학 상담', '국제처 안내', '유학 상담' 등 업무·기관 설명은 false)
-3) fabricatedLegalReferenceSuspicion: 법령명이 부자연스럽거나 허구로 보이는 인용 의심 여부
+3) fabricatedLegalReferenceSuspicion: **허구·임의로 만든 법령명**을 '제N조' 등으로 인용한 경우만 true
+   - true: 존재하지 않는 법명, "가상 법", "예시 법령", 조문 번호가 비정상적으로 큰 인용
+   - false: HACCP(또는 오타 HACC), 식품안전관리인증(기준), ISO, KS, GMP, GAP, HALAL 등 **산업 인증·표준·규격**
+   - false: 식품위생법·축산물위생관리법 등 실재 법령의 일반적인 언급
+   - 인증·표준을 법령으로 오인하지 말 것
 
 반드시 JSON:
 {
@@ -464,8 +532,16 @@ export class GemsAgent {
         `[Gems] LLM 금지어 검수 의심(정규식 미검출) — 통과 처리: ${llmReview.reason || "사유 없음"}`,
       );
     }
-    const mergedLegalSuspicion =
-      legalSuspicious || llmReview.fabricatedLegalReferenceSuspicion;
+    let llmLegalSuspicion = llmReview.fabricatedLegalReferenceSuspicion;
+    if (llmLegalSuspicion && !legalSuspicious) {
+      if (isCertificationLegalFalsePositive(llmReview.reason)) {
+        console.warn(
+          `[Gems] LLM 법령 검수 의심(인증·표준 오탐) — 통과 처리: ${llmReview.reason || "사유 없음"}`,
+        );
+        llmLegalSuspicion = false;
+      }
+    }
+    const mergedLegalSuspicion = legalSuspicious || llmLegalSuspicion;
 
     const violations: string[] = [];
     if (mergedAliasViolation) {
