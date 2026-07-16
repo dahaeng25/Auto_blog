@@ -2,6 +2,7 @@
  * 엔트리포인트: npm run auth:verify
  * 저장된 세션으로 글쓰기 화면까지 접근 가능한지 확인합니다.
  */
+import { withSystemUser } from "../src/auth/with-system-user.js";
 import { verifyAllSessions } from "../src/auth/session-verify.js";
 import { PLATFORMS } from "../config/platforms.js";
 
@@ -11,7 +12,7 @@ async function main(): Promise<void> {
   console.log("╚══════════════════════════════════════════╝\n");
 
   const headless = process.env.PUBLISH_HEADLESS !== "false";
-  const results = await verifyAllSessions(headless);
+  const results = await withSystemUser(() => verifyAllSessions(headless));
 
   if (results.length === 0) {
     console.log("검증할 플랫폼이 없습니다. .env에 NAVER_BLOG_ID / TISTORY_BLOG_NAME을 설정하세요.");
