@@ -36,13 +36,18 @@ async function migrateLibsql(
     }
   }
 
-  await db.execute({
-    sql: `CREATE TABLE IF NOT EXISTS platform_sessions (
-      platform    TEXT PRIMARY KEY,
-      state_json  TEXT NOT NULL,
-      updated_at  TEXT NOT NULL
-    )`,
-    args: [],
+  const { migrateUserScopedSchema } = await import("./migrate-user-scope.js");
+  await migrateUserScopedSchema({
+    execute: async (sql, args = []) => {
+      const result = await db.execute({ sql, args: args as never[] });
+      return {
+        rows: result.rows as Record<string, unknown>[],
+        lastInsertRowid: result.lastInsertRowid,
+      };
+    },
+    batch: async () => {
+      throw new Error("batch not used during migrate");
+    },
   });
 
   migrated = true;

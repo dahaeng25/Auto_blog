@@ -1,6 +1,7 @@
 import { getDb } from "../../db/client.js";
 import type { DbExecutor } from "../../db/types.js";
 import type { Platform } from "../../../config/platforms.js";
+import { requireUserId } from "../../auth/user-context.js";
 
 export interface PublishedPostRecord {
   id: number;
@@ -54,16 +55,22 @@ export class PublishedPostRepository {
     return this.dbPromise;
   }
 
+  private userId(): number {
+    return requireUserId();
+  }
+
   async save(input: SavePublishedPostInput): Promise<void> {
     const db = await this.db();
     await db.execute(
-      `INSERT INTO published_posts (topic_id, platform, title, keywords, post_url, published_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO published_posts (user_id, topic_id, platform, title, keywords, post_url, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(post_url) DO UPDATE SET
+         user_id = excluded.user_id,
          title = excluded.title,
          keywords = excluded.keywords,
          published_at = excluded.published_at`,
       [
+        this.userId(),
         input.topicId ?? null,
         input.platform,
         input.title,
@@ -80,6 +87,7 @@ export class PublishedPostRepository {
    */
   async findRelated(keywords: string, limit = 3): Promise<PublishedPostRecord[]> {
     const db = await this.db();
+    const userId = this.userId();
     const tokens = tokenizeKeywords(keywords);
     const seen = new Set<string>();
     const results: PublishedPostRecord[] = [];
@@ -91,10 +99,10 @@ export class PublishedPostRepository {
       const result = await db.execute(
         `SELECT id, topic_id, platform, title, keywords, post_url, published_at
          FROM published_posts
-         WHERE keywords LIKE ? OR title LIKE ?
+         WHERE user_id = ? AND (keywords LIKE ? OR title LIKE ?)
          ORDER BY published_at DESC
          LIMIT ?`,
-        [pattern, pattern, limit * 2],
+        [userId, pattern, pattern, limit * 2],
       );
 
       for (const row of result.rows) {
@@ -110,9 +118,10 @@ export class PublishedPostRepository {
       const fallback = await db.execute(
         `SELECT id, topic_id, platform, title, keywords, post_url, published_at
          FROM published_posts
+         WHERE user_id = ?
          ORDER BY published_at DESC
          LIMIT ?`,
-        [limit * 2],
+        [userId, limit * 2],
       );
 
       for (const row of fallback.rows) {
@@ -133,9 +142,10 @@ export class PublishedPostRepository {
     const result = await db.execute(
       `SELECT id, topic_id, platform, title, keywords, post_url, published_at
        FROM published_posts
+       WHERE user_id = ?
        ORDER BY published_at DESC
        LIMIT ?`,
-      [limit],
+      [this.userId(), limit],
     );
     return result.rows.map((row) => mapRow(row as Record<string, unknown>));
   }

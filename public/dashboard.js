@@ -12,9 +12,22 @@ const STEP_KEYS = ["collect", "content", "thumbnail", "publish"];
 let pollTimer = null;
 let lastLogs = [];
 let lastStatus = null;
+let currentUser = null;
+let authMode = "login";
 
 async function api(path, options = {}) {
-  const res = await fetch(path, options);
+  const res = await fetch(path, {
+    ...options,
+    credentials: "include",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers,
+    },
+  });
+  if (res.status === 401 && !path.startsWith("/api/auth/")) {
+    showAuthScreen();
+    throw { message: "로그인이 필요합니다.", stage: "인증", hint: "다시 로그인해 주세요." };
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const error = body.error ?? body.message ?? `요청 실패 (${res.status})`;
@@ -138,12 +151,46 @@ function inferStageFromText(text = "") {
   return "생성";
 }
 
+function isPlaceholderLogLine(line = "") {
+  const t = String(line);
+  return (
+    t.includes("아직 실행 로그가 없습니다") ||
+    t.includes("상세 로그: Vercel") ||
+    t.includes("Deployments → Functions")
+  );
+}
+
+function usableLogs(logs = []) {
+  return logs.filter((line) => line && !isPlaceholderLogLine(line));
+}
+
+/** trigger 예: web-step:content, web-step:publish, web, cron */
+function stageFromTrigger(trigger = "") {
+  const t = String(trigger).toLowerCase();
+  if (t.includes("collect")) return "수집";
+  if (t.includes("thumbnail")) return "썸네일";
+  if (t.includes("publish")) return "발행";
+  if (t.includes("content")) return "생성";
+  return null;
+}
+
 function inferCurrentStage(job, logs) {
   if (job?.status === "success") return "done";
-  if (job?.status === "error") return inferStageFromText(job.lastError);
+  if (job?.status === "error") {
+    return (
+      stageFromTrigger(job.trigger) ??
+      inferStageFromText(job.lastError) ??
+      "생성"
+    );
+  }
   if (job?.status !== "running") return "idle";
-  const text = [...logs].reverse().join("\n");
-  return inferStageFromText(text);
+
+  const fromTrigger = stageFromTrigger(job.trigger);
+  const realLogs = usableLogs(logs);
+  if (realLogs.length === 0) {
+    return fromTrigger ?? "생성";
+  }
+  return inferStageFromText(realLogs.slice().reverse().join("\n"));
 }
 
 /** 로그 한 줄에서 타임스탬프·레벨 제거 */
@@ -199,8 +246,8 @@ function extractActivityLines(logs, max = 5) {
   return result;
 }
 
-function activitySummaryText(job, stage, lines) {
-  if (job?.status === "running") {
+function activitySummaryText(job, stage, lines, isRunning) {
+  if (isRunning || job?.status === "running") {
     const latest = lines[lines.length - 1];
     if (latest) return `실행 중 — ${latest}`;
     if (stage !== "idle" && stage !== "done") {
@@ -219,7 +266,7 @@ function activitySummaryText(job, stage, lines) {
   return "대기 중 — 실행을 시작하면 여기에 진행 상황이 표시됩니다.";
 }
 
-function renderActivityBox(job, logs) {
+function renderActivityBox(job, logs, statusConfig = {}) {
   const box = document.getElementById("activity-box");
   const summaryEl = document.getElementById("activity-summary");
   const pulseEl = document.getElementById("activity-pulse");
@@ -227,31 +274,42 @@ function renderActivityBox(job, logs) {
   const feedEl = document.getElementById("activity-feed");
   if (!box || !summaryEl || !pulseEl || !miniEl || !feedEl) return;
 
+  const isRunning = Boolean(statusConfig.isRunning) || job?.status === "running";
+  const contentMode = statusConfig.contentMode ?? "gems";
   const stage = inferCurrentStage(job, logs);
   const stageIndex = STEP_LABELS.indexOf(stage);
-  const lines = extractActivityLines(logs, 5);
+  const lines = extractActivityLines(usableLogs(logs), 5);
 
-  summaryEl.textContent = activitySummaryText(job, stage, lines);
+  summaryEl.textContent = activitySummaryText(job, stage, lines, isRunning);
 
   pulseEl.className = "activity-pulse";
-  if (job?.status === "running") pulseEl.classList.add("running");
+  if (isRunning) pulseEl.classList.add("running");
   else if (job?.status === "success") pulseEl.classList.add("done");
   else if (job?.status === "error") pulseEl.classList.add("error");
   else pulseEl.classList.add("idle");
 
   miniEl.innerHTML = STEP_LABELS.map((label, i) => {
+    const stepKey = STEP_KEYS[i];
     let segClass = "";
-    if (job?.status === "success" || i < stageIndex) segClass = "done";
-    else if (job?.status === "error" && i === stageIndex) segClass = "error";
-    else if (job?.status === "running" && i === stageIndex) segClass = "running";
+    if (contentMode === "gems" && stepKey === "collect") {
+      segClass = "";
+    } else if (job?.status === "success" || (stageIndex >= 0 && i < stageIndex)) {
+      segClass = "done";
+    } else if (job?.status === "error" && i === stageIndex) {
+      segClass = "error";
+    } else if (isRunning && i === stageIndex) {
+      segClass = "running";
+    }
     return `<span class="activity-mini-seg ${segClass}" title="${label}"></span>`;
   }).join("");
 
-  if (lines.length === 0) {
+  if (!isRunning && (!job?.status || job.status === "idle")) {
+    feedEl.innerHTML = `<li>${escapeHtml("아직 활동 기록이 없습니다.")}</li>`;
+  } else if (lines.length === 0) {
     feedEl.innerHTML = `<li>${escapeHtml(
-      job?.status === "idle" || !job?.status
-        ? "아직 활동 기록이 없습니다."
-        : "상세 로그를 불러오는 중…",
+      isRunning
+        ? "상세 로그는 Vercel Functions Logs에서 확인할 수 있습니다."
+        : "아직 활동 기록이 없습니다.",
     )}</li>`;
   } else {
     feedEl.innerHTML = lines
@@ -264,8 +322,8 @@ function renderLogsSummary(logs, job) {
   const el = document.getElementById("logs-summary");
   if (!el) return;
 
-  const lines = extractActivityLines(logs, 8);
-  if (lines.length === 0 || (!job?.status || job.status === "idle")) {
+  const lines = extractActivityLines(usableLogs(logs), 8);
+  if (lines.length === 0 || job?.status === "idle" || !job?.status) {
     el.innerHTML = "";
     return;
   }
@@ -279,26 +337,37 @@ function renderProgress(job, logs, statusConfig = {}) {
   const container = document.getElementById("pipeline-progress");
   const stage = inferCurrentStage(job, logs);
   const stageIndex = STEP_LABELS.indexOf(stage);
-  const isRunning = Boolean(statusConfig.isRunning);
+  const isRunning = Boolean(statusConfig.isRunning) || job?.status === "running";
   const contentMode = statusConfig.contentMode ?? "gems";
+  const effectiveStatus = isRunning
+    ? "running"
+    : job?.status === "success"
+      ? "success"
+      : job?.status === "error"
+        ? "error"
+        : "idle";
 
   container.innerHTML = STEP_LABELS.map((label, i) => {
     let stateClass = "waiting";
     let stateText = "대기";
 
-    if (job?.status === "success" || i < stageIndex) {
+    const stepKey = STEP_KEYS[i];
+    const isCollectNa = stepKey === "collect" && contentMode === "gems";
+
+    if (isCollectNa) {
+      stateClass = "waiting";
+      stateText = "해당없음";
+    } else if (effectiveStatus === "success" || (stageIndex >= 0 && i < stageIndex && effectiveStatus !== "idle")) {
       stateClass = "done";
       stateText = "완료";
-    } else if (job?.status === "error" && i === stageIndex) {
+    } else if (effectiveStatus === "error" && i === stageIndex) {
       stateClass = "error";
       stateText = "실패";
-    } else if (job?.status === "running" && i === stageIndex) {
+    } else if (effectiveStatus === "running" && i === stageIndex) {
       stateClass = "running";
       stateText = "진행중";
     }
 
-    const stepKey = STEP_KEYS[i];
-    const isCollectNa = stepKey === "collect" && contentMode === "gems";
     const btnDisabled = isRunning || isCollectNa;
     const btnTitle = isCollectNa
       ? "gems 모드에서는 RSS 수집이 필요하지 않습니다"
@@ -428,7 +497,10 @@ async function loadStatus(options = {}) {
     isRunning: data.isRunning,
     contentMode: data.config.contentMode,
   });
-  renderActivityBox(job, lastLogs);
+  renderActivityBox(job, lastLogs, {
+    isRunning: data.isRunning,
+    contentMode: data.config.contentMode,
+  });
 
   // 실패 요약은 현재 job이 error일 때만 표시. running/success/idle에서는 숨김
   if (!suppressErrorCard && job.status === "error") {
@@ -555,7 +627,14 @@ async function loadLogs() {
     lastLogs.join("\n") || "로그가 없습니다.";
   renderLogsSummary(lastLogs, lastStatus?.job);
   if (lastStatus?.job) {
-    renderActivityBox(lastStatus.job, lastLogs);
+    renderActivityBox(lastStatus.job, lastLogs, {
+      isRunning: lastStatus.isRunning,
+      contentMode: lastStatus.config?.contentMode,
+    });
+    renderProgress(lastStatus.job, lastLogs, {
+      isRunning: lastStatus.isRunning,
+      contentMode: lastStatus.config?.contentMode,
+    });
   }
 }
 
@@ -899,12 +978,104 @@ function stopPolling() {
   }
 }
 
+function showAuthScreen() {
+  stopPolling();
+  currentUser = null;
+  document.getElementById("auth-screen")?.classList.remove("hidden");
+  document.getElementById("app")?.classList.add("hidden");
+  document.getElementById("logout-btn")?.setAttribute("hidden", "");
+  document.getElementById("auth-user-label")?.setAttribute("hidden", "");
+}
+
+function showDashboard(user) {
+  currentUser = user;
+  document.getElementById("auth-screen")?.classList.add("hidden");
+  document.getElementById("app")?.classList.remove("hidden");
+  const label = document.getElementById("auth-user-label");
+  const logoutBtn = document.getElementById("logout-btn");
+  if (label) {
+    label.textContent = user?.username ? `@${user.username}` : "";
+    label.removeAttribute("hidden");
+  }
+  logoutBtn?.removeAttribute("hidden");
+}
+
+function setAuthMode(mode) {
+  authMode = mode === "signup" ? "signup" : "login";
+  document.querySelectorAll(".auth-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.authMode === authMode);
+  });
+  const submit = document.getElementById("auth-submit");
+  if (submit) {
+    submit.textContent = authMode === "signup" ? "회원가입" : "로그인";
+  }
+  const password = document.getElementById("auth-password");
+  if (password) {
+    password.autocomplete =
+      authMode === "signup" ? "new-password" : "current-password";
+  }
+  const msg = document.getElementById("auth-message");
+  if (msg) {
+    msg.textContent = "";
+    msg.className = "auth-message";
+  }
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const username = document.getElementById("auth-username")?.value?.trim() ?? "";
+  const password = document.getElementById("auth-password")?.value ?? "";
+  const msg = document.getElementById("auth-message");
+  const submit = document.getElementById("auth-submit");
+  if (submit) submit.disabled = true;
+  try {
+    const path = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+    const data = await api(path, {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    showDashboard(data.user);
+    startPolling();
+    await refreshAll();
+  } catch (err) {
+    if (msg) {
+      msg.textContent = err.message ?? "인증에 실패했습니다.";
+      msg.className = "auth-message error";
+    }
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
+async function handleLogout() {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch {
+    /* ignore */
+  }
+  showAuthScreen();
+}
+
+async function checkAuth() {
+  try {
+    const data = await fetch("/api/auth/me", { credentials: "include" }).then(
+      (r) => r.json(),
+    );
+    if (data?.authenticated && data.user) {
+      showDashboard(data.user);
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  showAuthScreen();
+  return false;
+}
+
 function purgeLegacyLoginUi() {
   document.getElementById("login-screen")?.remove();
   document.querySelector(".login-screen")?.remove();
   document.getElementById("api-key-input")?.closest(".login-card")?.remove();
-  document.getElementById("app")?.classList.remove("hidden");
-  document.body.style.overflow = "";
 }
 
 async function init() {
@@ -912,6 +1083,16 @@ async function init() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeModal();
+  });
+
+  document.querySelectorAll(".auth-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode));
+  });
+  document.getElementById("auth-form")?.addEventListener("submit", (e) => {
+    void handleAuthSubmit(e);
+  });
+  document.getElementById("logout-btn")?.addEventListener("click", () => {
+    void handleLogout();
   });
 
   document.getElementById("refresh-btn").addEventListener("click", refreshAll);
@@ -946,6 +1127,9 @@ async function init() {
       if (platform) void refreshSession(platform);
     });
   });
+
+  const ok = await checkAuth();
+  if (!ok) return;
 
   startPolling();
 

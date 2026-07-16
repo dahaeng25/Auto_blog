@@ -7,6 +7,7 @@ import {
   runWorkflow,
   type WorkflowStep,
 } from "../src/cli/blog-workflow-runner.js";
+import { withSystemUser } from "../src/auth/with-system-user.js";
 import { notifyError } from "../src/monitoring/discord-notifier.js";
 import { gracefulExit } from "../src/monitoring/graceful-shutdown.js";
 
@@ -61,14 +62,16 @@ async function main(): Promise<void> {
   const skipEdit = argv.includes("--skip-edit");
   const batchMode = argv.includes("--batch");
 
-  await runWorkflow({
-    step,
-    blogTopic,
-    blogRegion,
-    keywordsFile,
-    skipEditPrompt: skipEdit,
-    batchMode,
-  });
+  await withSystemUser(() =>
+    runWorkflow({
+      step,
+      blogTopic,
+      blogRegion,
+      keywordsFile,
+      skipEditPrompt: skipEdit,
+      batchMode,
+    }),
+  );
 
   if (batchMode) {
     process.exit(0);

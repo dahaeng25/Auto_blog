@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import cron from "node-cron";
 import { config } from "../config/index.js";
+import { withSystemUser } from "./auth/with-system-user.js";
 import { createApp } from "./create-app.js";
 import { useLibsql } from "./db/client.js";
 import { logger } from "./monitoring/logger.js";
@@ -30,7 +31,9 @@ function startScheduler(): void {
           return;
         }
         logger.info("cron 트리거 — 파이프라인 시작");
-        void runOrchestration({ trigger: "cron" }).catch(() => {});
+        void withSystemUser(() =>
+          runOrchestration({ trigger: "cron" }),
+        ).catch(() => {});
       })();
     },
     { timezone: config.cronTimezone },
@@ -40,7 +43,9 @@ function startScheduler(): void {
 
   if (config.runOnStart) {
     logger.info("RUN_ON_START=true — 시작 시 즉시 1회 실행");
-    void runOrchestration({ trigger: "run-on-start" }).catch(() => {});
+    void withSystemUser(() =>
+      runOrchestration({ trigger: "run-on-start" }),
+    ).catch(() => {});
   }
 }
 

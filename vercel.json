@@ -26,6 +26,26 @@
       "maxDuration": 30,
       "memory": 1024
     },
+    "api/articles/clear.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "api/auth/signup.ts": {
+      "maxDuration": 15,
+      "memory": 1024
+    },
+    "api/auth/login.ts": {
+      "maxDuration": 15,
+      "memory": 1024
+    },
+    "api/auth/logout.ts": {
+      "maxDuration": 10,
+      "memory": 512
+    },
+    "api/auth/me.ts": {
+      "maxDuration": 10,
+      "memory": 512
+    },
     "api/run/step.ts": {
       "maxDuration": 300,
       "memory": 2048,

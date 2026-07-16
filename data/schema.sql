@@ -1,16 +1,37 @@
 -- 주제 수집 및 발행 이력 관리
 
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  username      TEXT    NOT NULL UNIQUE,
+  password_hash TEXT    NOT NULL,
+  created_at    TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  token       TEXT    PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  expires_at  TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);
+
 CREATE TABLE IF NOT EXISTS topics (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  source_url  TEXT    NOT NULL UNIQUE,
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  source_url  TEXT    NOT NULL,
   title       TEXT    NOT NULL,
   summary     TEXT    NOT NULL DEFAULT '',
   fetched_at  TEXT    NOT NULL,
-  status      TEXT    NOT NULL DEFAULT 'farmed'
+  status      TEXT    NOT NULL DEFAULT 'farmed',
+  UNIQUE(user_id, source_url)
 );
 
 CREATE TABLE IF NOT EXISTS articles (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL DEFAULT 0,
   topic_id        INTEGER NOT NULL,
   title           TEXT    NOT NULL,
   html_body       TEXT    NOT NULL,
@@ -20,10 +41,13 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_topics_status ON topics(status);
+CREATE INDEX IF NOT EXISTS idx_topics_user ON topics(user_id);
+CREATE INDEX IF NOT EXISTS idx_articles_user ON articles(user_id);
 
 -- 발행 완료 포스트 (SEO 내부 링크용)
 CREATE TABLE IF NOT EXISTS published_posts (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL DEFAULT 0,
   topic_id     INTEGER,
   platform     TEXT    NOT NULL,
   title        TEXT    NOT NULL,
@@ -35,10 +59,11 @@ CREATE TABLE IF NOT EXISTS published_posts (
 
 CREATE INDEX IF NOT EXISTS idx_published_posts_keywords ON published_posts(keywords);
 CREATE INDEX IF NOT EXISTS idx_published_posts_published_at ON published_posts(published_at);
+CREATE INDEX IF NOT EXISTS idx_published_posts_user ON published_posts(user_id);
 
--- 파이프라인 실행 상태 (단일 행)
+-- 파이프라인 실행 상태 (사용자별)
 CREATE TABLE IF NOT EXISTS job_state (
-  id                  INTEGER PRIMARY KEY CHECK (id = 1),
+  user_id             INTEGER PRIMARY KEY,
   status              TEXT    NOT NULL DEFAULT 'idle',
   trigger_source      TEXT,
   started_at          TEXT,
@@ -48,11 +73,11 @@ CREATE TABLE IF NOT EXISTS job_state (
   last_thumbnail_path TEXT
 );
 
-INSERT OR IGNORE INTO job_state (id, status) VALUES (1, 'idle');
-
--- Vercel 등 서버리스 환경용 플랫폼 세션 저장
+-- Vercel 등 서버리스 환경용 플랫폼 세션 저장 (사용자 × 플랫폼)
 CREATE TABLE IF NOT EXISTS platform_sessions (
-  platform    TEXT PRIMARY KEY,
-  state_json  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL
+  user_id     INTEGER NOT NULL,
+  platform    TEXT    NOT NULL,
+  state_json  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL,
+  PRIMARY KEY (user_id, platform)
 );

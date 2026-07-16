@@ -7,16 +7,41 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Blog Orchestrator</title>
-  <link rel="stylesheet" href="/styles.css?v=15" />
+  <link rel="stylesheet" href="/styles.css?v=20" />
 </head>
 <body>
-  <div id="app" class="app">
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card card">
+      <h1 class="auth-brand">Blog Orchestrator</h1>
+      <p class="auth-lead">계정별로 원고·세션·작업 상태가 분리됩니다.</p>
+      <div class="auth-tabs" role="tablist">
+        <button type="button" class="auth-tab active" data-auth-mode="login">로그인</button>
+        <button type="button" class="auth-tab" data-auth-mode="signup">회원가입</button>
+      </div>
+      <form id="auth-form" class="auth-form" autocomplete="on">
+        <label class="auth-field">
+          <span>사용자명</span>
+          <input id="auth-username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" />
+        </label>
+        <label class="auth-field">
+          <span>비밀번호</span>
+          <input id="auth-password" name="password" type="password" required minlength="6" autocomplete="current-password" />
+        </label>
+        <button id="auth-submit" type="submit" class="btn btn-primary auth-submit">로그인</button>
+        <p id="auth-message" class="auth-message" role="status"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
     <header class="header">
       <div>
         <h1>Blog Orchestrator</h1>
         <p class="subtitle">클라우드 블로그 자동화 대시보드</p>
       </div>
       <div class="header-actions">
+        <span id="auth-user-label" class="auth-user-label" hidden></span>
+        <button id="logout-btn" class="btn btn-ghost" type="button" hidden>로그아웃</button>
         <button id="refresh-btn" class="btn btn-ghost">새로고침</button>
       </div>
     </header>
@@ -186,16 +211,6 @@
     </div>
   </div>
 
-  <script>
-    // 구버전 HTML(로그인 화면) 캐시 대비 — DOM 로드 후 제거
-    function purgeLegacyLogin() {
-      document.getElementById("login-screen")?.remove();
-      document.querySelector(".login-screen")?.remove();
-      document.getElementById("app")?.classList.remove("hidden");
-    }
-    document.addEventListener("DOMContentLoaded", purgeLegacyLogin);
-    purgeLegacyLogin();
-  </script>
-  <script src="/dashboard.js?v=18" type="module"></script>
+  <script src="/dashboard.js?v=20" type="module"></script>
 </body>
 </html>

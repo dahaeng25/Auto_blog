@@ -23,6 +23,23 @@ async function ensureSqlite(): Promise<SqliteDatabase> {
     for (const sql of statements) {
       database.exec(sql);
     }
+
+    const { migrateUserScopedSchema } = await import("./migrate-user-scope.js");
+    const adapter: DbExecutor = {
+      execute: async (sql, args = []) => {
+        const stmt = database.prepare(sql);
+        const verb = sql.trim().split(/\s+/)[0]?.toUpperCase();
+        if (verb === "SELECT" || verb === "PRAGMA") {
+          return { rows: stmt.all(...args) as Record<string, unknown>[] };
+        }
+        const result = stmt.run(...args);
+        return { rows: [], lastInsertRowid: result.lastInsertRowid };
+      },
+      batch: async () => {
+        throw new Error("batch not used during migrate");
+      },
+    };
+    await migrateUserScopedSchema(adapter);
     migrated = true;
   }
 
@@ -36,7 +53,7 @@ export class BetterSqliteExecutor implements DbExecutor {
     const stmt = database.prepare(sql);
     const verb = sql.trim().split(/\s+/)[0]?.toUpperCase();
 
-    if (verb === "SELECT") {
+    if (verb === "SELECT" || verb === "PRAGMA") {
       const rows = stmt.all(...args) as Record<string, unknown>[];
       return { rows };
     }

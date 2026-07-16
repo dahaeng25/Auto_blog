@@ -4,13 +4,17 @@
  */
 import cron from "node-cron";
 import { config } from "../config/index.js";
+import { withSystemUser } from "./auth/with-system-user.js";
 import { logger } from "./monitoring/logger.js";
 import { runOrchestration } from "./pipeline.js";
 
 async function executePipeline(trigger: string): Promise<void> {
   logger.info(`파이프라인 트리거: ${trigger}`);
   try {
-    await runOrchestration();
+    await withSystemUser((user) => {
+      logger.info(`사용자 컨텍스트: @${user.username} (#${user.id})`);
+      return runOrchestration({ trigger });
+    });
   } catch {
     // runOrchestration 내부에서 이미 로깅·Discord 알림 처리
   }

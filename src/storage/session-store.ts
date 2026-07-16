@@ -1,24 +1,39 @@
+import path from "node:path";
 import { getDb } from "../db/client.js";
 import { config } from "../../config/index.js";
 import { PLATFORMS, type Platform } from "../../config/platforms.js";
+import { requireUserId } from "../auth/user-context.js";
 
-async function writeTempState(platform: Platform, json: string): Promise<string> {
+function localStatePath(platform: Platform, userId: number): string {
+  return path.join(
+    config.authDir,
+    `user_${userId}`,
+    path.basename(PLATFORMS[platform].stateFile),
+  );
+}
+
+async function writeTempState(
+  platform: Platform,
+  userId: number,
+  json: string,
+): Promise<string> {
   const { default: fs } = await import("node:fs/promises");
   const { default: os } = await import("node:os");
-  const { default: path } = await import("node:path");
   const tmpPath = path.join(
     os.tmpdir(),
-    `blog-orchestrator-${platform}-state.json`,
+    `blog-orchestrator-u${userId}-${platform}-state.json`,
   );
   await fs.writeFile(tmpPath, json, "utf-8");
   return tmpPath;
 }
 
 export async function hasStoredSession(platform: Platform): Promise<boolean> {
+  const userId = requireUserId();
+
   if (!config.isVercel) {
     const { default: fs } = await import("node:fs/promises");
     try {
-      await fs.access(PLATFORMS[platform].stateFile);
+      await fs.access(localStatePath(platform, userId));
       return true;
     } catch {
       return false;
@@ -27,15 +42,17 @@ export async function hasStoredSession(platform: Platform): Promise<boolean> {
 
   const db = await getDb();
   const result = await db.execute(
-    "SELECT 1 FROM platform_sessions WHERE platform = ?",
-    [platform],
+    "SELECT 1 FROM platform_sessions WHERE user_id = ? AND platform = ?",
+    [userId, platform],
   );
   return result.rows.length > 0;
 }
 
 export async function resolveSessionPath(platform: Platform): Promise<string> {
+  const userId = requireUserId();
+
   if (!config.isVercel) {
-    const statePath = PLATFORMS[platform].stateFile;
+    const statePath = localStatePath(platform, userId);
     if (!(await hasStoredSession(platform))) {
       throw new Error(
         `[${PLATFORMS[platform].name}] 세션 파일이 없습니다: ${statePath}\n` +
@@ -47,8 +64,8 @@ export async function resolveSessionPath(platform: Platform): Promise<string> {
 
   const db = await getDb();
   const result = await db.execute(
-    "SELECT state_json FROM platform_sessions WHERE platform = ?",
-    [platform],
+    "SELECT state_json FROM platform_sessions WHERE user_id = ? AND platform = ?",
+    [userId, platform],
   );
 
   if (result.rows.length === 0) {
@@ -57,17 +74,18 @@ export async function resolveSessionPath(platform: Platform): Promise<string> {
     );
   }
 
-  return writeTempState(platform, String(result.rows[0].state_json));
+  return writeTempState(platform, userId, String(result.rows[0].state_json));
 }
 
 export async function saveStoredSession(
   platform: Platform,
   stateJson: string,
 ): Promise<void> {
+  const userId = requireUserId();
+
   if (!config.isVercel) {
     const { default: fs } = await import("node:fs/promises");
-    const { default: path } = await import("node:path");
-    const statePath = PLATFORMS[platform].stateFile;
+    const statePath = localStatePath(platform, userId);
     await fs.mkdir(path.dirname(statePath), { recursive: true });
     await fs.writeFile(statePath, stateJson, "utf-8");
     return;
@@ -75,11 +93,11 @@ export async function saveStoredSession(
 
   const db = await getDb();
   await db.execute(
-    `INSERT INTO platform_sessions (platform, state_json, updated_at)
-     VALUES (?, ?, ?)
-     ON CONFLICT(platform) DO UPDATE SET
+    `INSERT INTO platform_sessions (user_id, platform, state_json, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, platform) DO UPDATE SET
        state_json = excluded.state_json,
        updated_at = excluded.updated_at`,
-    [platform, stateJson, new Date().toISOString()],
+    [userId, platform, stateJson, new Date().toISOString()],
   );
 }

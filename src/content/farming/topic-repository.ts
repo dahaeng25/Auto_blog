@@ -1,5 +1,6 @@
 import { getDb } from "../../db/client.js";
 import type { DbExecutor } from "../../db/types.js";
+import { requireUserId } from "../../auth/user-context.js";
 import type {
   ArticleDraft,
   RawTopic,
@@ -29,6 +30,7 @@ function mapTopicRow(row: Record<string, unknown>): TopicRecord {
 
 /**
  * 주제/원고 저장소 — 로컬 SQLite 또는 Turso(libsql) 공통.
+ * AsyncLocalStorage 의 현재 userId 기준으로 격리합니다.
  */
 export class TopicRepository {
   private readonly dbPromise: Promise<DbExecutor>;
@@ -41,11 +43,15 @@ export class TopicRepository {
     return this.dbPromise;
   }
 
+  private userId(): number {
+    return requireUserId();
+  }
+
   async existsByUrl(sourceUrl: string): Promise<boolean> {
     const db = await this.db();
     const result = await db.execute(
-      "SELECT 1 FROM topics WHERE source_url = ?",
-      [sourceUrl],
+      "SELECT 1 FROM topics WHERE user_id = ? AND source_url = ?",
+      [this.userId(), sourceUrl],
     );
     return result.rows.length > 0;
   }
@@ -53,28 +59,36 @@ export class TopicRepository {
   async insertTopic(topic: RawTopic): Promise<number> {
     const db = await this.db();
     const result = await db.execute(
-      `INSERT INTO topics (source_url, title, summary, fetched_at, status)
-       VALUES (?, ?, ?, ?, 'farmed')`,
-      [topic.sourceUrl, topic.title, topic.summary, new Date().toISOString()],
+      `INSERT INTO topics (user_id, source_url, title, summary, fetched_at, status)
+       VALUES (?, ?, ?, ?, ?, 'farmed')`,
+      [
+        this.userId(),
+        topic.sourceUrl,
+        topic.title,
+        topic.summary,
+        new Date().toISOString(),
+      ],
     );
     return Number(result.lastInsertRowid);
   }
 
   async updateStatus(topicId: number, status: TopicStatus): Promise<void> {
     const db = await this.db();
-    await db.execute("UPDATE topics SET status = ? WHERE id = ?", [
-      status,
-      topicId,
-    ]);
+    await db.execute(
+      "UPDATE topics SET status = ? WHERE id = ? AND user_id = ?",
+      [status, topicId, this.userId()],
+    );
   }
 
   async saveArticle(draft: ArticleDraft): Promise<number> {
     const db = await this.db();
+    const userId = this.userId();
     const results = await db.batch([
       {
-        sql: `INSERT INTO articles (topic_id, title, html_body, thumbnail_text, created_at)
-              VALUES (?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO articles (user_id, topic_id, title, html_body, thumbnail_text, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)`,
         args: [
+          userId,
           draft.topicId,
           draft.title,
           draft.htmlBody,
@@ -83,8 +97,8 @@ export class TopicRepository {
         ],
       },
       {
-        sql: "UPDATE topics SET status = ? WHERE id = ?",
-        args: ["drafted", draft.topicId],
+        sql: "UPDATE topics SET status = ? WHERE id = ? AND user_id = ?",
+        args: ["drafted", draft.topicId, userId],
       },
     ]);
     return Number(results[0]?.lastInsertRowid);
@@ -94,8 +108,8 @@ export class TopicRepository {
     const db = await this.db();
     const result = await db.execute(
       `SELECT id, source_url, title, summary, fetched_at, status
-       FROM topics WHERE source_url = ?`,
-      [sourceUrl],
+       FROM topics WHERE user_id = ? AND source_url = ?`,
+      [this.userId(), sourceUrl],
     );
     if (result.rows.length === 0) return null;
     return mapTopicRow(result.rows[0] as TopicRow);
@@ -108,10 +122,10 @@ export class TopicRepository {
               t.source_url, t.summary, t.title as topic_title
        FROM articles a
        JOIN topics t ON t.id = a.topic_id
-       WHERE a.topic_id = ?
+       WHERE a.topic_id = ? AND a.user_id = ? AND t.user_id = ?
        ORDER BY a.id DESC
        LIMIT 1`,
-      [topicId],
+      [topicId, this.userId(), this.userId()],
     );
     if (result.rows.length === 0) return null;
 
@@ -138,8 +152,10 @@ export class TopicRepository {
               t.source_url, t.summary, t.title as topic_title
        FROM articles a
        JOIN topics t ON t.id = a.topic_id
+       WHERE a.user_id = ? AND t.user_id = ?
        ORDER BY a.id DESC
        LIMIT 1`,
+      [this.userId(), this.userId()],
     );
     if (result.rows.length === 0) return null;
 
@@ -162,37 +178,48 @@ export class TopicRepository {
 
   async deleteTopicAndArticles(sourceUrl: string): Promise<void> {
     const db = await this.db();
+    const userId = this.userId();
     const topicResult = await db.execute(
-      "SELECT id FROM topics WHERE source_url = ?",
-      [sourceUrl],
+      "SELECT id FROM topics WHERE user_id = ? AND source_url = ?",
+      [userId, sourceUrl],
     );
     if (topicResult.rows.length === 0) return;
 
     const topicId = Number(topicResult.rows[0].id);
     await db.batch([
-      { sql: "DELETE FROM articles WHERE topic_id = ?", args: [topicId] },
-      { sql: "DELETE FROM topics WHERE id = ?", args: [topicId] },
+      {
+        sql: "DELETE FROM articles WHERE topic_id = ? AND user_id = ?",
+        args: [topicId, userId],
+      },
+      {
+        sql: "DELETE FROM topics WHERE id = ? AND user_id = ?",
+        args: [topicId, userId],
+      },
     ]);
   }
 
   async clearArticles(): Promise<{ deletedArticles: number; resetTopics: number }> {
     const db = await this.db();
-    const countResult = await db.execute("SELECT COUNT(*) as count FROM articles");
+    const userId = this.userId();
+    const countResult = await db.execute(
+      "SELECT COUNT(*) as count FROM articles WHERE user_id = ?",
+      [userId],
+    );
     const deletedArticles = Number(countResult.rows[0]?.count ?? 0);
 
     const draftedResult = await db.execute(
-      "SELECT COUNT(*) as count FROM topics WHERE status = ?",
-      ["drafted"],
+      "SELECT COUNT(*) as count FROM topics WHERE user_id = ? AND status = ?",
+      [userId, "drafted"],
     );
     const resetTopics = Number(draftedResult.rows[0]?.count ?? 0);
 
     // 원고만 삭제. drafted 주제는 farmed로 되돌려 재생성 가능.
     // published 주제·발행 이력(published_posts)은 유지.
     await db.batch([
-      { sql: "DELETE FROM articles", args: [] },
+      { sql: "DELETE FROM articles WHERE user_id = ?", args: [userId] },
       {
-        sql: "UPDATE topics SET status = ? WHERE status = ?",
-        args: ["farmed", "drafted"],
+        sql: "UPDATE topics SET status = ? WHERE user_id = ? AND status = ?",
+        args: ["farmed", userId, "drafted"],
       },
     ]);
 
@@ -203,8 +230,8 @@ export class TopicRepository {
     const db = await this.db();
     const result = await db.execute(
       `SELECT id, source_url, title, summary, fetched_at, status
-       FROM topics WHERE id = ?`,
-      [id],
+       FROM topics WHERE id = ? AND user_id = ?`,
+      [id, this.userId()],
     );
     if (result.rows.length === 0) return null;
     return mapTopicRow(result.rows[0] as TopicRow);
@@ -216,17 +243,19 @@ export class TopicRepository {
   }): Promise<TopicRecord[]> {
     const db = await this.db();
     const limit = options?.limit ?? 50;
+    const userId = this.userId();
     const result = options?.status
       ? await db.execute(
           `SELECT id, source_url, title, summary, fetched_at, status
-           FROM topics WHERE status = ?
+           FROM topics WHERE user_id = ? AND status = ?
            ORDER BY id DESC LIMIT ?`,
-          [options.status, limit],
+          [userId, options.status, limit],
         )
       : await db.execute(
           `SELECT id, source_url, title, summary, fetched_at, status
-           FROM topics ORDER BY id DESC LIMIT ?`,
-          [limit],
+           FROM topics WHERE user_id = ?
+           ORDER BY id DESC LIMIT ?`,
+          [userId, limit],
         );
 
     return result.rows.map((row) => mapTopicRow(row as TopicRow));
@@ -238,8 +267,9 @@ export class TopicRepository {
     const db = await this.db();
     const result = await db.execute(
       `SELECT id, topic_id, title, created_at
-       FROM articles ORDER BY id DESC LIMIT ?`,
-      [limit],
+       FROM articles WHERE user_id = ?
+       ORDER BY id DESC LIMIT ?`,
+      [this.userId(), limit],
     );
 
     return result.rows.map((row) => ({
@@ -259,8 +289,8 @@ export class TopicRepository {
               t.source_url, t.summary, t.title as topic_title
        FROM articles a
        JOIN topics t ON t.id = a.topic_id
-       WHERE a.id = ?`,
-      [id],
+       WHERE a.id = ? AND a.user_id = ? AND t.user_id = ?`,
+      [id, this.userId(), this.userId()],
     );
     if (result.rows.length === 0) return null;
 
@@ -286,8 +316,10 @@ export class TopicRepository {
     articles: number;
   }> {
     const db = await this.db();
+    const userId = this.userId();
     const counts = await db.execute(
-      "SELECT status, COUNT(*) as count FROM topics GROUP BY status",
+      "SELECT status, COUNT(*) as count FROM topics WHERE user_id = ? GROUP BY status",
+      [userId],
     );
 
     const topics = { farmed: 0, drafted: 0, published: 0 };
@@ -297,7 +329,8 @@ export class TopicRepository {
     }
 
     const articleResult = await db.execute(
-      "SELECT COUNT(*) as count FROM articles",
+      "SELECT COUNT(*) as count FROM articles WHERE user_id = ?",
+      [userId],
     );
     const articles = Number(articleResult.rows[0]?.count ?? 0);
 

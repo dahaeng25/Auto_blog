@@ -13,6 +13,21 @@ import {
   markSessionVerified,
   markSessionVerificationFailed,
 } from "./auth/session-info.js";
+import {
+  buildClearSessionCookie,
+  buildSessionCookie,
+  createSession,
+  destroySession,
+  getSessionTokenFromRequest,
+  loginUser,
+  resolveSessionUser,
+  signupUser,
+} from "./auth/user-auth.js";
+import {
+  enterUserContext,
+  runWithUser,
+  type AuthUser,
+} from "./auth/user-context.js";
 import { TopicRepository } from "./content/farming/topic-repository.js";
 import type { TopicStatus } from "./content/types.js";
 import { PublishedPostRepository } from "./content/seo/published-post-repository.js";
@@ -30,6 +45,21 @@ export interface CreateAppOptions {
   /** 정적 대시보드 서빙 (Docker/로컬) */
   serveStatic?: boolean;
 }
+
+declare module "fastify" {
+  interface FastifyRequest {
+    authUser?: AuthUser;
+  }
+}
+
+const PUBLIC_API_PATHS = new Set([
+  "/health",
+  "/api/health",
+  "/api/meta",
+  "/api/auth/signup",
+  "/api/auth/login",
+  "/api/auth/me",
+]);
 
 async function getAllSessionStatus(): Promise<Record<Platform, boolean>> {
   const platforms = Object.keys(PLATFORMS) as Platform[];
@@ -54,6 +84,15 @@ function readFirstNonCommentLine(filePath: string): string {
   );
 }
 
+function isPublicPath(url: string): boolean {
+  const pathname = url.split("?")[0] ?? url;
+  if (PUBLIC_API_PATHS.has(pathname)) return true;
+  if (pathname === "/api/auth/logout") return true;
+  // 정적 파일·루트는 공개 (프론트에서 로그인 게이트)
+  if (!pathname.startsWith("/api/")) return true;
+  return false;
+}
+
 export async function createApp(
   options: CreateAppOptions = {},
 ): Promise<FastifyInstance> {
@@ -70,18 +109,86 @@ export async function createApp(
     );
   });
 
+  app.addHook("onRequest", async (request, reply) => {
+    const token = getSessionTokenFromRequest(request.headers);
+    const sessionUser = await resolveSessionUser(token);
+    if (sessionUser) {
+      const user: AuthUser = {
+        id: sessionUser.id,
+        username: sessionUser.username,
+      };
+      request.authUser = user;
+      enterUserContext(user);
+    }
+
+    if (isPublicPath(request.url)) return;
+
+    if (!request.authUser) {
+      return reply.status(401).send({ error: "로그인이 필요합니다." });
+    }
+  });
+
   app.get("/health", async () => ({ ok: true }));
   app.get("/api/health", async () => ({ ok: true }));
   app.get("/api/meta", async () => ({
-    version: "0.3.0",
+    version: "0.4.0",
     platform: config.deploymentMode,
+    auth: "session",
   }));
+
+  app.post("/api/auth/signup", async (request, reply) => {
+    const body =
+      (request.body as { username?: string; password?: string } | undefined) ??
+      {};
+    const result = await signupUser(body.username ?? "", body.password ?? "");
+    if ("error" in result) {
+      return reply.status(400).send({ error: result.error });
+    }
+
+    const session = await createSession(result.user.id);
+    reply.header("Set-Cookie", buildSessionCookie(session.token));
+    return { ok: true, user: result.user };
+  });
+
+  app.post("/api/auth/login", async (request, reply) => {
+    const body =
+      (request.body as { username?: string; password?: string } | undefined) ??
+      {};
+    const result = await loginUser(body.username ?? "", body.password ?? "");
+    if ("error" in result) {
+      return reply.status(401).send({ error: result.error });
+    }
+    reply.header("Set-Cookie", buildSessionCookie(result.token));
+    return { ok: true, user: result.user };
+  });
+
+  app.post("/api/auth/logout", async (request, reply) => {
+    const token = getSessionTokenFromRequest(request.headers);
+    if (token) await destroySession(token);
+    reply.header("Set-Cookie", buildClearSessionCookie());
+    return { ok: true };
+  });
+
+  app.get("/api/auth/me", async (request) => {
+    if (!request.authUser) {
+      return { authenticated: false, user: null };
+    }
+    return {
+      authenticated: true,
+      user: request.authUser,
+    };
+  });
 
   app.get("/api/status", async (request, reply) => {
     try {
+      // jobStore.get() 는 stale running 을 error 로 정리한다.
+      // Vercel은 인스턴스가 달라 메모리 락이 false 여도 DB running 이면 실행 중으로 본다.
+      const job = await jobStore.get();
+      const isRunning = isPipelineRunning() || job.status === "running";
       return {
-        job: await jobStore.get(),
-        isRunning: await isPipelineRunning(),
+        job,
+        isRunning,
+        user: request.authUser ?? null,
         config: {
           cronSchedule: config.cronSchedule,
           cronTimezone: config.cronTimezone,
@@ -113,7 +220,7 @@ export async function createApp(
   });
 
   app.post("/api/run", async (request, reply) => {
-    if (await isPipelineRunning()) {
+    if (isPipelineRunning() || (await jobStore.isRunning())) {
       return reply.status(409).send({
         error: "파이프라인이 이미 실행 중입니다.",
         job: await jobStore.get(),
@@ -127,10 +234,12 @@ export async function createApp(
     const trigger = body.trigger ?? "web";
     const blogTopic = body.blogTopic?.trim() || undefined;
     const blogRegion = body.blogRegion?.trim() || undefined;
+    const user = request.authUser!;
 
     // Vercel 서버리스: 함수 종료 전까지 파이프라인 완료 대기
     if (config.isVercel) {
       try {
+        enterUserContext(user);
         const result = await runOrchestration({
           trigger,
           blogTopic,
@@ -157,7 +266,10 @@ export async function createApp(
       }
     }
 
-    void runOrchestration({ trigger, blogTopic, blogRegion }).catch(() => {});
+    // 백그라운드 실행 — ALS 유실 방지를 위해 runWithUser로 감쌈
+    void runWithUser(user, () =>
+      runOrchestration({ trigger, blogTopic, blogRegion }),
+    ).catch(() => {});
 
     return reply.status(202).send({
       message: "파이프라인 실행을 시작했습니다.",
@@ -166,7 +278,7 @@ export async function createApp(
   });
 
   app.post("/api/run/step", async (request, reply) => {
-    if (await isPipelineRunning()) {
+    if (isPipelineRunning() || (await jobStore.isRunning())) {
       return reply.status(409).send({
         error: "파이프라인이 이미 실행 중입니다.",
         job: await jobStore.get(),
@@ -196,9 +308,11 @@ export async function createApp(
     const trigger = body.trigger ?? `web-step:${step}`;
     const blogTopic = body.blogTopic?.trim() || undefined;
     const blogRegion = body.blogRegion?.trim() || undefined;
+    const user = request.authUser!;
 
     if (config.isVercel) {
       try {
+        enterUserContext(user);
         const result = await runPipelineStep({
           step,
           trigger,
@@ -230,9 +344,9 @@ export async function createApp(
       }
     }
 
-    void runPipelineStep({ step, trigger, blogTopic, blogRegion }).catch(
-      () => {},
-    );
+    void runWithUser(user, () =>
+      runPipelineStep({ step, trigger, blogTopic, blogRegion }),
+    ).catch(() => {});
 
     return reply.status(202).send({
       message: `${step} 단계 실행을 시작했습니다.`,
@@ -378,7 +492,7 @@ export async function createApp(
     const json = JSON.stringify(body);
     await saveStoredSession(platform as Platform, json);
 
-    logger.info(`세션 업로드 완료: ${platform}`);
+    logger.info(`세션 업로드 완료: ${platform} (user=${request.authUser?.id})`);
     return { ok: true, platform };
   });
 
