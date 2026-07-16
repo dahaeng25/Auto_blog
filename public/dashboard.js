@@ -919,6 +919,13 @@ async function refreshAll() {
   ]);
 }
 
+/** 헤더 새로고침: HTML·CSS·JS 캐시를 우회하는 강제 페이지 리로드 */
+function hardRefreshPage() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_", String(Date.now()));
+  window.location.replace(url.toString());
+}
+
 async function runPipelineStep(step) {
   const msgEl = document.getElementById("run-message");
   msgEl.textContent = `${STEP_LABELS[STEP_KEYS.indexOf(step)] ?? step} 단계 실행 중...`;
@@ -1574,7 +1581,7 @@ async function init() {
     void handleLogout();
   });
 
-  document.getElementById("refresh-btn").addEventListener("click", refreshAll);
+  document.getElementById("refresh-btn").addEventListener("click", hardRefreshPage);
   document.getElementById("run-btn").addEventListener("click", runPipeline);
   document
     .getElementById("articles-clear-btn")

@@ -81,6 +81,7 @@ export async function autoLoginNaver(
     }
 
     if (await isManualAuthScreen(page)) {
+      await reportConnectProgress("추가 인증 화면을 확인하는 중…");
       const completed = await waitForManualAuth(
         page,
         () => isNaverLoggedIn(page.context()),
