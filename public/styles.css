@@ -518,6 +518,90 @@ body {
   min-height: 1.25em;
 }
 
+.connect-progress-wrap {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.connect-progress-wrap.hidden {
+  display: none;
+}
+
+.connect-progress-title {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.connect-progress-current {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: var(--text, #e8eaed);
+}
+
+.connect-progress-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.connect-progress-log li {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.connect-progress-log li:last-child {
+  border-bottom: none;
+  color: var(--text, #e8eaed);
+}
+
+.connect-progress-screenshot {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: #111;
+}
+
+.connect-progress-screenshot.hidden {
+  display: none;
+}
+
+.connect-fallback-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 180, 60, 0.08);
+  border: 1px solid rgba(255, 180, 60, 0.25);
+}
+
+.connect-fallback-panel.hidden {
+  display: none;
+}
+
+.connect-fallback-text {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  color: var(--text, #e8eaed);
+}
+
+.connect-fallback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Full-page platform login (mobile-first) */
 body.platform-login-open {
   overflow: hidden;

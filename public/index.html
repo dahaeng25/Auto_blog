@@ -99,6 +99,30 @@
         </div>
       </div>
       <p id="connect-message" class="connect-message" aria-live="polite"></p>
+      <div id="connect-progress-wrap" class="connect-progress-wrap hidden" aria-live="polite">
+        <p class="connect-progress-title">연결 진행</p>
+        <p id="connect-progress-current" class="connect-progress-current"></p>
+        <ul id="connect-progress-log" class="connect-progress-log"></ul>
+        <img
+          id="connect-progress-screenshot"
+          class="connect-progress-screenshot hidden"
+          alt="로그인 화면 미리보기"
+        />
+      </div>
+      <div id="connect-fallback-panel" class="connect-fallback-panel hidden">
+        <p class="connect-fallback-text">자동 연결이 오래 걸리거나 실패했습니다.</p>
+        <div class="connect-fallback-actions">
+          <button type="button" id="connect-retry-btn" class="btn btn-secondary btn-sm">
+            다시 시도
+          </button>
+          <button type="button" id="connect-manual-btn" class="btn btn-primary btn-sm hidden">
+            브라우저에서 직접 로그인
+          </button>
+          <button type="button" id="connect-preview-btn" class="btn btn-primary btn-sm hidden">
+            화면 확인하며 다시 연결
+          </button>
+        </div>
+      </div>
     </section>
 
     <section class="card thumb-bg-section">
@@ -302,6 +326,30 @@
         </button>
       </form>
       <p id="platform-login-status" class="platform-login-status" aria-live="polite"></p>
+      <div id="platform-login-progress-wrap" class="connect-progress-wrap hidden" aria-live="polite">
+        <p class="connect-progress-title">연결 진행</p>
+        <p id="platform-login-progress-current" class="connect-progress-current"></p>
+        <ul id="platform-login-progress-log" class="connect-progress-log"></ul>
+        <img
+          id="platform-login-screenshot"
+          class="connect-progress-screenshot hidden"
+          alt="로그인 화면 미리보기"
+        />
+      </div>
+      <div id="platform-login-fallback" class="connect-fallback-panel hidden">
+        <p class="connect-fallback-text">자동 연결이 오래 걸리거나 실패했습니다.</p>
+        <div class="connect-fallback-actions">
+          <button type="button" id="platform-login-retry-btn" class="btn btn-secondary btn-sm">
+            다시 시도
+          </button>
+          <button type="button" id="platform-login-manual-btn" class="btn btn-primary btn-sm hidden">
+            브라우저에서 직접 로그인
+          </button>
+          <button type="button" id="platform-login-preview-btn" class="btn btn-primary btn-sm hidden">
+            화면 확인하며 다시 연결
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -317,6 +365,6 @@
     </div>
   </div>
 
-  <script src="/dashboard.js?v=24" type="module"></script>
+  <script src="/dashboard.js?v=25" type="module"></script>
 </body>
 </html>
