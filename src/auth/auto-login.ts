@@ -23,6 +23,12 @@ export type PlatformCredentials = {
   password: string;
 };
 
+/** 서버리스에서는 대기 시간을 줄여 함수 타임아웃 여유를 확보 */
+function loginPause(ms: number): Promise<void> {
+  const scaled = config.isVercel ? Math.min(ms, Math.round(ms * 0.55)) : ms;
+  return humanPause(Math.max(400, scaled));
+}
+
 /** 네이버 ID/PW 자동 로그인 */
 export async function autoLoginNaver(
   page: Page,
@@ -42,7 +48,7 @@ export async function autoLoginNaver(
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
-  await humanPause(1500);
+  await loginPause(1500);
 
   await fillFieldByEvaluate(page, "#id", naverId);
   await fillFieldByEvaluate(page, "#pw", naverPassword);
@@ -60,7 +66,7 @@ export async function autoLoginNaver(
     .locator('#log\\.login, button.btn_login, input.btn_global[type="submit"]')
     .first();
   await humanClick(loginBtn);
-  await humanPause(3000);
+  await loginPause(3000);
 
   for (let i = 0; i < 30; i++) {
     if (await isNaverLoggedIn(page.context())) {
@@ -80,7 +86,7 @@ export async function autoLoginNaver(
       );
     }
 
-    await humanPause(1000);
+    await loginPause(1000);
   }
 
   throw new Error(
@@ -103,7 +109,7 @@ async function clickKakaoLoginOnTistory(page: Page): Promise<void> {
     try {
       if ((await btn.count()) > 0 && (await btn.isVisible())) {
         await humanClick(btn);
-        await humanPause(3000);
+        await loginPause(3000);
         return;
       }
     } catch {
@@ -176,7 +182,7 @@ async function fillKakaoLoginForm(
     try {
       if ((await btn.count()) > 0 && (await btn.isVisible())) {
         await humanClick(btn);
-        await humanPause(3000);
+        await loginPause(3000);
         return;
       }
     } catch {
@@ -212,7 +218,7 @@ async function handleKakaoPostLogin(page: Page): Promise<void> {
       try {
         if ((await btn.count()) > 0 && (await btn.isVisible())) {
           await humanClick(btn);
-          await humanPause(2000);
+          await loginPause(2000);
           break;
         }
       } catch {
@@ -220,7 +226,7 @@ async function handleKakaoPostLogin(page: Page): Promise<void> {
       }
     }
 
-    await humanPause(1500);
+    await loginPause(1500);
   }
 }
 
@@ -245,7 +251,7 @@ export async function autoLoginTistory(
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
-  await humanPause(2000);
+  await loginPause(2000);
 
   await clickKakaoLoginOnTistory(page);
 
@@ -259,7 +265,7 @@ export async function autoLoginTistory(
       "https://accounts.kakao.com/login/?continue=https%3A%2F%2Fwww.tistory.com%2Fauth%2Fkakao%2Fcallback",
       { waitUntil: "domcontentloaded", timeout: 60_000 },
     );
-    await humanPause(2000);
+    await loginPause(2000);
   }
 
   await fillKakaoLoginForm(page, kakaoId, kakaoPassword);
@@ -284,7 +290,7 @@ export async function autoLoginTistory(
     }
 
     await handleKakaoPostLogin(page);
-    await humanPause(1000);
+    await loginPause(1000);
   }
 
   throw new Error(
