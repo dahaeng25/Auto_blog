@@ -1254,7 +1254,6 @@ body.modal-open {
 
   .card {
     padding: 16px;
-    margin-bottom: 0;
   }
 
   .account-connect,
@@ -1263,9 +1262,12 @@ body.modal-open {
   .progress-card,
   .error-card,
   .main-grid,
-  .main-grid > .card,
   .app > .card {
     margin-bottom: 14px;
+  }
+
+  .main-grid {
+    gap: 12px;
   }
 
   .card-header {
@@ -1806,8 +1808,8 @@ body.modal-open {
 }
 
 .auth-user-label {
-  align-self: center;
   color: var(--text-muted);
   font-size: 0.9rem;
   padding: 0 4px;
+  line-height: 1.4;
 }
