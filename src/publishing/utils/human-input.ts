@@ -23,6 +23,24 @@ export async function humanMouseMove(
   await humanPause(80);
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} 시간 초과 (${Math.round(ms / 1000)}초)`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 /** 엘리먼트 중앙으로 이동 후 클릭 */
 export async function humanClick(locator: Locator): Promise<void> {
   const page = locator.page();
@@ -36,6 +54,38 @@ export async function humanClick(locator: Locator): Promise<void> {
   await humanMouseMove(page, x, y);
   await page.mouse.click(x, y, { delay: randomTypingDelay() });
   await humanPause(150);
+}
+
+/**
+ * humanClick이 서버리스·헤드리스에서 무한 대기하는 경우를 막음.
+ * 실패 시 Playwright 기본 click / JS click 으로 폴백.
+ */
+export async function humanClickSafe(
+  locator: Locator,
+  timeoutMs = 12_000,
+): Promise<"human" | "locator" | "evaluate"> {
+  try {
+    await withTimeout(humanClick(locator), timeoutMs, "인간형 클릭");
+    return "human";
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[humanClickSafe] 인간형 클릭 실패 → 폴백: ${reason}`);
+  }
+
+  try {
+    await locator.click({ timeout: Math.min(8000, timeoutMs), delay: 80 });
+    await humanPause(150);
+    return "locator";
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[humanClickSafe] locator.click 실패 → JS click: ${reason}`);
+  }
+
+  await locator.evaluate((el) => {
+    if (el instanceof HTMLElement) el.click();
+  });
+  await humanPause(150);
+  return "evaluate";
 }
 
 /**

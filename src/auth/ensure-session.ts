@@ -259,7 +259,7 @@ async function performAutoLogin(
 
   await reportConnectProgress("브라우저를 준비하는 중…");
   const loginSession = await createBrowserSession({
-    headless: config.authLoginHeadless,
+    headless: config.isVercel ? true : config.authLoginHeadless,
   });
   const page = await getSessionPage(loginSession);
 

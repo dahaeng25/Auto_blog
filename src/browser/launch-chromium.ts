@@ -54,18 +54,21 @@ export async function launchChromium(
       "/tmp/al2/lib",
     );
 
+    // 서버리스는 디스플레이가 없음 — options.headless=false 로 덮어쓰면
+    // 클릭/마우스 동작이 영구 대기하며 「로그인 버튼 누르는 중」에 고착됨
+    const { headless: _ignored, ...rest } = options;
     return chromium.launch({
-      args: [...chromiumPkg.args, ...SERVERLESS_ARGS],
+      ...rest,
+      args: [...chromiumPkg.args, ...SERVERLESS_ARGS, ...(rest.args ?? [])],
       executablePath,
       headless: true,
-      ...options,
     });
   }
 
   const chromium = await getLocalChromium();
   return chromium.launch({
-    headless: options.headless ?? true,
     args: SERVERLESS_ARGS,
     ...options,
+    headless: options.headless ?? true,
   });
 }

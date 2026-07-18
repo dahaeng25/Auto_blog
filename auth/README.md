@@ -50,6 +50,21 @@ AUTH_2FA_WAIT_MS=180000
 
 세션 만료 시 ID/PW 자동 입력 후, 2단계 인증 화면이 나오면 **열린 브라우저에서 직접 완료**하면 됩니다 (최대 3분 대기).
 
+## Vercel 웹 「계정 연결」 한계
+
+Vercel은 **headed 브라우저를 띄울 수 없습니다** (디스플레이 없음 → 항상 headless Chromium).
+
+| 환경 | 동작 |
+|------|------|
+| **로컬** `npm run web` / `auth:setup` | 창이 보이는 headed — `auth-setup.bat`과 동일하게 2FA 푸시가 잘 옴 |
+| **Vercel 대시보드 연결** | headless — 스텔스·키보드 입력·클릭 타임아웃으로 최대한 맞춤. 그래도 네이버가 봇으로 막으면 2FA가 안 올 수 있음 |
+
+Vercel에서 연결이 막히면:
+
+1. 로컬에서 `auth-setup.bat` 또는 `npm run auth:setup`으로 로그인
+2. 대시보드「세션 업로드」로 `auth/naver_state.json` 업로드
+3. 또는 로컬 `npm run web`에서 「브라우저에서 직접 로그인」 사용
+
 ## 세션 확인
 
 ```powershell

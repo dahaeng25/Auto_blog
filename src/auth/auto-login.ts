@@ -1,7 +1,10 @@
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import { config } from "../../config/index.js";
 import { PLATFORMS } from "../../config/platforms.js";
-import { humanClick, humanPause } from "../publishing/utils/human-input.js";
+import {
+  humanClickSafe,
+  humanPause,
+} from "../publishing/utils/human-input.js";
 import {
   isNaverLoggedIn,
   isTistoryLoggedIn,
@@ -9,7 +12,7 @@ import {
 import {
   captureConnectScreenshot,
   describeLoginPage,
-  fillFieldByEvaluate,
+  fillLoginField,
   waitForLoginComplete,
 } from "./auth-wait.js";
 import {
@@ -40,6 +43,75 @@ function loginWaitBudgetMs(): number {
     : Math.max(config.auth2faWaitMs, 120_000);
 }
 
+/**
+ * 로그인 제출 — auth:setup처럼 클릭하되, 서버리스에서 클릭 고착을 막음.
+ * Enter / form.requestSubmit 폴백으로 네이버가 실제 로그인·2FA를 타도록 함.
+ */
+async function submitLoginForm(
+  page: Page,
+  loginBtn: Locator,
+  platformLabel: string,
+): Promise<void> {
+  const beforeUrl = page.url();
+  await reportConnectProgress(`${platformLabel} 로그인 버튼을 누르는 중…`);
+
+  let method = "none";
+  try {
+    method = await humanClickSafe(loginBtn, 12_000);
+    console.log(`[자동 로그인] ${platformLabel} 로그인 클릭: ${method}`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[자동 로그인] ${platformLabel} 클릭 실패 — Enter/form 폴백: ${reason}`);
+  }
+
+  // 클릭이 먹히지 않으면 Enter → form submit
+  await loginPause(800, "wait");
+  if (page.url() === beforeUrl) {
+    try {
+      await page.keyboard.press("Enter");
+      method = method === "none" ? "enter" : `${method}+enter`;
+      await loginPause(800, "wait");
+    } catch {
+      // ignore
+    }
+  }
+
+  if (page.url() === beforeUrl) {
+    try {
+      const submitted = await page.evaluate(() => {
+        const form =
+          document.querySelector<HTMLFormElement>("form#frmNIDLogin") ||
+          document.querySelector<HTMLFormElement>("form[name='frmNIDLogin']") ||
+          document.querySelector<HTMLFormElement>("form");
+        if (!form) return false;
+        if (typeof form.requestSubmit === "function") {
+          form.requestSubmit();
+          return true;
+        }
+        form.submit();
+        return true;
+      });
+      if (submitted) method = `${method}+form`;
+    } catch {
+      // ignore
+    }
+  }
+
+  await loginPause(2500, "wait");
+  const screen = await describeLoginPage(page);
+  await reportConnectProgress(
+    `${platformLabel} 로그인 요청을 보냈습니다 (${method}). ${screen}`,
+  );
+  await captureConnectScreenshot(page, "로그인 결과를 확인하는 중…");
+
+  // 여전히 입력 화면이면 자격증명/봇 차단 가능성 안내
+  if (/로그인 입력 화면|네이버 로그인 화면|카카오 로그인 화면/.test(screen)) {
+    await reportConnectProgress(
+      `${platformLabel} 아직 로그인 화면입니다. 휴대폰 알림이 없으면 아이디·비밀번호를 확인하거나, 로컬에서 「브라우저에서 직접 로그인」(auth:setup)을 사용해 주세요.`,
+    );
+  }
+}
+
 /** 네이버 ID/PW 자동 로그인 */
 export async function autoLoginNaver(
   page: Page,
@@ -65,14 +137,14 @@ export async function autoLoginNaver(
   await captureConnectScreenshot(page);
 
   await reportConnectProgress("네이버 아이디를 입력하는 중…");
-  await fillFieldByEvaluate(page, "#id", naverId);
+  await fillLoginField(page, "#id", naverId);
   await reportConnectProgress("네이버 비밀번호를 입력하는 중…");
-  await fillFieldByEvaluate(page, "#pw", naverPassword);
+  await fillLoginField(page, "#pw", naverPassword);
 
   const keepLogin = page.locator("#keep").first();
   try {
     if ((await keepLogin.count()) > 0 && !(await keepLogin.isChecked())) {
-      await humanClick(keepLogin);
+      await humanClickSafe(keepLogin, 8_000);
       await reportConnectProgress("로그인 상태 유지를 선택했습니다.");
     }
   } catch {
@@ -82,11 +154,8 @@ export async function autoLoginNaver(
   const loginBtn = page
     .locator('#log\\.login, button.btn_login, input.btn_global[type="submit"]')
     .first();
-  await reportConnectProgress("네이버 로그인 버튼을 누르는 중…");
-  await humanClick(loginBtn);
-  await loginPause(3000, "wait");
-  await reportConnectProgress("네이버 로그인 요청을 보냈습니다. 인증 여부를 확인하는 중…");
-  await captureConnectScreenshot(page, "로그인 결과를 확인하는 중…");
+  await loginBtn.waitFor({ state: "visible", timeout: 15_000 });
+  await submitLoginForm(page, loginBtn, "네이버");
 
   const loggedIn = await waitForLoginComplete(
     page,
@@ -120,7 +189,7 @@ async function clickKakaoLoginOnTistory(page: Page): Promise<void> {
     const btn = page.locator(sel).first();
     try {
       if ((await btn.count()) > 0 && (await btn.isVisible())) {
-        await humanClick(btn);
+        await humanClickSafe(btn);
         await loginPause(3000, "wait");
         return;
       }
@@ -152,7 +221,7 @@ async function fillKakaoLoginForm(
     try {
       const input = page.locator(sel).first();
       if ((await input.count()) > 0 && (await input.isVisible())) {
-        await fillFieldByEvaluate(page, sel, kakaoId);
+        await fillLoginField(page, sel, kakaoId);
         idFilled = true;
         break;
       }
@@ -169,7 +238,7 @@ async function fillKakaoLoginForm(
     try {
       const input = page.locator(sel).first();
       if ((await input.count()) > 0 && (await input.isVisible())) {
-        await fillFieldByEvaluate(page, sel, kakaoPassword);
+        await fillLoginField(page, sel, kakaoPassword);
         pwFilled = true;
         break;
       }
@@ -193,8 +262,7 @@ async function fillKakaoLoginForm(
     const btn = page.locator(sel).first();
     try {
       if ((await btn.count()) > 0 && (await btn.isVisible())) {
-        await humanClick(btn);
-        await loginPause(3000, "wait");
+        await submitLoginForm(page, btn, "카카오");
         return;
       }
     } catch {
@@ -230,7 +298,7 @@ async function handleKakaoPostLogin(page: Page): Promise<void> {
       try {
         if ((await btn.count()) > 0 && (await btn.isVisible())) {
           await reportConnectProgress("카카오 연결 동의를 진행하는 중…");
-          await humanClick(btn);
+          await humanClickSafe(btn);
           await loginPause(2000, "wait");
           break;
         }
@@ -288,11 +356,10 @@ export async function autoLoginTistory(
     await captureConnectScreenshot(page);
   }
 
-  await reportConnectProgress("카카오 아이디를 입력하는 중…");
+  await reportConnectProgress("카카오 아이디·비밀번호를 입력하는 중…");
   await fillKakaoLoginForm(page, kakaoId, kakaoPassword);
-  await reportConnectProgress("카카오 로그인 버튼을 누르는 중…");
   await handleKakaoPostLogin(page);
-  await reportConnectProgress("카카오 로그인 요청을 보냈습니다. 인증 여부를 확인하는 중…");
+  await reportConnectProgress("카카오 인증 여부를 확인하는 중…");
   await captureConnectScreenshot(page, "로그인 결과를 확인하는 중…");
 
   const loggedIn = await waitForLoginComplete(

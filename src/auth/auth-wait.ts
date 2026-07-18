@@ -1,9 +1,16 @@
 import type { Page } from "playwright";
 import { config } from "../../config/index.js";
-import { humanPause } from "../publishing/utils/human-input.js";
+import {
+  humanClickSafe,
+  humanPause,
+  randomTypingDelay,
+} from "../publishing/utils/human-input.js";
 import { reportConnectProgress } from "./connect-progress.js";
 
-/** paste 차단 우회 — 네이버·카카오 공통 */
+/**
+ * DOM value 직접 설정 — paste 차단 우회용 폴백.
+ * 네이버는 키보드 입력이 없으면 비밀번호 암호화(ipad)가 안 되어 로그인이 무시될 수 있음.
+ */
 export async function fillFieldByEvaluate(
   page: Page,
   selector: string,
@@ -17,13 +24,51 @@ export async function fillFieldByEvaluate(
       const el = document.querySelector(sel) as HTMLInputElement | null;
       if (!el) return;
       el.focus();
-      el.value = val;
+      const proto = window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      if (setter) setter.call(el, val);
+      else el.value = val;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(
+        new InputEvent("input", { bubbles: true, data: val, inputType: "insertText" }),
+      );
     },
     { sel: selector, val: value },
   );
   await humanPause(300);
+}
+
+/**
+ * auth:setup(수동 타이핑)과 동일하게 실제 키 입력으로 채움.
+ * 네이버·카카오 로그인 JS(암호화·유효성)가 반응하도록 함.
+ */
+export async function fillLoginField(
+  page: Page,
+  selector: string,
+  value: string,
+): Promise<void> {
+  const input = page.locator(selector).first();
+  await input.waitFor({ state: "visible", timeout: 20_000 });
+
+  try {
+    await humanClickSafe(input, 8_000);
+    await humanPause(120);
+    await input.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+    await humanPause(60);
+    await input.press("Backspace");
+    await humanPause(80);
+    await input.pressSequentially(value, { delay: randomTypingDelay() });
+    await humanPause(200);
+
+    const current = await input.inputValue().catch(() => "");
+    if (current === value) return;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[fillLoginField] 키보드 입력 실패 → evaluate 폴백: ${reason}`);
+  }
+
+  await fillFieldByEvaluate(page, selector, value);
 }
 
 /** 연결 진행 중 화면 캡처 (Vercel·수동 로그인 시 미리보기용) */
