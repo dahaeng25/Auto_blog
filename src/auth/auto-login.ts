@@ -43,6 +43,73 @@ function loginWaitBudgetMs(): number {
     : Math.max(config.auth2faWaitMs, 120_000);
 }
 
+/** 영문 글로벌 UI면 한국어로 전환 (셀렉터·2FA UX 안정화) */
+async function ensureNaverKoreanLocale(page: Page): Promise<void> {
+  try {
+    const body = await page.locator("body").innerText({ timeout: 3000 });
+    if (/로그인/.test(body) && /비밀번호/.test(body)) return;
+
+    const koBtn = page.locator('button.btn_language[data-lang="ko"]').first();
+    if ((await koBtn.count()) > 0 && (await koBtn.isVisible())) {
+      await humanClickSafe(koBtn, 5_000);
+      await loginPause(1200);
+      return;
+    }
+
+    // URL locale 파라미터가 무시된 경우 강제 재진입
+    if (!/locale=ko/i.test(page.url())) {
+      await page.goto(
+        "https://nid.naver.com/nidlogin.login?locale=ko_KR&lang=ko_KR",
+        { waitUntil: "domcontentloaded", timeout: 60_000 },
+      );
+      await loginPause(1200);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/** 신·구 UI / 한·영 / column·row 중 실제로 보이는 로그인 버튼 */
+async function findNaverLoginButton(page: Page): Promise<Locator> {
+  const selectors = [
+    "#loginBtn_column",
+    "#loginBtn_row",
+    '#log\\.login',
+    "button.btn_login",
+    'input.btn_global[type="submit"]',
+    'button.btn_done:has-text("로그인")',
+    'button.btn_done:has-text("Sign in")',
+  ];
+
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    for (const sel of selectors) {
+      const loc = page.locator(sel).first();
+      try {
+        if ((await loc.count()) > 0 && (await loc.isVisible())) {
+          return loc;
+        }
+      } catch {
+        // next
+      }
+    }
+    // role 기반 폴백 (텍스트만 보이는 경우)
+    const byRole = page.getByRole("button", { name: /^(로그인|Sign in)$/i });
+    try {
+      if ((await byRole.count()) > 0 && (await byRole.first().isVisible())) {
+        return byRole.first();
+      }
+    } catch {
+      // ignore
+    }
+    await loginPause(400);
+  }
+
+  throw new Error(
+    "네이버 로그인 버튼을 찾을 수 없습니다. 페이지 구조가 바뀌었거나 캡차가 표시됐을 수 있습니다.",
+  );
+}
+
 /**
  * 로그인 제출 — auth:setup처럼 클릭하되, 서버리스에서 클릭 고착을 막음.
  * Enter / form.requestSubmit 폴백으로 네이버가 실제 로그인·2FA를 타도록 함.
@@ -133,6 +200,7 @@ export async function autoLoginNaver(
     timeout: 60_000,
   });
   await loginPause(1500);
+  await ensureNaverKoreanLocale(page);
   await reportConnectProgress(`네이버 ${await describeLoginPage(page)}`);
   await captureConnectScreenshot(page);
 
@@ -141,20 +209,21 @@ export async function autoLoginNaver(
   await reportConnectProgress("네이버 비밀번호를 입력하는 중…");
   await fillLoginField(page, "#pw", naverPassword);
 
-  const keepLogin = page.locator("#keep").first();
-  try {
-    if ((await keepLogin.count()) > 0 && !(await keepLogin.isChecked())) {
-      await humanClickSafe(keepLogin, 8_000);
-      await reportConnectProgress("로그인 상태 유지를 선택했습니다.");
+  // 구 UI #keep / 신 UI #loginStay
+  for (const keepSel of ["#keep", "#loginStay"]) {
+    const keepLogin = page.locator(keepSel).first();
+    try {
+      if ((await keepLogin.count()) > 0 && !(await keepLogin.isChecked())) {
+        await humanClickSafe(keepLogin, 8_000);
+        await reportConnectProgress("로그인 상태 유지를 선택했습니다.");
+        break;
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  const loginBtn = page
-    .locator('#log\\.login, button.btn_login, input.btn_global[type="submit"]')
-    .first();
-  await loginBtn.waitFor({ state: "visible", timeout: 15_000 });
+  const loginBtn = await findNaverLoginButton(page);
   await submitLoginForm(page, loginBtn, "네이버");
 
   const loggedIn = await waitForLoginComplete(

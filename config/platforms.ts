@@ -13,7 +13,7 @@ export type Platform = "naver" | "tistory" | "google";
 export const PLATFORMS = {
   naver: {
     name: "네이버 블로그",
-    loginUrl: "https://nid.naver.com/nidlogin.login",
+    loginUrl: "https://nid.naver.com/nidlogin.login?locale=ko_KR&lang=ko_KR",
     /** 로그인 완료 여부 확인용 (네이버 메인) */
     verifyUrl: "https://www.naver.com",
     /** 글쓰기 URL — NAVER_BLOG_ID 환경변수 필요 */
