@@ -113,6 +113,9 @@ export async function describeLoginPage(page: Page): Promise<string> {
     if (/로그인/.test(compact) && /아이디|비밀번호|이메일/.test(compact)) {
       return "로그인 입력 화면";
     }
+    if (/Sign in/i.test(compact) && /Password|ID or phone/i.test(compact)) {
+      return "로그인 입력 화면";
+    }
     if (/동의|계속|Accept/i.test(compact)) {
       return "동의·연결 화면";
     }
