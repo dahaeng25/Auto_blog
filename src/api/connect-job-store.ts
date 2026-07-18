@@ -97,7 +97,11 @@ function isStaleConnecting(job: ConnectJobRecord): boolean {
   if (job.status !== "connecting" || !job.startedAt) return false;
   const started = Date.parse(job.startedAt);
   if (!Number.isFinite(started)) return false;
-  return Date.now() - started > STALE_CONNECTING_MS;
+  // 원격 조작(캡차) 중이면 여유를 더 줌 — 조기 실패로 UX가 끊기지 않게
+  const limit = job.interactive
+    ? Math.max(STALE_CONNECTING_MS, 12 * 60 * 1000)
+    : STALE_CONNECTING_MS;
+  return Date.now() - started > limit;
 }
 
 async function ensureConnectJobSchema(db: DbExecutor): Promise<void> {

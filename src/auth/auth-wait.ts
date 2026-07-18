@@ -218,8 +218,11 @@ export async function waitForManualAuth(
   }
 
   const screen = await describeLoginPage(page);
+  const localChrome = !config.isVercel && !config.authLoginHeadless;
   await reportConnectProgress(
-    `${platformName} ${screen} — 휴대폰 알림·앱에서 승인해 주세요.`,
+    localChrome
+      ? `${platformName} ${screen} — 열린 Chrome 창에서 캡차·인증을 직접 완료해 주세요.`
+      : `${platformName} ${screen} — 휴대폰 알림·앱 승인, 또는 원격 미리보기로 입력해 주세요. (캡차는 로컬 Chrome 직접 로그인 권장)`,
   );
   await captureConnectScreenshot(page, "인증 화면을 확인하는 중…");
 

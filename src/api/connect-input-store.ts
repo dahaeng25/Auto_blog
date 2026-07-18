@@ -5,7 +5,9 @@ import type { Platform } from "../../config/platforms.js";
 export type ConnectInputAction =
   | { type: "click"; x: number; y: number }
   | { type: "type"; text: string }
-  | { type: "press"; key: "Enter" | "Tab" | "Backspace" | "Escape" };
+  | { type: "press"; key: "Enter" | "Tab" | "Backspace" | "Escape" }
+  /** 캡차 입력칸 포커스 → (선택) 텍스트 입력 → 확인 버튼 클릭 또는 Enter */
+  | { type: "confirm"; text?: string };
 
 let schemaReady = false;
 

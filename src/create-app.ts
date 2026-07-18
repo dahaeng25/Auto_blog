@@ -732,6 +732,14 @@ export async function createApp(
             | "Backspace"
             | "Escape",
         };
+      } else if (rawAction?.type === "confirm") {
+        const text =
+          typeof rawAction.text === "string" ? rawAction.text.trim() : "";
+        if (text.length > 500) {
+          action = null;
+        } else {
+          action = text ? { type: "confirm", text } : { type: "confirm" };
+        }
       }
 
       if (!action) {

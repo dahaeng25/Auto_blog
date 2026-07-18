@@ -109,11 +109,11 @@
           alt="실시간 로그인 화면"
         />
         <div id="connect-progress-controls" class="connect-remote-controls hidden">
-          <p>화면을 눌러 조작하세요. 정답을 입력한 뒤 확인을 누르세요.</p>
+          <p>Vercel 원격 조작(보조). 캡차는 로컬 Chrome 창 입력을 권장합니다.</p>
           <div class="connect-remote-input-row">
             <input id="connect-progress-text" type="text" placeholder="캡차 정답 또는 입력할 내용" autocomplete="off" />
             <button id="connect-progress-type-btn" type="button" class="btn btn-primary btn-sm">입력</button>
-            <button id="connect-progress-enter-btn" type="button" class="btn btn-secondary btn-sm">확인(Enter)</button>
+            <button id="connect-progress-enter-btn" type="button" class="btn btn-secondary btn-sm">확인</button>
           </div>
         </div>
       </div>
@@ -126,8 +126,8 @@
           <button type="button" id="connect-manual-btn" class="btn btn-primary btn-sm hidden">
             Chrome에서 직접 로그인
           </button>
-          <button type="button" id="connect-preview-btn" class="btn btn-primary btn-sm hidden">
-            인증 화면 직접 조작
+          <button type="button" id="connect-preview-btn" class="btn btn-secondary btn-sm hidden">
+            원격으로 인증 화면 조작
           </button>
         </div>
       </div>
@@ -329,6 +329,9 @@
         <button type="submit" id="platform-login-submit" class="btn btn-primary btn-lg platform-login-submit">
           로그인하고 연결
         </button>
+        <button type="button" id="platform-login-chrome-btn" class="btn btn-primary btn-lg platform-login-chrome-btn hidden">
+          Chrome에서 직접 로그인
+        </button>
         <button type="button" id="platform-login-env-btn" class="btn btn-secondary btn-lg platform-login-env-btn hidden">
           등록된 계정으로 연결
         </button>
@@ -344,11 +347,11 @@
           alt="실시간 로그인 화면"
         />
         <div id="platform-login-controls" class="connect-remote-controls hidden">
-          <p>화면을 눌러 조작하세요. 정답을 입력한 뒤 확인을 누르세요.</p>
+          <p>Vercel 원격 조작(보조). 캡차는 로컬 Chrome 창 입력을 권장합니다.</p>
           <div class="connect-remote-input-row">
             <input id="platform-login-text" type="text" placeholder="캡차 정답 또는 입력할 내용" autocomplete="off" />
             <button id="platform-login-type-btn" type="button" class="btn btn-primary btn-sm">입력</button>
-            <button id="platform-login-enter-btn" type="button" class="btn btn-secondary btn-sm">확인(Enter)</button>
+            <button id="platform-login-enter-btn" type="button" class="btn btn-secondary btn-sm">확인</button>
           </div>
         </div>
       </div>
@@ -361,8 +364,8 @@
           <button type="button" id="platform-login-manual-btn" class="btn btn-primary btn-sm hidden">
             Chrome에서 직접 로그인
           </button>
-          <button type="button" id="platform-login-preview-btn" class="btn btn-primary btn-sm hidden">
-            인증 화면 직접 조작
+          <button type="button" id="platform-login-preview-btn" class="btn btn-secondary btn-sm hidden">
+            원격으로 인증 화면 조작
           </button>
         </div>
       </div>

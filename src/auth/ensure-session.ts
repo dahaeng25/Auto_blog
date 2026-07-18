@@ -166,30 +166,52 @@ async function isWritePageAccessible(
   return false;
 }
 
+/** 로컬에서 보이는 Chrome 창으로 로그인할지 (AUTH_LOGIN_HEADLESS=true 면 제외) */
+function preferVisibleChrome(): boolean {
+  return !config.isVercel && !config.authLoginHeadless;
+}
+
 /** 로컬: headed 창에서 사용자가 직접 로그인 / Vercel: 화면 미리보기 + 대기 */
 async function performManualLogin(
   platform: Platform,
   credentials?: PlatformCredentials,
 ): Promise<string> {
-  const headed = !config.isVercel;
+  const headed = preferVisibleChrome();
   bindConnectProgress(platform);
 
   const loginSession = headed
     ? await createManualChromeSession(platform)
-    : await createBrowserSession({ headless: config.authLoginHeadless });
+    : await createBrowserSession({ headless: true });
   const page = await getSessionPage(loginSession);
   const stopRemoteControl = !headed
     ? await startRemoteBrowserControl(platform, page)
     : null;
 
   try {
+    // 로컬 Chrome + 자격증명: 자동 입력 후 캡차만 창에서 직접 처리
+    if (headed && credentials?.id && credentials.password) {
+      await reportConnectProgress(
+        "Chrome 창을 여는 중… 아이디·비밀번호는 자동 입력되고, 캡차·인증은 열린 창에서 직접 입력하세요.",
+      );
+      if (platform === "naver") {
+        await autoLoginNaver(page, credentials);
+      } else if (platform === "tistory") {
+        await autoLoginTistory(page, credentials);
+      } else {
+        throw new Error(
+          `[${PLATFORMS[platform].name}] 웹 로그인을 지원하지 않습니다.`,
+        );
+      }
+      return await finalizeLoginSession(platform, loginSession, page);
+    }
+
     if (headed) {
       await reportConnectProgress(
-        "Chrome 창을 여는 중… 열린 창에서 직접 로그인해 주세요.",
+        "Chrome 창을 여는 중… 열린 창에서 직접 로그인해 주세요. 캡차·2단계도 그 창에서 입력하면 됩니다.",
       );
     } else {
       await reportConnectProgress(
-        "로그인 화면을 준비하는 중… 아래 미리보기를 확인해 주세요.",
+        "로그인 화면을 준비하는 중… Vercel에서는 PC Chrome 창을 열 수 없습니다. 캡차는 로컬 서버의 「Chrome에서 직접 로그인」을 권장합니다.",
       );
     }
 
@@ -201,7 +223,7 @@ async function performManualLogin(
     await humanPause(1500);
     await captureLoginPreview(page);
 
-    // Vercel: 자격증명이 있으면 자동 입력까지 시도(캡차는 사용자가 재시도)
+    // Vercel: 자격증명이 있으면 자동 입력까지 시도(캡차는 원격 조작 또는 로컬 재시도)
     if (!headed && credentials?.id && credentials.password) {
       await reportConnectProgress("아이디·비밀번호를 입력하는 중…");
       if (platform === "naver") {
@@ -210,9 +232,12 @@ async function performManualLogin(
         await autoLoginTistory(page, credentials);
       }
       await captureLoginPreview(page);
-    } else if (headed) {
+      return await finalizeLoginSession(platform, loginSession, page);
+    }
+
+    if (headed) {
       await reportConnectProgress(
-        "브라우저 창에서 로그인을 완료해 주세요. 완료되면 자동으로 연결됩니다.",
+        "Chrome 창에서 로그인을 완료해 주세요. 완료되면 자동으로 연결됩니다.",
       );
     }
 
@@ -228,14 +253,14 @@ async function performManualLogin(
       if (await isManualAuthScreen(page)) {
         await reportConnectProgress(
           headed
-            ? "추가 인증 화면입니다. 브라우저 창에서 인증을 완료해 주세요."
-            : "추가 인증이 필요합니다. 휴대폰 앱·알림에서 승인해 주세요.",
+            ? "추가 인증 화면입니다. Chrome 창에서 캡차·인증을 직접 완료해 주세요."
+            : "추가 인증이 필요합니다. 원격 미리보기로 조작하거나, 로컬에서 Chrome 직접 로그인을 이용해 주세요.",
         );
         await captureLoginPreview(page);
       } else if (headed) {
         if (Date.now() - progressAt > 8000) {
           progressAt = Date.now();
-          await reportConnectProgress("브라우저 창에서 로그인을 기다리는 중…");
+          await reportConnectProgress("Chrome 창에서 로그인을 기다리는 중…");
         }
       } else if (Date.now() - previewAt > 8000) {
         previewAt = Date.now();
@@ -249,8 +274,8 @@ async function performManualLogin(
 
     throw new Error(
       headed
-        ? "직접 로그인 시간이 초과되었습니다. 브라우저 창에서 로그인한 뒤 다시 시도해 주세요."
-        : "로그인 확인 시간이 초과되었습니다. 캡차·2단계 인증이 있으면 직접 완료하거나, 로컬 서버에서는 「Chrome에서 직접 로그인」을 이용해 주세요.",
+        ? "직접 로그인 시간이 초과되었습니다. Chrome 창에서 로그인한 뒤 다시 시도해 주세요."
+        : "로그인 확인 시간이 초과되었습니다. 캡차·2단계 인증은 로컬 서버에서 「Chrome에서 직접 로그인」을 이용해 주세요.",
     );
   } finally {
     await stopRemoteControl?.();
@@ -266,11 +291,20 @@ async function performAutoLogin(
 ): Promise<string> {
   bindConnectProgress(platform);
 
-  await reportConnectProgress("브라우저를 준비하는 중…");
-  const loginSession = await createBrowserSession({
-    headless: config.isVercel ? true : config.authLoginHeadless,
-  });
+  const useChrome = preferVisibleChrome();
+  await reportConnectProgress(
+    useChrome
+      ? "Chrome 창을 여는 중… 캡차·추가 인증은 열린 창에서 직접 입력하세요."
+      : "브라우저를 준비하는 중…",
+  );
+
+  const loginSession = useChrome
+    ? await createManualChromeSession(platform)
+    : await createBrowserSession({
+        headless: config.isVercel ? true : config.authLoginHeadless,
+      });
   const page = await getSessionPage(loginSession);
+  // 원격 입력 큐는 Vercel(서버리스)에서만 — 로컬은 Chrome 창에서 직접 입력
   const stopRemoteControl = config.isVercel
     ? await startRemoteBrowserControl(platform, page)
     : null;

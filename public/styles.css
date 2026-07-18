@@ -745,6 +745,7 @@ body.platform-login-open {
 }
 
 .platform-login-submit,
+.platform-login-chrome-btn,
 .platform-login-env-btn {
   width: 100%;
   min-height: 52px;

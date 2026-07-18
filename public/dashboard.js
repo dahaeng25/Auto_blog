@@ -17,7 +17,8 @@ let authMode = "login";
 let envLoginAvailable = { naver: false, tistory: false };
 let connectFeatures = { headedManualLogin: false, loginPreview: false };
 let activeConnectRequest = { platform: null, username: "", password: "" };
-const CONNECT_FALLBACK_MS = 45_000;
+/** 로컬 Chrome 직접 입력 중에는 조기 실패 오버레이를 띄우지 않음 */
+const CONNECT_FALLBACK_MS = 180_000;
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -146,11 +147,28 @@ function updateConnectFallbackButtons(scope, features = connectFeatures) {
   const ids = connectProgressIds(scope);
   const manualBtn = document.getElementById(ids.manualBtn);
   const previewBtn = document.getElementById(ids.previewBtn);
+  const textEl = document.querySelector(
+    `#${ids.fallback} .connect-fallback-text`,
+  );
   if (manualBtn) {
+    // 로컬: Chrome 직접 로그인이 주 경로
     manualBtn.classList.toggle("hidden", !features.headedManualLogin);
+    if (features.headedManualLogin) {
+      manualBtn.classList.add("btn-primary");
+      manualBtn.classList.remove("btn-secondary");
+    }
   }
   if (previewBtn) {
-    previewBtn.classList.toggle("hidden", !features.loginPreview);
+    // Vercel 전용 원격 조작 — 로컬에서는 숨김
+    previewBtn.classList.toggle(
+      "hidden",
+      !features.loginPreview || features.headedManualLogin,
+    );
+  }
+  if (textEl) {
+    textEl.textContent = features.headedManualLogin
+      ? "연결에 시간이 걸리거나 실패했습니다. Chrome 창에서 캡차·인증을 직접 입력해 보세요."
+      : "자동 연결이 실패했거나 캡차가 필요합니다. Vercel에서는 PC Chrome 창을 열 수 없으니, 로컬 서버에서 「Chrome에서 직접 로그인」을 사용하세요.";
   }
 }
 
@@ -203,15 +221,18 @@ function renderConnectProgress(job, scope = getConnectUiScope()) {
     shot.classList.remove("hidden");
   }
 
-  const interactive = Boolean(
-    job.interactive && job.status === "connecting" && job.screenshotBase64,
-  );
-  shot?.classList.toggle("is-interactive", interactive);
-  document.getElementById(ids.controls)?.classList.toggle("hidden", !interactive);
+  // 로컬 Chrome 직접 입력이 가능하면 원격 입력 바는 쓰지 않음
+  const allowRemote =
+    Boolean(job.interactive) &&
+    job.status === "connecting" &&
+    Boolean(job.screenshotBase64) &&
+    !connectFeatures.headedManualLogin;
+  shot?.classList.toggle("is-interactive", allowRemote);
+  document.getElementById(ids.controls)?.classList.toggle("hidden", !allowRemote);
   if (scope === "modal") {
     document
       .querySelector(".platform-login-panel")
-      ?.classList.toggle("has-remote-browser", interactive);
+      ?.classList.toggle("has-remote-browser", allowRemote);
   }
 }
 
@@ -259,6 +280,16 @@ async function typeRemoteText(scope) {
   input.value = "";
 }
 
+async function confirmRemoteText(scope) {
+  const ids = connectProgressIds(scope);
+  const input = document.getElementById(ids.textInput);
+  const text = (input?.value ?? "").trim();
+  await sendConnectInput(
+    text ? { type: "confirm", text } : { type: "confirm" },
+  );
+  if (input) input.value = "";
+}
+
 /** 계정 연결 비동기 작업이 끝날 때까지 /api/status 폴링 */
 async function pollConnectJob(
   platform,
@@ -286,11 +317,19 @@ async function pollConnectJob(
 
       renderConnectProgress(job, scope);
 
+      // 연결 중이거나 원격 조작 중이면 「실패」 오버레이를 띄우지 않음
+      // 로컬 Chrome 경로에서는 창에서 직접 입력하므로 조기 폴백 불필요
+      const suppressFallback =
+        job.status === "connecting" &&
+        (job.interactive ||
+          connectFeatures.headedManualLogin ||
+          Date.now() < fallbackAt);
+
       if (
         !fallbackShown &&
         isDesktopClient() &&
         job.status === "connecting" &&
-        Date.now() >= fallbackAt
+        !suppressFallback
       ) {
         fallbackShown = true;
         showConnectFallback(scope, true);
@@ -305,7 +344,9 @@ async function pollConnectJob(
         throw {
           message: job.lastError || "연결에 실패했습니다.",
           stage: "계정 연결",
-          hint: "아이디·비밀번호를 확인한 뒤 다시 연결해 주세요.",
+          hint: connectFeatures.headedManualLogin
+            ? "Chrome 창에서 캡차·인증을 완료했는지 확인한 뒤 「Chrome에서 직접 로그인」으로 다시 시도해 주세요."
+            : "캡차가 있으면 로컬 서버에서 Chrome 직접 로그인을 이용해 주세요.",
         };
       }
     } catch (err) {
@@ -321,7 +362,9 @@ async function pollConnectJob(
       "연결 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
     stage: "계정 연결",
     timedOut: true,
-    hint: "추가 인증(캡차·2단계)이 있거나 서버 시간이 부족할 수 있습니다.",
+    hint: connectFeatures.headedManualLogin
+      ? "Chrome 창에서 캡차·로그인을 완료한 뒤 다시 시도해 주세요."
+      : "캡차·2단계 인증은 로컬 서버의 「Chrome에서 직접 로그인」을 권장합니다.",
   };
 }
 
@@ -341,13 +384,19 @@ async function connectPlatform(
   const setBusy = (busy) => {
     if (submit) {
       submit.disabled = busy;
-      submit.textContent = busy
-        ? manual
+      if (!busy) {
+        submit.textContent = connectFeatures.headedManualLogin
+          ? "자동 입력으로 연결"
+          : "로그인하고 연결";
+      } else {
+        submit.textContent = manual
           ? "직접 로그인 준비 중…"
-          : "연결 중…"
-        : "로그인하고 연결";
+          : "연결 중…";
+      }
     }
     if (envBtn) envBtn.disabled = busy;
+    const chromeBtn = document.getElementById("platform-login-chrome-btn");
+    if (chromeBtn) chromeBtn.disabled = busy;
     document.querySelectorAll(".btn-connect").forEach((btn) => {
       btn.disabled = busy;
     });
@@ -366,9 +415,11 @@ async function connectPlatform(
     statusEl.className = "platform-login-status";
     statusEl.textContent = manual
       ? connectFeatures.headedManualLogin
-        ? "Chrome 창이 열리면 캡차·2단계 인증을 직접 완료해 주세요."
-        : "인증 화면을 준비하는 중입니다. 캡차·2단계 인증은 직접 완료해야 합니다."
-      : "로그인 중입니다. 아래 진행 로그를 확인해 주세요.";
+        ? "Chrome 창이 열리면 그 창에서 캡차·로그인을 직접 완료해 주세요. 대시보드 원격 입력은 필요 없습니다."
+        : "인증 화면을 준비하는 중입니다. Vercel에서는 Chrome 창을 열 수 없어 원격 미리보기만 가능합니다."
+      : connectFeatures.headedManualLogin
+        ? "Chrome 창이 열립니다. 캡차·추가 인증은 그 창에서 직접 입력하세요."
+        : "로그인 중입니다. 캡차가 뜨면 로컬 Chrome 직접 로그인을 권장합니다.";
   }
   clearErrorCard();
 
@@ -418,7 +469,9 @@ async function connectPlatform(
     if (/2단계|캡차|CAPTCHA|추가 인증|보안문자/.test(error.message)) {
       hint =
         hint ??
-        "추가 인증이 필요할 수 있습니다. 로컬에서는 「Chrome에서 직접 로그인」을 이용해 주세요.";
+        (connectFeatures.headedManualLogin
+          ? "열린 Chrome 창에서 캡차·인증을 직접 입력한 뒤 기다려 주세요."
+          : "캡차는 Vercel 원격 입력보다 로컬 「Chrome에서 직접 로그인」이 확실합니다.");
     }
     if (/404|실패 \(404\)/.test(error.message)) {
       hint =
@@ -1397,6 +1450,7 @@ function openPlatformLogin(platform) {
   const statusEl = document.getElementById("platform-login-status");
   const envHint = document.getElementById("platform-login-env-hint");
   const envBtn = document.getElementById("platform-login-env-btn");
+  const chromeBtn = document.getElementById("platform-login-chrome-btn");
   const label = PLATFORM_LABELS[platform] ?? platform;
 
   if (!screen) return;
@@ -1404,10 +1458,14 @@ function openPlatformLogin(platform) {
   platformInput.value = platform;
   title.textContent = `${label} 연결`;
   if (platform === "tistory") {
-    desc.textContent = "카카오 아이디와 비밀번호로 연결합니다.";
+    desc.textContent = connectFeatures.headedManualLogin
+      ? "카카오 계정으로 연결합니다. Chrome 창이 열리면 캡차·인증은 그 창에서 직접 입력하세요."
+      : "카카오 아이디와 비밀번호로 연결합니다. 캡차는 로컬 Chrome 직접 로그인을 권장합니다.";
     idLabel.textContent = "카카오 아이디";
   } else {
-    desc.textContent = "네이버 아이디와 비밀번호를 입력해 주세요.";
+    desc.textContent = connectFeatures.headedManualLogin
+      ? "네이버 계정으로 연결합니다. Chrome 창이 열리면 캡차·인증은 그 창에서 직접 입력하세요."
+      : "네이버 아이디와 비밀번호를 입력해 주세요. 캡차는 로컬 Chrome 직접 로그인을 권장합니다.";
     idLabel.textContent = "네이버 아이디";
   }
 
@@ -1433,6 +1491,25 @@ function openPlatformLogin(platform) {
     }
   }
 
+  if (chromeBtn) {
+    const showChrome = connectFeatures.headedManualLogin;
+    chromeBtn.classList.toggle("hidden", !showChrome);
+    const submit = document.getElementById("platform-login-submit");
+    if (submit && showChrome) {
+      submit.classList.remove("btn-primary");
+      submit.classList.add("btn-secondary");
+      submit.textContent = "자동 입력으로 연결";
+      chromeBtn.classList.add("btn-primary");
+      chromeBtn.classList.remove("btn-secondary");
+    } else if (submit) {
+      submit.classList.add("btn-primary");
+      submit.classList.remove("btn-secondary");
+      submit.textContent = "로그인하고 연결";
+    }
+  }
+
+  resetConnectProgressUI("modal");
+  showConnectFallback("modal", false);
   screen.classList.remove("hidden");
   document.body.classList.add("platform-login-open");
   username.focus();
@@ -1449,11 +1526,17 @@ function closePlatformLogin() {
   }
   const submit = document.getElementById("platform-login-submit");
   const envBtn = document.getElementById("platform-login-env-btn");
+  const chromeBtn = document.getElementById("platform-login-chrome-btn");
   if (submit) {
     submit.disabled = false;
     submit.textContent = "로그인하고 연결";
+    submit.classList.add("btn-primary");
+    submit.classList.remove("btn-secondary");
   }
   if (envBtn) envBtn.disabled = false;
+  if (chromeBtn) chromeBtn.disabled = false;
+  resetConnectProgressUI("modal");
+  showConnectFallback("modal", false);
 }
 
 async function handlePlatformLoginSubmit(event) {
@@ -1874,6 +1957,21 @@ async function init() {
       const platform = document.getElementById("platform-login-platform")?.value;
       if (platform) void connectPlatform(platform);
     });
+  document
+    .getElementById("platform-login-chrome-btn")
+    ?.addEventListener("click", () => {
+      const platform = document.getElementById("platform-login-platform")?.value;
+      if (!platform) return;
+      const username =
+        document.getElementById("platform-login-username")?.value?.trim() ?? "";
+      const password =
+        document.getElementById("platform-login-password")?.value ?? "";
+      void connectPlatform(platform, {
+        username,
+        password,
+        manual: true,
+      });
+    });
 
   for (const [retryId, manualId, previewId] of [
     ["connect-retry-btn", "connect-manual-btn", "connect-preview-btn"],
@@ -1905,22 +2003,26 @@ async function init() {
     document
       .getElementById(ids.enterBtn)
       ?.addEventListener("click", () =>
-        void sendConnectInput({ type: "press", key: "Enter" }),
+        void confirmRemoteText(scope).catch((err) =>
+          showErrorCard(
+            normalizeError(err).message,
+            "로그인 화면 조작",
+            "화면이 갱신된 뒤 다시 시도해 주세요.",
+          ),
+        ),
       );
     document
       .getElementById(ids.textInput)
       ?.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
-        void typeRemoteText(scope)
-          .then(() => sendConnectInput({ type: "press", key: "Enter" }))
-          .catch((err) =>
-            showErrorCard(
-              normalizeError(err).message,
-              "로그인 화면 조작",
-              "화면에서 입력칸을 먼저 누른 뒤 다시 입력해 주세요.",
-            ),
-          );
+        void confirmRemoteText(scope).catch((err) =>
+          showErrorCard(
+            normalizeError(err).message,
+            "로그인 화면 조작",
+            "화면에서 입력칸을 먼저 누른 뒤 다시 입력해 주세요.",
+          ),
+        );
       });
   }
 
