@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS platform_connect_jobs (
   platform           TEXT    NOT NULL,
   status             TEXT    NOT NULL DEFAULT 'idle',
   mode               TEXT    NOT NULL DEFAULT 'auto',
+  interactive        INTEGER NOT NULL DEFAULT 0,
   current_step       TEXT,
   step_logs_json     TEXT,
   screenshot_base64  TEXT,
@@ -96,6 +97,18 @@ CREATE TABLE IF NOT EXISTS platform_connect_jobs (
   last_error         TEXT,
   PRIMARY KEY (user_id, platform)
 );
+
+-- 서버리스 로그인 브라우저로 전달할 클릭·키보드 입력 큐
+CREATE TABLE IF NOT EXISTS platform_connect_inputs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  platform    TEXT    NOT NULL,
+  action_json TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_platform_connect_inputs_job
+  ON platform_connect_inputs(user_id, platform, id);
 
 -- 사용자별 썸네일 배경 (업로드 이미지 또는 샘플 그라데이션)
 CREATE TABLE IF NOT EXISTS user_thumbnail_backgrounds (

@@ -96,6 +96,10 @@ function connectProgressIds(scope) {
       current: "platform-login-progress-current",
       log: "platform-login-progress-log",
       screenshot: "platform-login-screenshot",
+      controls: "platform-login-controls",
+      textInput: "platform-login-text",
+      typeBtn: "platform-login-type-btn",
+      enterBtn: "platform-login-enter-btn",
       fallback: "platform-login-fallback",
       manualBtn: "platform-login-manual-btn",
       previewBtn: "platform-login-preview-btn",
@@ -107,6 +111,10 @@ function connectProgressIds(scope) {
     current: "connect-progress-current",
     log: "connect-progress-log",
     screenshot: "connect-progress-screenshot",
+    controls: "connect-progress-controls",
+    textInput: "connect-progress-text",
+    typeBtn: "connect-progress-type-btn",
+    enterBtn: "connect-progress-enter-btn",
     fallback: "connect-fallback-panel",
     manualBtn: "connect-manual-btn",
     previewBtn: "connect-preview-btn",
@@ -125,8 +133,13 @@ function resetConnectProgressUI(scope = getConnectUiScope()) {
   const shot = document.getElementById(ids.screenshot);
   if (shot) {
     shot.classList.add("hidden");
+    shot.classList.remove("is-interactive");
     shot.removeAttribute("src");
   }
+  document.getElementById(ids.controls)?.classList.add("hidden");
+  document
+    .querySelector(".platform-login-panel")
+    ?.classList.remove("has-remote-browser");
 }
 
 function updateConnectFallbackButtons(scope, features = connectFeatures) {
@@ -189,6 +202,61 @@ function renderConnectProgress(job, scope = getConnectUiScope()) {
     shot.src = `data:image/jpeg;base64,${job.screenshotBase64}`;
     shot.classList.remove("hidden");
   }
+
+  const interactive = Boolean(
+    job.interactive && job.status === "connecting" && job.screenshotBase64,
+  );
+  shot?.classList.toggle("is-interactive", interactive);
+  document.getElementById(ids.controls)?.classList.toggle("hidden", !interactive);
+  if (scope === "modal") {
+    document
+      .querySelector(".platform-login-panel")
+      ?.classList.toggle("has-remote-browser", interactive);
+  }
+}
+
+async function sendConnectInput(action) {
+  const platform = activeConnectRequest.platform;
+  if (!platform) return;
+  await api(`/api/sessions/${platform}/refresh`, {
+    method: "POST",
+    body: JSON.stringify({ phase: "input", action }),
+  });
+}
+
+function handleRemoteScreenClick(event, scope) {
+  const ids = connectProgressIds(scope);
+  const image = document.getElementById(ids.screenshot);
+  if (!image?.classList.contains("is-interactive")) return;
+
+  const rect = image.getBoundingClientRect();
+  const naturalWidth = image.naturalWidth || 1440;
+  const naturalHeight = image.naturalHeight || 900;
+  const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+  const shownWidth = naturalWidth * scale;
+  const shownHeight = naturalHeight * scale;
+  const left = rect.left + (rect.width - shownWidth) / 2;
+  const top = rect.top + (rect.height - shownHeight) / 2;
+  const x = (event.clientX - left) / shownWidth;
+  const y = (event.clientY - top) / shownHeight;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+
+  void sendConnectInput({ type: "click", x, y }).catch((err) => {
+    showErrorCard(
+      normalizeError(err).message,
+      "로그인 화면 조작",
+      "화면이 갱신된 뒤 다시 눌러 주세요.",
+    );
+  });
+}
+
+async function typeRemoteText(scope) {
+  const ids = connectProgressIds(scope);
+  const input = document.getElementById(ids.textInput);
+  const text = input?.value ?? "";
+  if (!text) return;
+  await sendConnectInput({ type: "type", text });
+  input.value = "";
 }
 
 /** 계정 연결 비동기 작업이 끝날 때까지 /api/status 폴링 */
@@ -298,8 +366,8 @@ async function connectPlatform(
     statusEl.className = "platform-login-status";
     statusEl.textContent = manual
       ? connectFeatures.headedManualLogin
-        ? "브라우저 창이 열리면 직접 로그인해 주세요."
-        : "로그인 화면을 준비하는 중입니다."
+        ? "Chrome 창이 열리면 캡차·2단계 인증을 직접 완료해 주세요."
+        : "인증 화면을 준비하는 중입니다. 캡차·2단계 인증은 직접 완료해야 합니다."
       : "로그인 중입니다. 아래 진행 로그를 확인해 주세요.";
   }
   clearErrorCard();
@@ -350,7 +418,7 @@ async function connectPlatform(
     if (/2단계|캡차|CAPTCHA|추가 인증|보안문자/.test(error.message)) {
       hint =
         hint ??
-        "추가 인증이 필요할 수 있습니다. 「브라우저에서 직접 로그인」 또는 잠시 후 다시 시도해 주세요.";
+        "추가 인증이 필요할 수 있습니다. 로컬에서는 「Chrome에서 직접 로그인」을 이용해 주세요.";
     }
     if (/404|실패 \(404\)/.test(error.message)) {
       hint =
@@ -1814,6 +1882,46 @@ async function init() {
     document.getElementById(retryId)?.addEventListener("click", handleConnectRetry);
     document.getElementById(manualId)?.addEventListener("click", handleConnectManual);
     document.getElementById(previewId)?.addEventListener("click", handleConnectManual);
+  }
+
+  for (const scope of ["page", "modal"]) {
+    const ids = connectProgressIds(scope);
+    document
+      .getElementById(ids.screenshot)
+      ?.addEventListener("click", (event) =>
+        handleRemoteScreenClick(event, scope),
+      );
+    document
+      .getElementById(ids.typeBtn)
+      ?.addEventListener("click", () =>
+        void typeRemoteText(scope).catch((err) =>
+          showErrorCard(
+            normalizeError(err).message,
+            "로그인 화면 조작",
+            "화면에서 입력칸을 먼저 누른 뒤 다시 입력해 주세요.",
+          ),
+        ),
+      );
+    document
+      .getElementById(ids.enterBtn)
+      ?.addEventListener("click", () =>
+        void sendConnectInput({ type: "press", key: "Enter" }),
+      );
+    document
+      .getElementById(ids.textInput)
+      ?.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        void typeRemoteText(scope)
+          .then(() => sendConnectInput({ type: "press", key: "Enter" }))
+          .catch((err) =>
+            showErrorCard(
+              normalizeError(err).message,
+              "로그인 화면 조작",
+              "화면에서 입력칸을 먼저 누른 뒤 다시 입력해 주세요.",
+            ),
+          );
+      });
   }
 
   const ok = await checkAuth();

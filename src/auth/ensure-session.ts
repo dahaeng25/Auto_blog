@@ -1,7 +1,11 @@
 import type { Page } from "playwright";
 import { config } from "../../config/index.js";
 import { PLATFORMS, type Platform } from "../../config/platforms.js";
-import { createBrowserSession, getSessionPage } from "./browser-factory.js";
+import {
+  createBrowserSession,
+  createManualChromeSession,
+  getSessionPage,
+} from "./browser-factory.js";
 import {
   autoLoginNaver,
   autoLoginTistory,
@@ -30,6 +34,7 @@ import {
   normalizeTistoryBlogName,
 } from "./write-page-nav.js";
 import { isManualAuthScreen, captureConnectScreenshot } from "./auth-wait.js";
+import { startRemoteBrowserControl } from "./remote-browser-control.js";
 
 export type EnsureSessionOptions = {
   /** 저장된 세션을 무시하고 다시 로그인 */
@@ -169,15 +174,18 @@ async function performManualLogin(
   const headed = !config.isVercel;
   bindConnectProgress(platform);
 
-  const loginSession = await createBrowserSession({
-    headless: headed ? false : config.authLoginHeadless,
-  });
+  const loginSession = headed
+    ? await createManualChromeSession(platform)
+    : await createBrowserSession({ headless: config.authLoginHeadless });
   const page = await getSessionPage(loginSession);
+  const stopRemoteControl = !headed
+    ? await startRemoteBrowserControl(platform, page)
+    : null;
 
   try {
     if (headed) {
       await reportConnectProgress(
-        "브라우저 창을 여는 중… 열린 창에서 직접 로그인해 주세요.",
+        "Chrome 창을 여는 중… 열린 창에서 직접 로그인해 주세요.",
       );
     } else {
       await reportConnectProgress(
@@ -242,9 +250,10 @@ async function performManualLogin(
     throw new Error(
       headed
         ? "직접 로그인 시간이 초과되었습니다. 브라우저 창에서 로그인한 뒤 다시 시도해 주세요."
-        : "로그인 확인 시간이 초과되었습니다. 캡차·2단계 인증이 있으면 잠시 후 다시 시도하거나, 로컬 서버에서는 「브라우저에서 직접 로그인」을 이용해 주세요.",
+        : "로그인 확인 시간이 초과되었습니다. 캡차·2단계 인증이 있으면 직접 완료하거나, 로컬 서버에서는 「Chrome에서 직접 로그인」을 이용해 주세요.",
     );
   } finally {
+    await stopRemoteControl?.();
     await page.close();
     await loginSession.close();
     unbindConnectProgress();
@@ -262,6 +271,9 @@ async function performAutoLogin(
     headless: config.isVercel ? true : config.authLoginHeadless,
   });
   const page = await getSessionPage(loginSession);
+  const stopRemoteControl = config.isVercel
+    ? await startRemoteBrowserControl(platform, page)
+    : null;
 
   try {
     if (platform === "naver") {
@@ -293,6 +305,7 @@ async function performAutoLogin(
 
     return await finalizeLoginSession(platform, loginSession, page);
   } finally {
+    await stopRemoteControl?.();
     await page.close();
     await loginSession.close();
     unbindConnectProgress();

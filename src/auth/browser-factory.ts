@@ -1,10 +1,16 @@
+import fs from "node:fs";
+import path from "node:path";
 import type {
   Browser,
   BrowserContext,
   BrowserContextOptions,
   Page,
 } from "playwright-core";
+import { chromium as standardChromium } from "playwright";
+import { config } from "../../config/index.js";
 import { launchChromium } from "../browser/launch-chromium.js";
+import type { Platform } from "../../config/platforms.js";
+import { requireUserId } from "./user-context.js";
 
 import { isServerless } from "../browser/is-serverless.js";
 
@@ -82,6 +88,64 @@ export async function createBrowserSession(
     close: async () => {
       await context.close();
       await browser.close();
+    },
+  };
+}
+
+/**
+ * 로컬 수동 인증 전용: 설치된 Chrome의 보이는 창과 사용자별 영구 프로필 사용.
+ * 자동화 은폐 스크립트는 주입하지 않고 사용자가 실제 DOM을 직접 조작합니다.
+ */
+export async function createManualChromeSession(
+  platform: Platform,
+): Promise<BrowserSession> {
+  if (isServerless()) {
+    throw new Error("서버리스 환경에서는 로컬 Chrome 창을 열 수 없습니다.");
+  }
+
+  const userDataDir = path.join(
+    config.dataDir,
+    "chrome-profiles",
+    String(requireUserId()),
+    platform,
+  );
+  fs.mkdirSync(userDataDir, { recursive: true });
+
+  let context: BrowserContext | null = null;
+  let lastError: unknown;
+  for (const channel of ["chrome", "msedge"] as const) {
+    try {
+      context = await standardChromium.launchPersistentContext(userDataDir, {
+        ...DEFAULT_CONTEXT_OPTIONS,
+        channel,
+        headless: false,
+      });
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!context) {
+    const reason = lastError instanceof Error ? lastError.message : String(lastError);
+    throw new Error(
+      `설치된 Chrome 또는 Edge를 열 수 없습니다. 브라우저 설치 상태를 확인해 주세요. (${reason})`,
+    );
+  }
+
+  const page = context.pages()[0] ?? (await context.newPage());
+  const browser = context.browser();
+  if (!browser) {
+    await context.close();
+    throw new Error("Chrome 브라우저 컨텍스트를 만들 수 없습니다.");
+  }
+
+  return {
+    browser,
+    context,
+    page,
+    close: async () => {
+      await context.close();
     },
   };
 }

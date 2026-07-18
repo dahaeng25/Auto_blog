@@ -20,6 +20,7 @@ export interface ConnectJobRecord {
   platform: Platform;
   status: ConnectJobStatus;
   mode: ConnectJobMode;
+  interactive: boolean;
   currentStep: string | null;
   stepLogs: ConnectStepLog[];
   screenshotBase64: string | null;
@@ -31,6 +32,7 @@ export interface ConnectJobRecord {
 const DEFAULT: Omit<ConnectJobRecord, "platform"> = {
   status: "idle",
   mode: "auto",
+  interactive: false,
   currentStep: null,
   stepLogs: [],
   screenshotBase64: null,
@@ -79,6 +81,7 @@ function mapRow(
     platform,
     status: (row.status as ConnectJobStatus) ?? "idle",
     mode,
+    interactive: Number(row.interactive ?? 0) === 1,
     currentStep: row.current_step ? String(row.current_step) : null,
     stepLogs: parseStepLogs(row.step_logs_json),
     screenshotBase64: row.screenshot_base64
@@ -104,6 +107,7 @@ async function ensureConnectJobSchema(db: DbExecutor): Promise<void> {
     "ALTER TABLE platform_connect_jobs ADD COLUMN step_logs_json TEXT",
     "ALTER TABLE platform_connect_jobs ADD COLUMN screenshot_base64 TEXT",
     "ALTER TABLE platform_connect_jobs ADD COLUMN mode TEXT DEFAULT 'auto'",
+    "ALTER TABLE platform_connect_jobs ADD COLUMN interactive INTEGER NOT NULL DEFAULT 0",
   ];
   for (const sql of alters) {
     try {
@@ -123,7 +127,7 @@ async function readJob(
 ): Promise<ConnectJobRecord> {
   await ensureConnectJobSchema(db);
   const result = await db.execute(
-    `SELECT status, mode, current_step, step_logs_json, screenshot_base64,
+    `SELECT status, mode, interactive, current_step, step_logs_json, screenshot_base64,
             started_at, finished_at, last_error
      FROM platform_connect_jobs
      WHERE user_id = ? AND platform = ?`,
@@ -145,12 +149,13 @@ async function writeJob(
 
   await db.execute(
     `INSERT INTO platform_connect_jobs (
-      user_id, platform, status, mode, current_step, step_logs_json,
+      user_id, platform, status, mode, interactive, current_step, step_logs_json,
       screenshot_base64, started_at, finished_at, last_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, platform) DO UPDATE SET
       status = excluded.status,
       mode = excluded.mode,
+      interactive = excluded.interactive,
       current_step = excluded.current_step,
       step_logs_json = excluded.step_logs_json,
       screenshot_base64 = excluded.screenshot_base64,
@@ -162,6 +167,7 @@ async function writeJob(
       platform,
       next.status,
       next.mode,
+      next.interactive ? 1 : 0,
       next.currentStep,
       next.stepLogs.length > 0 ? JSON.stringify(next.stepLogs) : null,
       next.screenshotBase64,
@@ -227,6 +233,7 @@ export const connectJobStore = {
       currentStep: firstStep,
       stepLogs: [{ at: new Date().toISOString(), message: firstStep }],
       screenshotBase64: null,
+      interactive: false,
     });
   },
 
@@ -254,6 +261,22 @@ export const connectJobStore = {
     });
   },
 
+  async updateInteractiveFrame(
+    platform: Platform,
+    screenshot: Buffer,
+  ): Promise<ConnectJobRecord> {
+    const userId = requireUserId();
+    const db = await getDb();
+    await ensureConnectJobSchema(db);
+    await db.execute(
+      `UPDATE platform_connect_jobs
+       SET interactive = 1, screenshot_base64 = ?
+       WHERE user_id = ? AND platform = ? AND status = 'connecting'`,
+      [screenshot.toString("base64"), userId, platform],
+    );
+    return readJob(db, userId, platform);
+  },
+
   async markConnected(platform: Platform): Promise<ConnectJobRecord> {
     const userId = requireUserId();
     const done = "연결 완료";
@@ -263,6 +286,7 @@ export const connectJobStore = {
       status: "connected",
       finishedAt: new Date().toISOString(),
       lastError: null,
+      interactive: false,
       currentStep: done,
       stepLogs: [...current.stepLogs, { at: new Date().toISOString(), message: done }].slice(
         -MAX_STEP_LOGS,
@@ -281,6 +305,7 @@ export const connectJobStore = {
       status: "failed",
       finishedAt: new Date().toISOString(),
       lastError: error,
+      interactive: false,
       currentStep: error,
       stepLogs: [...current.stepLogs, { at: new Date().toISOString(), message: error }].slice(
         -MAX_STEP_LOGS,

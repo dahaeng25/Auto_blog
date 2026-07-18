@@ -5,6 +5,10 @@ import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
 import { config, getEnabledPlatforms } from "../config/index.js";
 import { PLATFORMS, type Platform } from "../config/platforms.js";
+import {
+  connectInputStore,
+  type ConnectInputAction,
+} from "./api/connect-input-store.js";
 import { connectJobStore } from "./api/connect-job-store.js";
 import { jobStore } from "./api/job-store.js";
 import { readRecentLogs } from "./api/log-reader.js";
@@ -674,8 +678,9 @@ export async function createApp(
             password?: string;
             force?: boolean;
             manual?: boolean;
-            /** start: 작업 등록만 / run: Playwright 로그인 실행 */
-            phase?: "start" | "run";
+            /** start: 작업 등록 / run: Playwright 실행 / input: 원격 화면 조작 */
+            phase?: "start" | "run" | "input";
+            action?: unknown;
           }
         | undefined) ?? {};
 
@@ -685,8 +690,65 @@ export async function createApp(
     const credentials = hasFormCreds
       ? { id: username, password }
       : undefined;
-    const phase = body.phase === "run" ? "run" : "start";
+    const phase =
+      body.phase === "run" || body.phase === "input" ? body.phase : "start";
     const manual = body.manual === true;
+
+    const target = platform as Platform;
+
+    if (phase === "input") {
+      const rawAction = body.action as Record<string, unknown> | null;
+      let action: ConnectInputAction | null = null;
+      if (
+        rawAction?.type === "click" &&
+        typeof rawAction.x === "number" &&
+        Number.isFinite(rawAction.x) &&
+        typeof rawAction.y === "number" &&
+        Number.isFinite(rawAction.y)
+      ) {
+        action = {
+          type: "click",
+          x: Math.max(0, Math.min(1, rawAction.x)),
+          y: Math.max(0, Math.min(1, rawAction.y)),
+        };
+      } else if (
+        rawAction?.type === "type" &&
+        typeof rawAction.text === "string" &&
+        rawAction.text.length > 0 &&
+        rawAction.text.length <= 500
+      ) {
+        action = { type: "type", text: rawAction.text };
+      } else if (
+        rawAction?.type === "press" &&
+        ["Enter", "Tab", "Backspace", "Escape"].includes(
+          String(rawAction.key),
+        )
+      ) {
+        action = {
+          type: "press",
+          key: String(rawAction.key) as
+            | "Enter"
+            | "Tab"
+            | "Backspace"
+            | "Escape",
+        };
+      }
+
+      if (!action) {
+        return reply.status(400).send({ error: "올바르지 않은 화면 조작입니다." });
+      }
+
+      return runWithUser(user, async () => {
+        const current = await connectJobStore.get(target);
+        if (current.status !== "connecting" || !current.interactive) {
+          return reply.status(409).send({
+            error: "현재 조작할 수 있는 로그인 화면이 없습니다.",
+          });
+        }
+        await connectInputStore.enqueue(target, action);
+        return reply.status(202).send({ ok: true, accepted: true });
+      });
+    }
 
     if (!hasFormCreds && !hasEnvCredentials(platform as Platform) && !manual) {
       return reply.status(400).send({
@@ -694,8 +756,6 @@ export async function createApp(
           "아이디와 비밀번호를 입력해 주세요. (또는 서버에 계정 환경변수를 설정하세요)",
       });
     }
-
-    const target = platform as Platform;
 
     const runConnect = async () => {
       try {

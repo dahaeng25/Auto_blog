@@ -106,8 +106,16 @@
         <img
           id="connect-progress-screenshot"
           class="connect-progress-screenshot hidden"
-          alt="로그인 화면 미리보기"
+          alt="실시간 로그인 화면"
         />
+        <div id="connect-progress-controls" class="connect-remote-controls hidden">
+          <p>화면을 눌러 조작하세요. 정답을 입력한 뒤 확인을 누르세요.</p>
+          <div class="connect-remote-input-row">
+            <input id="connect-progress-text" type="text" placeholder="캡차 정답 또는 입력할 내용" autocomplete="off" />
+            <button id="connect-progress-type-btn" type="button" class="btn btn-primary btn-sm">입력</button>
+            <button id="connect-progress-enter-btn" type="button" class="btn btn-secondary btn-sm">확인(Enter)</button>
+          </div>
+        </div>
       </div>
       <div id="connect-fallback-panel" class="connect-fallback-panel hidden">
         <p class="connect-fallback-text">자동 연결이 오래 걸리거나 실패했습니다.</p>
@@ -116,10 +124,10 @@
             다시 시도
           </button>
           <button type="button" id="connect-manual-btn" class="btn btn-primary btn-sm hidden">
-            브라우저에서 직접 로그인
+            Chrome에서 직접 로그인
           </button>
           <button type="button" id="connect-preview-btn" class="btn btn-primary btn-sm hidden">
-            화면 확인하며 다시 연결
+            인증 화면 직접 조작
           </button>
         </div>
       </div>
@@ -333,8 +341,16 @@
         <img
           id="platform-login-screenshot"
           class="connect-progress-screenshot hidden"
-          alt="로그인 화면 미리보기"
+          alt="실시간 로그인 화면"
         />
+        <div id="platform-login-controls" class="connect-remote-controls hidden">
+          <p>화면을 눌러 조작하세요. 정답을 입력한 뒤 확인을 누르세요.</p>
+          <div class="connect-remote-input-row">
+            <input id="platform-login-text" type="text" placeholder="캡차 정답 또는 입력할 내용" autocomplete="off" />
+            <button id="platform-login-type-btn" type="button" class="btn btn-primary btn-sm">입력</button>
+            <button id="platform-login-enter-btn" type="button" class="btn btn-secondary btn-sm">확인(Enter)</button>
+          </div>
+        </div>
       </div>
       <div id="platform-login-fallback" class="connect-fallback-panel hidden">
         <p class="connect-fallback-text">자동 연결이 오래 걸리거나 실패했습니다.</p>
@@ -343,10 +359,10 @@
             다시 시도
           </button>
           <button type="button" id="platform-login-manual-btn" class="btn btn-primary btn-sm hidden">
-            브라우저에서 직접 로그인
+            Chrome에서 직접 로그인
           </button>
           <button type="button" id="platform-login-preview-btn" class="btn btn-primary btn-sm hidden">
-            화면 확인하며 다시 연결
+            인증 화면 직접 조작
           </button>
         </div>
       </div>
