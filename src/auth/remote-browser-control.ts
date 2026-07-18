@@ -1,12 +1,15 @@
 import type { Page } from "playwright";
 import type { Platform } from "../../config/platforms.js";
-import { connectInputStore } from "../api/connect-input-store.js";
+import {
+  connectInputStore,
+  type ConnectInputAction,
+} from "../api/connect-input-store.js";
 import { connectJobStore } from "../api/connect-job-store.js";
 import { humanPause } from "../publishing/utils/human-input.js";
 import { reportConnectProgress } from "./connect-progress.js";
 
-const FRAME_INTERVAL_MS = 1200;
-const INPUT_POLL_MS = 350;
+const FRAME_INTERVAL_MS = 900;
+const INPUT_POLL_MS = 400;
 
 const CHALLENGE_INPUT_SELECTORS = [
   "#captcha",
@@ -28,6 +31,7 @@ const CONFIRM_BUTTON_SELECTORS = [
   'input[type="submit"][value*="확인"]',
   'a:has-text("확인")',
   'button.btn_confirm',
+  'button.btn_primary:has-text("확인")',
   'button[type="submit"]',
   'input[type="submit"]',
 ];
@@ -64,7 +68,12 @@ async function clickConfirmButton(page: Page): Promise<boolean> {
 }
 
 async function typeIntoPage(page: Page, text: string): Promise<void> {
-  await focusChallengeInput(page);
+  const focused = await focusChallengeInput(page);
+  if (!focused) {
+    console.warn(
+      "[remote-browser-control] 캡차 입력칸을 찾지 못함 — 현재 포커스에 타이핑",
+    );
+  }
   if (/^[\x20-\x7E\n\r\t]*$/.test(text)) {
     await page.keyboard.type(text, { delay: 35 });
   } else {
@@ -82,13 +91,17 @@ async function applyConfirm(page: Page, text?: string): Promise<void> {
 
   const clicked = await clickConfirmButton(page);
   if (!clicked) {
+    console.warn(
+      "[remote-browser-control] 확인 버튼 미발견 — Enter 폴백",
+    );
     await page.keyboard.press("Enter");
   }
 }
 
-async function applyInput(
+/** 테스트·내부용: 큐 액션을 Playwright page에 적용 */
+export async function applyConnectInput(
   page: Page,
-  action: Awaited<ReturnType<typeof connectInputStore.drain>>[number],
+  action: ConnectInputAction,
 ): Promise<void> {
   if (action.type === "click") {
     const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
@@ -116,14 +129,17 @@ async function applyInput(
   await page.keyboard.press(action.key);
 }
 
-async function pushInteractiveFrame(platform: Platform, page: Page): Promise<void> {
+async function pushInteractiveFrame(
+  platform: Platform,
+  page: Page,
+): Promise<void> {
   const shot = await page.screenshot({ type: "jpeg", quality: 65 });
   await connectJobStore.updateInteractiveFrame(platform, shot);
 }
 
 /**
  * 서버리스 브라우저를 DB 입력 큐와 연결합니다.
- * 별도 함수 인스턴스에서 받은 입력도 현재 실행 중인 page가 소비할 수 있습니다.
+ * phase=input 이 다른 함수 인스턴스여도 Turso 큐를 통해 현재 page가 소비합니다.
  * (로컬 headed Chrome에서는 사용하지 않음 — 사용자가 창에서 직접 입력)
  */
 export async function startRemoteBrowserControl(
@@ -134,9 +150,18 @@ export async function startRemoteBrowserControl(
   let lastFrameAt = 0;
 
   await connectInputStore.clear(platform);
+  await connectJobStore.enableInteractive(platform);
   await reportConnectProgress(
-    "추가 인증이 필요합니다. 가능하면 로컬에서 Chrome 창으로 직접 입력하세요. (원격 조작은 보조 수단)",
+    "원격 조작이 활성화되었습니다. 아래 미리보기에 캡차를 입력하거나, 가능하면 로컬 Chrome에서 직접 입력하세요.",
   );
+
+  try {
+    await pushInteractiveFrame(platform, page);
+    lastFrameAt = Date.now();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[remote-browser-control] 초기 프레임 실패: ${reason}`);
+  }
 
   const loop = (async () => {
     while (!stopped && !page.isClosed()) {
@@ -144,7 +169,15 @@ export async function startRemoteBrowserControl(
         const actions = await connectInputStore.drain(platform);
         let applied = false;
         for (const action of actions) {
-          await applyInput(page, action);
+          console.log(
+            `[remote-browser-control] apply ${action.type}` +
+              (action.type === "type"
+                ? ` len=${action.text.length}`
+                : action.type === "confirm" && action.text
+                  ? ` len=${action.text.length}`
+                  : ""),
+          );
+          await applyConnectInput(page, action);
           applied = true;
         }
 

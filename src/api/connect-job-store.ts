@@ -150,6 +150,16 @@ async function writeJob(
   await ensureConnectJobSchema(db);
   const current = await readJob(db, userId, platform);
   const next = { ...current, ...partial };
+  // 원격 프레임 루프와 appendStep 이 동시에 돌 때 interactive·스크린샷이
+  // 서로 덮어쓰이지 않도록, 호출자가 명시한 필드만 UPDATE 한다.
+  const touchInteractive = Object.prototype.hasOwnProperty.call(
+    partial,
+    "interactive",
+  );
+  const touchScreenshot = Object.prototype.hasOwnProperty.call(
+    partial,
+    "screenshotBase64",
+  );
 
   await db.execute(
     `INSERT INTO platform_connect_jobs (
@@ -159,10 +169,16 @@ async function writeJob(
     ON CONFLICT(user_id, platform) DO UPDATE SET
       status = excluded.status,
       mode = excluded.mode,
-      interactive = excluded.interactive,
+      interactive = CASE
+        WHEN ? = 1 THEN excluded.interactive
+        ELSE platform_connect_jobs.interactive
+      END,
       current_step = excluded.current_step,
       step_logs_json = excluded.step_logs_json,
-      screenshot_base64 = excluded.screenshot_base64,
+      screenshot_base64 = CASE
+        WHEN ? = 1 THEN excluded.screenshot_base64
+        ELSE platform_connect_jobs.screenshot_base64
+      END,
       started_at = excluded.started_at,
       finished_at = excluded.finished_at,
       last_error = excluded.last_error`,
@@ -178,9 +194,11 @@ async function writeJob(
       next.startedAt,
       next.finishedAt,
       next.lastError,
+      touchInteractive ? 1 : 0,
+      touchScreenshot ? 1 : 0,
     ],
   );
-  return next;
+  return readJob(db, userId, platform);
 }
 
 async function settleStale(
@@ -256,13 +274,29 @@ export const connectJobStore = {
         ? current.stepLogs
         : [...current.stepLogs, { at, message }].slice(-MAX_STEP_LOGS);
 
-    return writeJob(userId, platform, {
+    const partial: Partial<Omit<ConnectJobRecord, "platform">> = {
       currentStep: message,
       stepLogs,
-      screenshotBase64: screenshot
-        ? screenshot.toString("base64")
-        : current.screenshotBase64,
-    });
+    };
+    // 스크린샷이 있을 때만 갱신 — 없으면 원격 조작 프레임을 보존
+    if (screenshot) {
+      partial.screenshotBase64 = screenshot.toString("base64");
+    }
+    return writeJob(userId, platform, partial);
+  },
+
+  /** 캡차·인증 대기 진입 시 UI 조작을 즉시 활성화 */
+  async enableInteractive(platform: Platform): Promise<ConnectJobRecord> {
+    const userId = requireUserId();
+    const db = await getDb();
+    await ensureConnectJobSchema(db);
+    await db.execute(
+      `UPDATE platform_connect_jobs
+       SET interactive = 1
+       WHERE user_id = ? AND platform = ? AND status = 'connecting'`,
+      [userId, platform],
+    );
+    return readJob(db, userId, platform);
   },
 
   async updateInteractiveFrame(

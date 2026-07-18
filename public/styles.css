@@ -612,6 +612,28 @@ body {
   color: var(--text, #e8eaed);
 }
 
+.connect-remote-controls code {
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.connect-input-status {
+  min-height: 1.2em;
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted, #9aa0a6);
+}
+
+.connect-input-status.is-ok {
+  color: var(--success, #3dd68c);
+}
+
+.connect-input-status.is-error {
+  color: var(--danger, #f87171);
+}
+
 .connect-remote-input-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto auto;

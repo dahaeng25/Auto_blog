@@ -20,6 +20,21 @@ let activeConnectRequest = { platform: null, username: "", password: "" };
 /** 로컬 Chrome 직접 입력 중에는 조기 실패 오버레이를 띄우지 않음 */
 const CONNECT_FALLBACK_MS = 180_000;
 
+function applyConnectFeatures(config) {
+  if (!config) return;
+  if (config.connectFeatures) {
+    connectFeatures = {
+      headedManualLogin: Boolean(config.connectFeatures.headedManualLogin),
+      loginPreview: Boolean(config.connectFeatures.loginPreview),
+    };
+  }
+  // 클라우드(Vercel)에서는 절대 로컬 Chrome 플래그를 true 로 두지 않음
+  if (config.isVercel) {
+    connectFeatures.headedManualLogin = false;
+    connectFeatures.loginPreview = true;
+  }
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -101,6 +116,7 @@ function connectProgressIds(scope) {
       textInput: "platform-login-text",
       typeBtn: "platform-login-type-btn",
       enterBtn: "platform-login-enter-btn",
+      inputStatus: "platform-login-input-status",
       fallback: "platform-login-fallback",
       manualBtn: "platform-login-manual-btn",
       previewBtn: "platform-login-preview-btn",
@@ -116,6 +132,7 @@ function connectProgressIds(scope) {
     textInput: "connect-progress-text",
     typeBtn: "connect-progress-type-btn",
     enterBtn: "connect-progress-enter-btn",
+    inputStatus: "connect-progress-input-status",
     fallback: "connect-fallback-panel",
     manualBtn: "connect-manual-btn",
     previewBtn: "connect-preview-btn",
@@ -168,7 +185,7 @@ function updateConnectFallbackButtons(scope, features = connectFeatures) {
   if (textEl) {
     textEl.textContent = features.headedManualLogin
       ? "연결에 시간이 걸리거나 실패했습니다. Chrome 창에서 캡차·인증을 직접 입력해 보세요."
-      : "자동 연결이 실패했거나 캡차가 필요합니다. Vercel에서는 PC Chrome 창을 열 수 없으니, 로컬 서버에서 「Chrome에서 직접 로그인」을 사용하세요.";
+      : "Vercel(클라우드)에서는 PC Chrome 창을 열 수 없습니다. 캡차는 로컬에서 npm run web → 「Chrome에서 직접 로그인」을 쓰거나, 아래 원격 미리보기로 입력하세요.";
   }
 }
 
@@ -236,13 +253,48 @@ function renderConnectProgress(job, scope = getConnectUiScope()) {
   }
 }
 
+function setRemoteInputStatus(scope, message, kind = "") {
+  const ids = connectProgressIds(scope);
+  const el = document.getElementById(ids.inputStatus);
+  if (!el) return;
+  el.textContent = message || "";
+  el.classList.remove("is-ok", "is-error");
+  if (kind === "ok") el.classList.add("is-ok");
+  if (kind === "error") el.classList.add("is-error");
+}
+
+async function refreshConnectJobFrame(platform, scope) {
+  try {
+    const data = await api("/api/status");
+    lastStatus = data;
+    const job = data.connectJobs?.[platform];
+    if (job) renderConnectProgress(job, scope);
+  } catch {
+    // ignore — 폴링이 이어감
+  }
+}
+
 async function sendConnectInput(action) {
   const platform = activeConnectRequest.platform;
-  if (!platform) return;
-  await api(`/api/sessions/${platform}/refresh`, {
-    method: "POST",
-    body: JSON.stringify({ phase: "input", action }),
-  });
+  if (!platform) {
+    throw { message: "연결 중인 플랫폼이 없습니다.", stage: "로그인 화면 조작" };
+  }
+  try {
+    await api(`/api/sessions/${platform}/refresh`, {
+      method: "POST",
+      body: JSON.stringify({ phase: "input", action }),
+    });
+  } catch (err) {
+    const error = normalizeError(err);
+    if (/세션이 종료|SESSION_ENDED|조작할 수 있는/i.test(error.message)) {
+      throw {
+        message: "세션이 종료되었습니다. 다시 연결해 주세요.",
+        stage: "로그인 화면 조작",
+        hint: "연결을 다시 시작한 뒤 캡차를 입력하세요.",
+      };
+    }
+    throw error;
+  }
 }
 
 function handleRemoteScreenClick(event, scope) {
@@ -262,32 +314,87 @@ function handleRemoteScreenClick(event, scope) {
   const y = (event.clientY - top) / shownHeight;
   if (x < 0 || x > 1 || y < 0 || y > 1) return;
 
-  void sendConnectInput({ type: "click", x, y }).catch((err) => {
-    showErrorCard(
-      normalizeError(err).message,
-      "로그인 화면 조작",
-      "화면이 갱신된 뒤 다시 눌러 주세요.",
-    );
-  });
+  const platform = activeConnectRequest.platform;
+  setRemoteInputStatus(scope, "클릭 전송 중…");
+  void sendConnectInput({ type: "click", x, y })
+    .then(async () => {
+      setRemoteInputStatus(scope, "클릭 전송됨", "ok");
+      if (platform) {
+        await sleep(500);
+        await refreshConnectJobFrame(platform, scope);
+      }
+    })
+    .catch((err) => {
+      const error = normalizeError(err);
+      setRemoteInputStatus(scope, error.message, "error");
+      showErrorCard(
+        error.message,
+        "로그인 화면 조작",
+        error.hint ?? "화면이 갱신된 뒤 다시 눌러 주세요.",
+      );
+    });
 }
 
 async function typeRemoteText(scope) {
   const ids = connectProgressIds(scope);
   const input = document.getElementById(ids.textInput);
+  const typeBtn = document.getElementById(ids.typeBtn);
+  const enterBtn = document.getElementById(ids.enterBtn);
   const text = input?.value ?? "";
-  if (!text) return;
-  await sendConnectInput({ type: "type", text });
-  input.value = "";
+  if (!text) {
+    setRemoteInputStatus(scope, "입력할 내용을 적어 주세요.", "error");
+    return;
+  }
+  const platform = activeConnectRequest.platform;
+  if (typeBtn) typeBtn.disabled = true;
+  if (enterBtn) enterBtn.disabled = true;
+  setRemoteInputStatus(scope, "입력 전송 중…");
+  try {
+    await sendConnectInput({ type: "type", text });
+    if (input) input.value = "";
+    setRemoteInputStatus(scope, "전송됨 — 화면에 반영되는 중…", "ok");
+    if (platform) {
+      await sleep(700);
+      await refreshConnectJobFrame(platform, scope);
+    }
+  } catch (err) {
+    const error = normalizeError(err);
+    setRemoteInputStatus(scope, error.message, "error");
+    throw error;
+  } finally {
+    if (typeBtn) typeBtn.disabled = false;
+    if (enterBtn) enterBtn.disabled = false;
+  }
 }
 
 async function confirmRemoteText(scope) {
   const ids = connectProgressIds(scope);
   const input = document.getElementById(ids.textInput);
+  const typeBtn = document.getElementById(ids.typeBtn);
+  const enterBtn = document.getElementById(ids.enterBtn);
   const text = (input?.value ?? "").trim();
-  await sendConnectInput(
-    text ? { type: "confirm", text } : { type: "confirm" },
-  );
-  if (input) input.value = "";
+  const platform = activeConnectRequest.platform;
+  if (typeBtn) typeBtn.disabled = true;
+  if (enterBtn) enterBtn.disabled = true;
+  setRemoteInputStatus(scope, "확인 전송 중…");
+  try {
+    await sendConnectInput(
+      text ? { type: "confirm", text } : { type: "confirm" },
+    );
+    if (input) input.value = "";
+    setRemoteInputStatus(scope, "확인 전송됨 — 결과 반영 중…", "ok");
+    if (platform) {
+      await sleep(900);
+      await refreshConnectJobFrame(platform, scope);
+    }
+  } catch (err) {
+    const error = normalizeError(err);
+    setRemoteInputStatus(scope, error.message, "error");
+    throw error;
+  } finally {
+    if (typeBtn) typeBtn.disabled = false;
+    if (enterBtn) enterBtn.disabled = false;
+  }
 }
 
 /** 계정 연결 비동기 작업이 끝날 때까지 /api/status 폴링 */
@@ -301,16 +408,16 @@ async function pollConnectJob(
   let fallbackShown = false;
 
   while (Date.now() < deadline) {
-    await sleep(intervalMs);
+    const jobPeek = lastStatus?.connectJobs?.[platform];
+    const waitMs =
+      jobPeek?.interactive && jobPeek?.status === "connecting"
+        ? Math.min(intervalMs, 900)
+        : intervalMs;
+    await sleep(waitMs);
     try {
       const data = await api("/api/status");
       lastStatus = data;
-      if (data.config?.connectFeatures) {
-        connectFeatures = {
-          headedManualLogin: Boolean(data.config.connectFeatures.headedManualLogin),
-          loginPreview: Boolean(data.config.connectFeatures.loginPreview),
-        };
-      }
+      applyConnectFeatures(data.config);
       updateConnectPanelStatus(data.sessionDetails, data.connectJobs);
       const job = data.connectJobs?.[platform];
       if (!job) continue;
@@ -318,7 +425,6 @@ async function pollConnectJob(
       renderConnectProgress(job, scope);
 
       // 연결 중이거나 원격 조작 중이면 「실패」 오버레이를 띄우지 않음
-      // 로컬 Chrome 경로에서는 창에서 직접 입력하므로 조기 폴백 불필요
       const suppressFallback =
         job.status === "connecting" &&
         (job.interactive ||
@@ -346,7 +452,7 @@ async function pollConnectJob(
           stage: "계정 연결",
           hint: connectFeatures.headedManualLogin
             ? "Chrome 창에서 캡차·인증을 완료했는지 확인한 뒤 「Chrome에서 직접 로그인」으로 다시 시도해 주세요."
-            : "캡차가 있으면 로컬 서버에서 Chrome 직접 로그인을 이용해 주세요.",
+            : "캡차가 있으면 로컬에서 npm run web 후 Chrome 직접 로그인을 이용하거나, 원격 미리보기로 다시 시도하세요.",
         };
       }
     } catch (err) {
@@ -416,10 +522,10 @@ async function connectPlatform(
     statusEl.textContent = manual
       ? connectFeatures.headedManualLogin
         ? "Chrome 창이 열리면 그 창에서 캡차·로그인을 직접 완료해 주세요. 대시보드 원격 입력은 필요 없습니다."
-        : "인증 화면을 준비하는 중입니다. Vercel에서는 Chrome 창을 열 수 없어 원격 미리보기만 가능합니다."
+        : "인증 화면을 준비하는 중입니다. Vercel에서는 Chrome 창을 열 수 없어 원격 미리보기만 가능합니다. 확실하려면 로컬에서 npm run web 을 실행하세요."
       : connectFeatures.headedManualLogin
         ? "Chrome 창이 열립니다. 캡차·추가 인증은 그 창에서 직접 입력하세요."
-        : "로그인 중입니다. 캡차가 뜨면 로컬 Chrome 직접 로그인을 권장합니다.";
+        : "로그인 중입니다. 캡차가 뜨면 미리보기에 입력하거나, 로컬 npm run web → Chrome 직접 로그인을 사용하세요.";
   }
   clearErrorCard();
 
@@ -1055,12 +1161,7 @@ async function loadStatus(options = {}) {
       tistory: Boolean(data.config.envLoginAvailable.tistory),
     };
   }
-  if (data.config?.connectFeatures) {
-    connectFeatures = {
-      headedManualLogin: Boolean(data.config.connectFeatures.headedManualLogin),
-      loginPreview: Boolean(data.config.connectFeatures.loginPreview),
-    };
-  }
+  applyConnectFeatures(data.config);
   document.getElementById("run-btn").disabled = data.isRunning;
 
   renderProgress(job, lastLogs, {

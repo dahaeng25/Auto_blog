@@ -1,11 +1,15 @@
 import type { Page } from "playwright";
 import { config } from "../../config/index.js";
+import { connectJobStore } from "../api/connect-job-store.js";
 import {
   humanClickSafe,
   humanPause,
   randomTypingDelay,
 } from "../publishing/utils/human-input.js";
-import { reportConnectProgress } from "./connect-progress.js";
+import {
+  getBoundConnectPlatform,
+  reportConnectProgress,
+} from "./connect-progress.js";
 
 /**
  * DOM value 직접 설정 — paste 차단 우회용 폴백.
@@ -219,10 +223,17 @@ export async function waitForManualAuth(
 
   const screen = await describeLoginPage(page);
   const localChrome = !config.isVercel && !config.authLoginHeadless;
+  if (config.isVercel) {
+    // 원격 입력 루프가 프레임을 올리기 전에도 UI 조작을 허용
+    const bound = getBoundConnectPlatform();
+    if (bound) {
+      await connectJobStore.enableInteractive(bound).catch(() => {});
+    }
+  }
   await reportConnectProgress(
     localChrome
       ? `${platformName} ${screen} — 열린 Chrome 창에서 캡차·인증을 직접 완료해 주세요.`
-      : `${platformName} ${screen} — 휴대폰 알림·앱 승인, 또는 원격 미리보기로 입력해 주세요. (캡차는 로컬 Chrome 직접 로그인 권장)`,
+      : `${platformName} ${screen} — 아래 미리보기에 입력하거나, 로컬에서 Chrome 직접 로그인을 이용하세요.`,
   );
   await captureConnectScreenshot(page, "인증 화면을 확인하는 중…");
 

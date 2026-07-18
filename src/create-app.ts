@@ -748,13 +748,22 @@ export async function createApp(
 
       return runWithUser(user, async () => {
         const current = await connectJobStore.get(target);
-        if (current.status !== "connecting" || !current.interactive) {
+        if (current.status !== "connecting") {
           return reply.status(409).send({
-            error: "현재 조작할 수 있는 로그인 화면이 없습니다.",
+            error:
+              "세션이 종료되었습니다. 다시 연결해 주세요.",
+            code: "SESSION_ENDED",
           });
         }
         await connectInputStore.enqueue(target, action);
-        return reply.status(202).send({ ok: true, accepted: true });
+        console.log(
+          `[connect-input] enqueued ${action.type} for ${target} (user=${user.id})`,
+        );
+        return reply.status(202).send({
+          ok: true,
+          accepted: true,
+          interactive: current.interactive,
+        });
       });
     }
 
