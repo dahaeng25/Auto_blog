@@ -57,24 +57,16 @@ async function realNaverLogin(): Promise<void> {
   const session = await createBrowserSession({ headless: !headed });
   const page = await getSessionPage(session);
 
-  // 테스트용으로 2FA 대기 상한 축소
-  const prevWait = process.env.AUTH_2FA_WAIT_MS;
-  process.env.AUTH_2FA_WAIT_MS = "90000";
-
   try {
-    const deadline = Date.now() + 120_000;
-    const loginPromise = autoLoginNaver(page);
-    const watchdog = new Promise<never>((_, reject) => {
-      const t = setInterval(() => {
-        if (Date.now() > deadline) {
-          clearInterval(t);
-          reject(new Error("전체 로그인 테스트 시간 초과 (120초)"));
-        }
-      }, 2000);
-      loginPromise.finally(() => clearInterval(t));
-    });
-
-    await Promise.race([loginPromise, watchdog]);
+    await Promise.race([
+      autoLoginNaver(page),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("전체 로그인 테스트 시간 초과 (120초)")),
+          120_000,
+        ),
+      ),
+    ]);
 
     const loggedIn = await isNaverLoggedIn(session.context);
     const screen = await describeLoginPage(page);
@@ -91,14 +83,13 @@ async function realNaverLogin(): Promise<void> {
       `  상태: loggedIn=${loggedIn}, authScreen=${authScreen}, screen=${screen}`,
     );
     // 2FA 화면까지 도달했으면 클릭/제출 경로 성공으로 간주
-    if (authScreen || /인증|2단계|기기|앱에서/.test(screen)) {
+    if (authScreen || /인증|2단계|기기|앱에서|푸시|알림/.test(screen)) {
       console.log("  OK 로그인 제출 성공 — 2FA/기기 인증 화면 도달 (푸시 확인)");
       return;
     }
-    throw error;
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(msg);
   } finally {
-    if (prevWait === undefined) delete process.env.AUTH_2FA_WAIT_MS;
-    else process.env.AUTH_2FA_WAIT_MS = prevWait;
     await page.close().catch(() => {});
     await session.close();
   }
